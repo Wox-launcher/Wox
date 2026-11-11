@@ -96,6 +96,7 @@ func captureScreenshotPlatform(options ScreenshotOptions) (ScreenshotResult, err
 		return ScreenshotResult{}, prepareErr
 	}
 	source, virtualBounds := captured.capture.Image, captured.capture.Bounds
+	recordingWorkAreas := windowsRecordingWorkAreas(options.recordingDisplays, virtualBounds)
 	objectQuery, objectQueryClose := windowsScreenshotObjectQuery(windowCandidates, virtualBounds)
 	platform := screenshotEditorPlatform{
 		windowCandidates: windowsScreenshotWindowCandidates(windowCandidates, virtualBounds),
@@ -194,10 +195,15 @@ func captureScreenshotPlatform(options ScreenshotOptions) (ScreenshotResult, err
 				Height: selection.Height,
 			}
 			thickness := int32(math.Round(float64(2 * woxui.WindowsPhysicalRectScale(globalSelection))))
-			return showWindowsScrollingCaptureBorder(globalSelection, max(int32(2), thickness))
+			rects := windowsScrollingCaptureBorderRects(globalSelection, max(int32(2), thickness))
+			return showWindowsCaptureBorder(rects[:])
 		},
-		preparedWindow: preparedWindow,
-		windowHost:     windowHost,
+		showRecordingBorder: func(selection Rect, _ Size) (func(), error) {
+			return showWindowsRecordingBorder(selection, virtualBounds.Min, recordingWorkAreas)
+		},
+		recordingWorkAreas: recordingWorkAreas,
+		preparedWindow:     preparedWindow,
+		windowHost:         windowHost,
 		afterShow: func() {
 			util.GetLogger().Debug(context.Background(), fmt.Sprintf(
 				"screenshot overlay ready: total=%s capture=%s dwm=%s setup=%s bitblt=%s renderer=%s desktop=%dx%d",
@@ -223,12 +229,45 @@ func windowsScreenshotPointerCoordinate(origin int, point float32) int32 {
 	return int32(math.Floor(float64(float32(origin) + point)))
 }
 
-// showWindowsScrollingCaptureBorder keeps the selected viewport visible without covering it.
-func showWindowsScrollingCaptureBorder(selection Rect, thickness int32) (func(), error) {
+// windowsRecordingWorkAreas maps physical work areas into the captured virtual desktop.
+func windowsRecordingWorkAreas(displays []screen.Display, desktop image.Rectangle) []Rect {
+	var areas []Rect
+	for _, display := range displays {
+		work := display.PixelWorkArea
+		if work.IsEmpty() {
+			work = display.PixelBounds
+		}
+		visible := image.Rect(work.X, work.Y, work.X+work.Width, work.Y+work.Height).Intersect(desktop)
+		if !visible.Empty() {
+			areas = append(areas, Rect{
+				X: float32(visible.Min.X - desktop.Min.X), Y: float32(visible.Min.Y - desktop.Min.Y),
+				Width: float32(visible.Dx()), Height: float32(visible.Dy()),
+			})
+		}
+	}
+	return areas
+}
+
+// showWindowsRecordingBorder keeps the green edges visible on full-display recordings.
+func showWindowsRecordingBorder(selection Rect, origin image.Point, workAreas []Rect) (func(), error) {
+	global := selection
+	global.X += float32(origin.X)
+	global.Y += float32(origin.Y)
+	thickness := int32(math.Round(float64(2 * woxui.WindowsPhysicalRectScale(global))))
+	rects := windowsRecordingCaptureBorderRects(selection, workAreas, max(int32(2), thickness))
+	for i := range rects {
+		rects[i].X += float32(origin.X)
+		rects[i].Y += float32(origin.Y)
+	}
+	return showWindowsCaptureBorder(rects)
+}
+
+// showWindowsCaptureBorder presents passive strips and returns their session-owned cleanup.
+func showWindowsCaptureBorder(rects []Rect) (func(), error) {
 	var windows []win.HWND
 	var createErr error
 	if err := Call(func() {
-		windows, createErr = createWindowsScrollingCaptureBorder(selection, thickness)
+		windows, createErr = createWindowsCaptureBorder(rects)
 	}); err != nil {
 		return nil, err
 	}
@@ -249,8 +288,8 @@ func showWindowsScrollingCaptureBorder(selection Rect, thickness int32) (func(),
 	}, nil
 }
 
-// createWindowsScrollingCaptureBorder creates passive topmost edges around the live viewport.
-func createWindowsScrollingCaptureBorder(selection Rect, thickness int32) ([]win.HWND, error) {
+// createWindowsCaptureBorder creates passive topmost edges around the live viewport.
+func createWindowsCaptureBorder(rects []Rect) ([]win.HWND, error) {
 	if err := ensureWindowsScrollingBorderClass(); err != nil {
 		return nil, err
 	}
@@ -263,7 +302,6 @@ func createWindowsScrollingCaptureBorder(selection Rect, thickness int32) ([]win
 		return nil, err
 	}
 	instance := win.GetModuleHandle(nil)
-	rects := windowsScrollingCaptureBorderRects(selection, thickness)
 	windows := make([]win.HWND, 0, len(rects))
 	for _, rect := range rects {
 		window := win.CreateWindowEx(
@@ -302,6 +340,34 @@ func windowsScrollingCaptureBorderRects(selection Rect, thickness int32) [4]Rect
 		{X: selection.X - border, Y: selection.Y + selection.Height, Width: selection.Width + border*2, Height: border},
 		{X: selection.X - border, Y: selection.Y, Width: border, Height: selection.Height},
 	}
+}
+
+// windowsRecordingCaptureBorderRects uses outside strips where possible and moves clipped edges
+// inward at the screen or taskbar boundary. Each work area is already in capture coordinates.
+func windowsRecordingCaptureBorderRects(selection Rect, workAreas []Rect, thickness int32) []Rect {
+	var rects []Rect
+	for _, area := range workAreas {
+		if !screenshotEditorRectsOverlap(selection, area) {
+			continue
+		}
+		areaRight, areaBottom := area.X+area.Width, area.Y+area.Height
+		border := min(float32(max(int32(1), thickness)), area.Width/2, area.Height/2)
+		left := max(area.X, selection.X-border)
+		top := max(area.Y, selection.Y-border)
+		right := min(areaRight-border, selection.X+selection.Width)
+		bottom := min(areaBottom-border, selection.Y+selection.Height)
+		rects = append(rects,
+			Rect{X: left, Y: top, Width: right + border - left, Height: border},
+			Rect{X: right, Y: top + border, Width: border, Height: bottom - top - border},
+			Rect{X: left, Y: bottom, Width: right + border - left, Height: border},
+			Rect{X: left, Y: top + border, Width: border, Height: bottom - top - border},
+		)
+	}
+	if len(rects) == 0 {
+		outside := windowsScrollingCaptureBorderRects(selection, thickness)
+		return outside[:]
+	}
+	return rects
 }
 
 // ensureWindowsScrollingBorderClass registers the process-wide class with the Flutter border color.

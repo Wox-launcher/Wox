@@ -5,6 +5,7 @@ package screenshot
 import (
 	"image"
 	"testing"
+	"wox/util/screen"
 	"wox/util/window"
 )
 
@@ -99,5 +100,48 @@ func TestWindowsScrollingCaptureBorderStaysOutsideSelection(t *testing.T) {
 	}
 	if rects[3] != (Rect{X: 97, Y: 200, Width: 3, Height: 400}) {
 		t.Fatalf("left border = %+v", rects[3])
+	}
+}
+
+func TestWindowsFullscreenRecordingControlsAndBorderAvoidTaskbar(t *testing.T) {
+	desktop := image.Rect(-5120, -200, 0, 2680)
+	displays := []screen.Display{
+		{PixelBounds: screen.Rect{X: -5120, Y: -200, Width: 5120, Height: 2880},
+			PixelWorkArea: screen.Rect{X: -5120, Y: -200, Width: 5120, Height: 2760}, Scale: 2.5},
+	}
+	areas := windowsRecordingWorkAreas(displays, desktop)
+	workArea := Rect{Width: 5120, Height: 2760}
+	if len(areas) != 1 || areas[0] != workArea {
+		t.Fatalf("recording work areas = %+v, want %+v", areas, workArea)
+	}
+	for _, selection := range []Rect{workArea, {Width: 5120, Height: 2880}} {
+		_, compact, collapsed := recordingToolbarLayout(workArea, selection, recordingToolbarWidth*2.5, recordingToolbarHeight*2.5)
+		if !collapsed || compact.Width > 0 {
+			t.Fatalf("expected controls inside selection, compact=%+v collapsed=%t", compact, collapsed)
+		}
+		want := Rect{X: 4900, Y: 2640, Width: 200, Height: 100}
+		if got := recordingToolbarInsideSelection(workArea, selection, 2.5); got != want {
+			t.Fatalf("toolbar = %+v, want %+v", got, want)
+		}
+		wantEdges := [4]Rect{
+			{Width: 5120, Height: 5},
+			{X: 5115, Y: 5, Width: 5, Height: 2750},
+			{Y: 2755, Width: 5120, Height: 5},
+			{Y: 5, Width: 5, Height: 2750},
+		}
+		got := windowsRecordingCaptureBorderRects(selection, areas, 5)
+		if len(got) != len(wantEdges) || [4]Rect(got) != wantEdges {
+			t.Fatalf("recording border = %+v, want %+v", got, wantEdges)
+		}
+	}
+}
+
+func TestWindowsRecordingBorderRemainsOutsideWhenThereIsRoom(t *testing.T) {
+	selection := Rect{X: 100, Y: 200, Width: 300, Height: 400}
+	workArea := Rect{Width: 1920, Height: 1080}
+	got := windowsRecordingCaptureBorderRects(selection, []Rect{workArea}, 3)
+	want := windowsScrollingCaptureBorderRects(selection, 3)
+	if len(got) != len(want) || [4]Rect(got) != want {
+		t.Fatalf("recording border = %+v, want outside border %+v", got, want)
 	}
 }

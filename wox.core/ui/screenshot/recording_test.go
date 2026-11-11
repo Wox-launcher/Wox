@@ -426,9 +426,88 @@ func TestRecordingToolbarLayoutUsesEveryOutsideEdgeAndCollapsesForFullscreen(t *
 			}
 		})
 	}
-	_, hotspot, collapsed := recordingToolbarLayout(frame, frame, recordingToolbarWidth, recordingToolbarHeight)
-	if !collapsed || hotspot.Width != 18 || hotspot.Height != recordingToolbarHeight {
-		t.Fatalf("fullscreen hotspot = %+v collapsed=%t", hotspot, collapsed)
+	_, compact, collapsed := recordingToolbarLayout(frame, frame, recordingToolbarWidth, recordingToolbarHeight)
+	if !collapsed || compact != (Rect{}) {
+		t.Fatalf("fullscreen recording has no outside placement: compact=%+v collapsed=%t", compact, collapsed)
+	}
+}
+
+func TestRecordingToolbarKeepsCompactControlsOutsideNearFullscreenCrop(t *testing.T) {
+	const scale = 2.5
+	frame := Rect{X: -5120, Y: -300, Width: 3778, Height: 2724}
+	selection := Rect{X: frame.X + 98, Y: frame.Y + 86, Width: 3520, Height: 2562}
+	_, compact, collapsed := recordingToolbarLayout(frame, selection, recordingToolbarWidth*scale, recordingToolbarHeight*scale)
+	if !collapsed || compact.Width != recordingToolbarButton*scale || compact.Height != 2*recordingToolbarButton*scale {
+		t.Fatalf("near-fullscreen recording compact bounds = %+v, collapsed=%t", compact, collapsed)
+	}
+	if compact.X <= selection.X+selection.Width || compact.X+compact.Width > frame.X+frame.Width {
+		t.Fatalf("compact controls must fit in the right gutter: toolbar=%+v selection=%+v", compact, selection)
+	}
+	pause, stop := recordingCompactToolbarButtons(Size{Width: compact.Width, Height: compact.Height})
+	if stop.Y != pause.Height || screenshotEditorRectsOverlap(pause, stop) {
+		t.Fatalf("compact pause and stop targets must occupy separate rows: pause=%+v stop=%+v", pause, stop)
+	}
+}
+
+func TestRecordingToolbarCanUseAnAdjacentDisplayAtItsScale(t *testing.T) {
+	selection := Rect{Width: 1920, Height: 1080}
+	display := Rect{X: -1500, Y: -1600, Width: 1500, Height: 1500}
+	const scale = 2
+	bar, _, collapsed := recordingToolbarLayout(display, selection, recordingToolbarWidth*scale, recordingToolbarHeight*scale)
+	if collapsed || bar.X < display.X || bar.Y < display.Y || bar.X+bar.Width > display.X+display.Width || bar.Y+bar.Height > display.Y+display.Height {
+		t.Fatalf("toolbar must fit on the adjacent display: toolbar=%+v display=%+v collapsed=%t", bar, display, collapsed)
+	}
+}
+
+func TestRecordingToolbarInsideSelectionStaysOnTheActiveDisplay(t *testing.T) {
+	const scale = 2.5
+	frame := Rect{X: -5120, Y: -300, Width: 3778, Height: 2724}
+	selection := Rect{X: frame.X + 80, Y: frame.Y + 50, Width: frame.Width + 200, Height: frame.Height + 100}
+	want := Rect{X: frame.X + frame.Width - 220, Y: frame.Y + frame.Height - 120, Width: 200, Height: 100}
+	if got := recordingToolbarInsideSelection(frame, selection, scale); got != want {
+		t.Fatalf("in-selection toolbar = %+v, want %+v", got, want)
+	}
+}
+
+func TestRecordingCompactStopAndCaptureCommandPreservePreview(t *testing.T) {
+	if (&recordingToolbarState{}).stopFromCaptureCommand() {
+		t.Fatal("the screenshot command must not start a take while the toolbar is ready")
+	}
+	t.Run("compact stop button", func(t *testing.T) {
+		state, encoder := newRecordingToolbarStopTestState()
+		state.collapsedBounds = Rect{Width: 100, Height: 200}
+		state.toolbarPointer(PointerEvent{
+			Kind: PointerDown, Button: PointerButtonPrimary, Position: Point{X: 50, Y: 150},
+		})
+		verifyRecordingToolbarStopped(t, state, encoder)
+	})
+	t.Run("repeat screenshot command", func(t *testing.T) {
+		state, encoder := newRecordingToolbarStopTestState()
+		if !state.stopFromCaptureCommand() {
+			t.Fatal("the screenshot command must stop an active take")
+		}
+		verifyRecordingToolbarStopped(t, state, encoder)
+		if !state.stopFromCaptureCommand() || state.recordingStatus() != recordingStateSave {
+			t.Fatal("repeating the screenshot command must leave the preview available")
+		}
+	})
+}
+
+func newRecordingToolbarStopTestState() (*recordingToolbarState, *recordingTestEncoder) {
+	encoder := &recordingTestEncoder{}
+	return &recordingToolbarState{collapsed: true, session: &recordingSession{
+		state:  recordingStateRecording,
+		config: recordingSessionConfig{Encoder: encoder, Now: time.Now},
+	}}, encoder
+}
+
+func verifyRecordingToolbarStopped(t *testing.T, state *recordingToolbarState, encoder *recordingTestEncoder) {
+	t.Helper()
+	waitForRecordingState(t, state.session, recordingStateSave)
+	encoder.mu.Lock()
+	defer encoder.mu.Unlock()
+	if !encoder.finalized || encoder.aborted {
+		t.Fatal("stopping must finalize the take")
 	}
 }
 

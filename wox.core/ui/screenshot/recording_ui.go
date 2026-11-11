@@ -39,6 +39,8 @@ const (
 	recordingChordMergeWindow = 500 * time.Millisecond
 )
 
+var activeScreenshotRecordings = util.NewHashMap[*WindowManager, *recordingToolbarState]()
+
 type recordingKeycap struct {
 	label     string
 	expiresAt time.Time
@@ -223,11 +225,6 @@ func runScreenshotRecording(options ScreenshotOptions, editor *screenshotEditorO
 			editor.mu.Unlock()
 			openErr = state.positionToolbar()
 		}
-		if openErr == nil {
-			if state.window != nil {
-				openErr = state.window.Invalidate()
-			}
-		}
 	}); err != nil {
 		openErr = err
 	}
@@ -242,6 +239,8 @@ func runScreenshotRecording(options ScreenshotOptions, editor *screenshotEditorO
 	}
 	defer overlayManaged.Close()
 	defer borderManaged.Close()
+	activeScreenshotRecordings.Store(manager, state)
+	defer activeScreenshotRecordings.Delete(manager)
 	defer func() { _ = Call(func() { state.closeFormatMenu(); state.closeRuntimeDialog() }) }()
 	state.startBorderMonitor()
 	defer state.stopBorderMonitor()
@@ -458,22 +457,51 @@ func normalizeRecordingLogicalSelection(source image.Rectangle, selection Rect, 
 	return selection, nil
 }
 
-// positionToolbar tries every outside edge before enabling the in-selection collapsed hotspot.
+// positionToolbar prefers the selection's display and keeps the controls out of monitor gaps.
 func (state *recordingToolbarState) positionToolbar() error {
 	if state.window == nil {
 		return errors.New("recording toolbar window is unavailable")
 	}
 	scale := state.toolbarChromeScale()
-	frame := Rect{Width: state.frameSize.Width, Height: state.frameSize.Height}
+	fallback := Rect{Width: state.frameSize.Width, Height: state.frameSize.Height}
+	displays := state.platform.displayCandidates
+	if workAreas := state.platform.recordingWorkAreas; len(workAreas) > 0 {
+		// The capture can include shell chrome, but the controls need a clickable work area.
+		displays = workAreas
+		fallback = workAreas[0]
+	}
+	frame := screenshotEditorToolbarFrame(state.selection, fallback, displays)
 	width := recordingToolbarWidth
 	if state.recordingStatus() == recordingStateSave {
 		width -= 48
 	}
 	expanded, collapsed, collapseWhileActive := recordingToolbarLayout(frame, state.selection, width*scale, recordingToolbarHeight*scale)
+	if collapseWhileActive && collapsed.Width == 0 {
+		for _, display := range displays {
+			if display == frame {
+				continue
+			}
+			displayScale := scale
+			if state.editor.chromeScale != nil {
+				displayScale = max(float32(1), state.editor.chromeScale(display))
+			}
+			bar, compact, collapse := recordingToolbarLayout(display, state.selection, width*displayScale, recordingToolbarHeight*displayScale)
+			if !collapse || compact.Width > 0 {
+				expanded, collapsed, collapseWhileActive = bar, compact, collapse
+				break
+			}
+		}
+	}
+	if collapseWhileActive && collapsed.Width == 0 {
+		collapsed = recordingToolbarInsideSelection(frame, state.selection, scale)
+	}
+	state.mu.Lock()
 	state.expandedBounds = expanded
 	state.collapsedBounds = collapsed
 	state.collapseWhileActive = collapseWhileActive
-	return setScreenshotScrollingWindowBounds(state.window, state.platform, expanded, state.frameSize)
+	state.collapsed = false
+	state.mu.Unlock()
+	return state.setToolbarBounds(expanded)
 }
 
 // usesToolbarSurface is true when this window has already been resized to recording chrome.
@@ -481,11 +509,13 @@ func (state *recordingToolbarState) usesToolbarSurface(frame FrameInfo) bool {
 	if state == nil {
 		return false
 	}
-	scale := state.toolbarChromeScale()
-	if scale <= 0 {
-		scale = 1
+	state.mu.Lock()
+	height := max(state.expandedBounds.Height, state.collapsedBounds.Height)
+	state.mu.Unlock()
+	if height == 0 {
+		height = recordingToolbarHeight * state.toolbarChromeScale()
 	}
-	return frame.Size.Height > 0 && frame.Size.Height <= recordingToolbarHeight*scale*1.5
+	return frame.Size.Height > 0 && frame.Size.Height <= height+1
 }
 
 // toolbarChromeScale sizes recording controls with the same DPI used by screenshot chrome.
@@ -528,7 +558,7 @@ func (state *recordingToolbarState) scaledBorderMargin() float32 {
 	return recordingBorderMargin * state.toolbarChromeScale()
 }
 
-// recordingToolbarLayout reuses screenshot placement, then left/right, then a fullscreen hotspot.
+// recordingToolbarLayout finds room for the full bar or compact controls outside the captured pixels.
 func recordingToolbarLayout(globalFrame, globalSelection Rect, width, height float32) (Rect, Rect, bool) {
 	if width <= 0 {
 		width = recordingToolbarWidth
@@ -540,24 +570,55 @@ func recordingToolbarLayout(globalFrame, globalSelection Rect, width, height flo
 	if scale <= 0 {
 		scale = 1
 	}
-	hotspotWidth := 18 * width / recordingToolbarWidth
-	hotspot := Rect{X: globalSelection.X + globalSelection.Width - hotspotWidth, Y: globalSelection.Y + globalSelection.Height/2 - height/2, Width: hotspotWidth, Height: height}
+	frameRight, frameBottom := globalFrame.X+globalFrame.Width, globalFrame.Y+globalFrame.Height
+	fits := func(rect Rect, inset float32) bool {
+		return rect.X >= globalFrame.X+inset && rect.Y >= globalFrame.Y+inset &&
+			rect.X+rect.Width <= frameRight-inset && rect.Y+rect.Height <= frameBottom-inset
+	}
 	placement := screenshotEditorToolbarPlacement(globalSelection, globalFrame, width, height, height, scale)
-	if !screenshotEditorRectsOverlap(placement, globalSelection) {
+	if !screenshotEditorRectsOverlap(globalFrame, globalSelection) {
+		placement = screenshotEditorToolbarPlacement(globalFrame, globalFrame, width, height, height, scale)
+	}
+	if fits(placement, 0) && !screenshotEditorRectsOverlap(placement, globalSelection) {
 		return placement, Rect{}, false
 	}
 	gap := recordingToolbarSelectionGap * scale
-	frameRight, frameBottom := globalFrame.X+globalFrame.Width, globalFrame.Y+globalFrame.Height
 	sideY := min(max(globalFrame.Y+8, globalSelection.Y), frameBottom-height-8)
 	for _, candidate := range []Rect{
 		{X: globalSelection.X - width - gap, Y: sideY, Width: width, Height: height},
 		{X: globalSelection.X + globalSelection.Width + gap, Y: sideY, Width: width, Height: height},
 	} {
-		if candidate.X >= globalFrame.X+8 && candidate.Y >= globalFrame.Y+8 && candidate.X+candidate.Width <= frameRight-8 && candidate.Y+candidate.Height <= frameBottom-8 && !screenshotEditorRectsOverlap(candidate, globalSelection) {
+		if fits(candidate, 8) && !screenshotEditorRectsOverlap(candidate, globalSelection) {
 			return candidate, Rect{}, false
 		}
 	}
-	return placement, hotspot, true
+	// A narrow gutter can hold two buttons along the edge even when it cannot hold the toolbar.
+	button := recordingToolbarButton * scale
+	inset := 4 * scale
+	left := min(max(globalSelection.X+globalSelection.Width-2*button, globalFrame.X+inset), frameRight-2*button-inset)
+	top := min(max(globalSelection.Y+globalSelection.Height/2-button, globalFrame.Y+inset), frameBottom-2*button-inset)
+	for _, candidate := range []Rect{
+		{X: globalSelection.X + globalSelection.Width + inset, Y: top, Width: button, Height: 2 * button},
+		{X: globalSelection.X - button - inset, Y: top, Width: button, Height: 2 * button},
+		{X: left, Y: globalSelection.Y + globalSelection.Height + inset, Width: 2 * button, Height: button},
+		{X: left, Y: globalSelection.Y - button - inset, Width: 2 * button, Height: button},
+	} {
+		if fits(candidate, inset) {
+			return placement, candidate, true
+		}
+	}
+	return placement, Rect{}, true
+}
+
+// recordingToolbarInsideSelection keeps both buttons on the active display for a spanning capture.
+func recordingToolbarInsideSelection(frame, selection Rect, scale float32) Rect {
+	right := min(frame.X+frame.Width, selection.X+selection.Width)
+	bottom := min(frame.Y+frame.Height, selection.Y+selection.Height)
+	width := right - max(frame.X, selection.X)
+	height := bottom - max(frame.Y, selection.Y)
+	button := min(recordingToolbarButton*scale, width/2, height)
+	inset := min(8*scale, (width-2*button)/2, (height-button)/2)
+	return Rect{X: right - 2*button - inset, Y: bottom - button - inset, Width: 2 * button, Height: button}
 }
 
 // recordingStatus is ready until a session exists, then follows that session.
@@ -571,7 +632,8 @@ func (state *recordingToolbarState) recordingStatus() recordingState {
 	return session.currentState()
 }
 
-// syncRecordingSurfaces uncovers the selection while capturing, matching scrolling screenshot.
+// syncRecordingSurfaces reads the current session state on the UI thread so queued updates
+// cannot hide a preview that was shown by a newer transition.
 func (state *recordingToolbarState) syncRecordingSurfaces() {
 	state.mu.Lock()
 	exporting := state.exporting
@@ -581,8 +643,8 @@ func (state *recordingToolbarState) syncRecordingSurfaces() {
 	}
 	status := state.recordingStatus()
 	ready := status == recordingStateReady
-	if ready || status == recordingStateSave {
-		_ = Call(func() { _ = state.positionToolbar() })
+	if ready || status == recordingStateError {
+		_ = state.positionToolbar()
 	}
 	coverSelection := status == recordingStateCountdown || status == recordingStateSave
 	if ready {
@@ -609,7 +671,18 @@ func (state *recordingToolbarState) syncRecordingSurfaces() {
 	if state.overlay != nil {
 		_ = state.overlay.SetPointerPassthrough(status != recordingStateSave)
 	}
+	overlayLifecycle := state.overlayManaged.Lifecycle()
 	_ = state.setManagedVisible(state.overlayManaged, true)
+	if status == recordingStateSave {
+		if err := state.positionToolbar(); err != nil {
+			return
+		}
+		// A newly shown full-screen preview can cover the restored save controls.
+		if overlayLifecycle != WindowLifecycleVisible && overlayLifecycle != WindowLifecyclePresenting &&
+			screenshotEditorRectsOverlap(state.expandedBounds, state.selection) {
+			_, _ = state.window.Show()
+		}
+	}
 	if state.overlay != nil {
 		_ = state.overlay.Invalidate()
 	}
@@ -641,11 +714,19 @@ func (state *recordingToolbarState) ensureScrollBorder() {
 	frameSize := state.frameSize
 	platform := state.platform
 	state.mu.Unlock()
-	if platform.showScrollBorder == nil {
+	showBorder := platform.showRecordingBorder
+	if showBorder == nil {
+		showBorder = platform.showScrollBorder
+	}
+	if showBorder == nil {
 		return
 	}
-	closeBorder, err := platform.showScrollBorder(selection, frameSize)
-	if err != nil || closeBorder == nil {
+	closeBorder, err := showBorder(selection, frameSize)
+	if err != nil {
+		util.GetLogger().Warn(context.Background(), fmt.Sprintf("show recording border: %v", err))
+		return
+	}
+	if closeBorder == nil {
 		return
 	}
 	state.mu.Lock()
@@ -1283,11 +1364,7 @@ func recordingToolbarControlLayout(scale float32) (panel, timeRect, primary, res
 // drawToolbar renders controls from a locked snapshot so callbacks never retain mutable state.
 func (state *recordingToolbarState) drawToolbar(displayList *DisplayList, frame FrameInfo) {
 	state.mu.Lock()
-	if state.collapsed {
-		state.mu.Unlock()
-		displayList.Clear(Color{})
-		return
-	}
+	collapsed := state.collapsed
 	session := state.session
 	showPointer := state.showPointer
 	showKeypress := state.showKeypress
@@ -1311,6 +1388,23 @@ func (state *recordingToolbarState) drawToolbar(displayList *DisplayList, frame 
 	}
 
 	displayList.Clear(Color{})
+	if collapsed {
+		panel := Rect{Width: frame.Size.Width, Height: frame.Size.Height}
+		pause, stop := recordingCompactToolbarButtons(frame.Size)
+		scale := pause.Width / recordingToolbarButton
+		displayList.FillRoundedRect(panel, 12*scale, Color{R: 30, G: 26, B: 24, A: 248})
+		pauseColor := Color{R: 255, G: 255, B: 255, A: 255}
+		stopColor := Color{R: 255, G: 107, B: 107, A: 255}
+		if finishing || recordingStatus != recordingStateRecording {
+			pauseColor.A = 100
+		}
+		if finishing {
+			stopColor.A = 100
+		}
+		drawRecordingToolbarIcon(displayList, "control.pause", pause, pauseColor, scale)
+		drawRecordingToolbarIcon(displayList, "control.stop", stop, stopColor, scale)
+		return
+	}
 	panel, timeRect, primaryRect, restartRect, pointerRect, keypressRect, finishRect, cancelRect := recordingToolbarControlLayout(scale)
 	if recordingStatus == recordingStateSave {
 		finishRect, cancelRect = keypressRect, finishRect
@@ -1366,6 +1460,16 @@ func (state *recordingToolbarState) drawToolbar(displayList *DisplayList, frame 
 	}
 }
 
+// recordingCompactToolbarButtons splits the edge-aligned surface into pause and stop targets.
+func recordingCompactToolbarButtons(size Size) (pause, stop Rect) {
+	if size.Width > size.Height {
+		width := size.Width / 2
+		return Rect{Width: width, Height: size.Height}, Rect{X: width, Width: width, Height: size.Height}
+	}
+	height := size.Height / 2
+	return Rect{Width: size.Width, Height: height}, Rect{Y: height, Width: size.Width, Height: height}
+}
+
 func (state *recordingToolbarState) drawToggle(displayList *DisplayList, rect Rect, icon string, enabled, available bool, scale float32) {
 	if scale <= 0 {
 		scale = 1
@@ -1408,6 +1512,10 @@ func formatRecordingDuration(duration time.Duration) string {
 func (state *recordingToolbarState) toolbarPointer(event PointerEvent) {
 	if event.Kind == PointerMove || event.Kind == PointerLeave {
 		state.mu.Lock()
+		if state.collapsed {
+			state.mu.Unlock()
+			return
+		}
 		current := recordingStateReady
 		if state.session != nil {
 			current = state.session.currentState()
@@ -1447,12 +1555,14 @@ func (state *recordingToolbarState) toolbarPointer(event PointerEvent) {
 	}
 	session := state.session
 	if state.collapsed {
+		bounds := state.collapsedBounds
 		state.mu.Unlock()
-		if session != nil && session.currentState() == recordingStateRecording {
-			_ = session.Pause()
-			session.DiscardPendingFrames()
+		pause, stop := recordingCompactToolbarButtons(Size{Width: bounds.Width, Height: bounds.Height})
+		if screenshotEditorRectContains(stop, event.Position) {
+			state.finish()
+		} else if screenshotEditorRectContains(pause, event.Position) && session != nil && session.Pause() == nil {
+			state.setToolbarCollapsed(false)
 		}
-		state.setToolbarCollapsed(false)
 		return
 	}
 	current := recordingStateReady
@@ -1640,16 +1750,18 @@ func (state *recordingToolbarState) newSession() (*recordingSession, error) {
 			return frame, nil
 		},
 		Encoder: &ffmpegRecordingEncoder{}, Release: releaseCapture, Diagnostics: true, OnChanged: func() {
-			state.syncRecordingSurfaces()
-			if state.window != nil {
-				_ = state.window.Invalidate()
-			}
-			if state.overlay != nil {
-				_ = state.overlay.Invalidate()
-			}
-			if state.border != nil {
-				_ = state.border.Invalidate()
-			}
+			_ = Call(func() {
+				state.syncRecordingSurfaces()
+				if state.window != nil {
+					_ = state.window.Invalidate()
+				}
+				if state.overlay != nil {
+					_ = state.overlay.Invalidate()
+				}
+				if state.border != nil {
+					_ = state.border.Invalidate()
+				}
+			})
 		},
 	})
 }
@@ -1685,24 +1797,31 @@ func (state *recordingToolbarState) start() {
 	_ = state.window.Invalidate()
 }
 
-// setToolbarCollapsed switches between the full controls and transparent edge hotspot.
+// setToolbarCollapsed switches to the compact controls while a take is active.
 func (state *recordingToolbarState) setToolbarCollapsed(collapsed bool) {
 	state.mu.Lock()
-	if !state.collapseWhileActive || state.collapsed == collapsed {
+	if state.collapsed == collapsed || (collapsed && !state.collapseWhileActive) {
 		state.mu.Unlock()
 		return
 	}
 	state.collapsed = collapsed
+	state.hoverTooltip = ""
+	state.hoverTooltipRect = Rect{}
 	bounds := state.expandedBounds
 	if collapsed {
 		bounds = state.collapsedBounds
 	}
-	window := state.window
 	state.mu.Unlock()
-	_ = setScreenshotScrollingWindowBounds(window, state.platform, bounds, state.frameSize)
-	if window != nil {
-		_ = window.Invalidate()
+	if err := state.setToolbarBounds(bounds); err != nil {
+		util.GetLogger().Warn(context.Background(), fmt.Sprintf("update recording toolbar bounds: %v", err))
 	}
+}
+
+func (state *recordingToolbarState) setToolbarBounds(bounds Rect) error {
+	if err := setScreenshotScrollingWindowBounds(state.window, state.platform, bounds, state.frameSize); err != nil {
+		return err
+	}
+	return state.window.Invalidate()
 }
 
 // restart discards the current MP4 and starts a fresh countdown with the same selection.
@@ -1776,6 +1895,19 @@ func (state *recordingToolbarState) finish() {
 	}
 }
 
+// stopFromCaptureCommand lets the screenshot shortcut finish an active take.
+func (state *recordingToolbarState) stopFromCaptureCommand() bool {
+	switch state.recordingStatus() {
+	case recordingStateCountdown, recordingStateRecording, recordingStatePaused, recordingStateError:
+		state.finish()
+		return true
+	case recordingStateFinalizing, recordingStateSave, recordingStateClosed:
+		return true
+	default:
+		return false
+	}
+}
+
 // stopRecording finalizes the MP4 and keeps the overlay open for in-place preview.
 func (state *recordingToolbarState) stopRecording() {
 	state.mu.Lock()
@@ -1827,7 +1959,7 @@ func (state *recordingToolbarState) stopRecording() {
 		if window != nil {
 			_ = window.Invalidate()
 		}
-		state.syncRecordingSurfaces()
+		_ = Call(state.syncRecordingSurfaces)
 	}()
 }
 

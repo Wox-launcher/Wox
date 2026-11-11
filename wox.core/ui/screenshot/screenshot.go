@@ -15,6 +15,7 @@ type ScreenshotOptions struct {
 	// OnClipboardReady runs on the capture worker before file writes and editable-scene preparation.
 	OnClipboardReady      func()
 	capturedDisplays      []screenshotDisplay
+	recordingDisplays     []screen.Display
 	SaveEditableScene     bool
 	EditScreenshotPath    string
 	ExportFilePath        string
@@ -136,10 +137,25 @@ func CaptureScreenshot(options ScreenshotOptions) (ScreenshotResult, error) {
 	if options.EditScreenshotPath != "" {
 		return editSavedScreenshot(options)
 	}
+	if options.AllowVideoRecording {
+		if recording, ok := activeScreenshotRecordings.Load(options.WindowManager); ok {
+			var handled bool
+			if err := Call(func() { handled = recording.stopFromCaptureCommand() }); err != nil {
+				return ScreenshotResult{}, err
+			}
+			if handled {
+				// The original request still owns the preview and eventual export.
+				return ScreenshotResult{Cancelled: true}, nil
+			}
+		}
+	}
 	// Freeze monitor geometry for both selection fallback and editable scenes before the capture overlays appear.
 	displays, err := screen.ListDisplays()
 	if err == nil {
 		options.capturedDisplays = screenshotDisplayLayout(displays)
+		if options.AllowVideoRecording {
+			options.recordingDisplays = displays
+		}
 	}
 	return captureScreenshotPlatform(options)
 }

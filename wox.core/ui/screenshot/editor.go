@@ -336,6 +336,8 @@ type screenshotEditorPlatform struct {
 	openRecordingCapture    func(pixelBounds image.Rectangle) (func() (*image.RGBA, error), func(), error)
 	setScrollBounds         func(window *Window, controls Rect, frameSize Size) error
 	showScrollBorder        func(selection Rect, frameSize Size) (func(), error)
+	showRecordingBorder     func(selection Rect, frameSize Size) (func(), error)
+	recordingWorkAreas      []Rect
 	frameSize               Size
 	initialSelection        *Rect
 	windowCandidates        []Rect
