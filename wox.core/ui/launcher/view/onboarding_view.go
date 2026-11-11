@@ -20,14 +20,6 @@ type OnboardingStep struct {
 	Accent woxui.Color
 }
 
-// OnboardingChoice describes one language or Glance option.
-type OnboardingChoice struct {
-	Value    string
-	Label    string
-	Leading  *woxui.Image
-	Trailing string
-}
-
 // OnboardingPermission describes one passive permission check and action.
 type OnboardingPermission struct {
 	ID          string
@@ -150,7 +142,7 @@ type OnboardingProps struct {
 	ChoiceKind              string
 	ChoiceValue             string
 	ChoiceAnchor            woxui.Rect
-	Choices                 []OnboardingChoice
+	Choices                 []SettingsChoice
 	Window                  *woxui.Window
 	Theme                   woxcomponent.ControlTheme
 	// PreviewTheme belongs only to illustrative launcher content.
@@ -193,12 +185,6 @@ func OnboardingView(props OnboardingProps) woxwidget.Widget {
 		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{header, page, footer}},
 	}}}
 	if props.ChoiceKind != "" {
-		choices := make([]SettingsChoice, len(props.Choices))
-		for index, choice := range props.Choices {
-			choices[index] = SettingsChoice{
-				Value: choice.Value, Label: choice.Label, Leading: choice.Leading, Trailing: choice.Trailing,
-			}
-		}
 		title := props.Labels["language"]
 		if props.ChoiceKind == "glance" {
 			title = props.Labels["glance.primary"]
@@ -206,7 +192,7 @@ func OnboardingView(props OnboardingProps) woxwidget.Widget {
 		kind := props.ChoiceKind
 		layers = append(layers, woxwidget.StackChild{Child: SettingsChoiceView(SettingsChoiceProps{
 			ID: "onboarding-choice-picker", Width: props.Width, Height: props.Height, Anchor: props.ChoiceAnchor,
-			Theme: props.Theme, Window: props.Window, Title: title, CurrentValue: props.ChoiceValue, Choices: choices,
+			Theme: props.Theme, Window: props.Window, Title: title, CurrentValue: props.ChoiceValue, Choices: props.Choices,
 			OnChoose: func(index int) {
 				if props.OnSelectChoice != nil && index >= 0 && index < len(props.Choices) {
 					props.OnSelectChoice(props.Choices[index].Value)

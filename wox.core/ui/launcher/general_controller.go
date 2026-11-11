@@ -41,12 +41,13 @@ type generalSettingsController struct {
 	deps   CommonDeps
 	shared *sharedEditState
 
-	services     generalSettingWriter
-	sessionID    string
-	lifecycleCtx context.Context
-	runOnUI      func(string, func()) error
-	language     *languageCatalog
-	settings     *settingsWindowController
+	services       generalSettingWriter
+	sessionID      string
+	lifecycleCtx   context.Context
+	runOnUI        func(string, func()) error
+	language       *languageCatalog
+	settings       *settingsWindowController
+	languagePicker *languagePickerController
 
 	settingsSearch      func() *settingsSearchController
 	hotkeySettings      func() *hotkeySettingsController
@@ -108,6 +109,7 @@ func (a *App) bindGeneralSettings() {
 	c.reloadUsageStats = a.reloadUsageStats
 	c.restartFromSettings = a.restartFromSettings
 	c.saveSetting = a.saveSetting
+	a.bindLanguagePicker()
 }
 
 // ApplyData replaces the full settingsData owned by the general controller. Called by
@@ -170,6 +172,7 @@ func (c *generalSettingsController) BeginEdit(owner, key string) bool {
 
 // EndEdit releases the shared editor back to idle.
 func (c *generalSettingsController) EndEdit() {
+	c.languagePicker.dismiss(settingsLanguagePicker)
 	c.shared.End()
 }
 
@@ -195,6 +198,9 @@ func (c *generalSettingsController) Editor() *woxui.TextEditor {
 // Passing nil clears an open picker. The choice picker lives on the shared state so
 // EndEdit naturally clears it when the session ends.
 func (c *generalSettingsController) SetChoicePicker(state *settingChoicePickerState) {
+	if state == nil || state.item.key != "LangCode" {
+		c.languagePicker.dismiss(settingsLanguagePicker)
+	}
 	c.shared.choicePicker = state
 	if state == nil && c.shared.editor != nil {
 		c.shared.editor.SetText("", false)
@@ -230,6 +236,7 @@ func (c *generalSettingsController) StartEdit(key, value string, caret int) bool
 			c.shared.editor.SetCaret(caret)
 		}
 	}
+	c.languagePicker.dismiss(settingsLanguagePicker)
 	c.shared.choicePicker = nil
 	return true
 }

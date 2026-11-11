@@ -17,7 +17,7 @@ func TestOnboardingViewExposesWindowAndChoiceOverlay(t *testing.T) {
 		Width: 1040, Height: 800, ActiveStep: 0, ChoiceKind: "language",
 		Steps:   []OnboardingStep{{ID: "welcome", Title: "Welcome", Accent: woxui.Color{G: 200, A: 255}}},
 		Labels:  map[string]string{"title": "Set up Wox", "subtitle": "Quick setup", "back": "Back", "next": "Next"},
-		Choices: []OnboardingChoice{{Value: "en_US", Label: "English"}},
+		Choices: []SettingsChoice{{Value: "en_US", Label: "English"}},
 		Theme:   management, PreviewTheme: woxcomponent.Theme{Background: woxui.Color{R: 255, G: 255, B: 255, A: 255}},
 	})
 	root, ok := view.(woxwidget.Semantics)

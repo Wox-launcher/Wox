@@ -537,6 +537,7 @@
   "ui_runtime_python_version_unsupported": "Python {version}은(는) 지원되지 않습니다. Wox에는 Python {minimumVersion} 이상이 필요합니다.",
   "ui_runtime_nodejs_version_unsupported": "Node.js {version}은(는) 지원되지 않습니다. Wox에는 Node.js {minimumVersion} 이상이 필요합니다.",
   "ui_themes": "테마",
+  "ui_theme_omarchy_auto_description": "현재 Omarchy 테마를 따릅니다.",
   "ui_store_themes": "스토어 테마",
   "ui_installed_themes": "설치된 테마",
   "ui_setting_theme_search_placeholder": "%d개 테마 검색",

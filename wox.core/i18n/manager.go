@@ -16,6 +16,8 @@ var managerOnce sync.Once
 type Manager struct {
 	mu              sync.RWMutex
 	currentLangCode LangCode
+	revision        uint64
+	packs           *packStore
 	// Parsed language tables. The raw JSON is discarded after Unmarshal so the
 	// process does not keep both the source bytes and the lookup map.
 	enUsLang    map[string]string
@@ -35,34 +37,71 @@ func GetI18nManager() *Manager {
 }
 
 func (m *Manager) UpdateLang(ctx context.Context, langCode LangCode) error {
-	if !IsSupportedLangCode(string(langCode)) {
-		return fmt.Errorf("unsupported lang code: %s", langCode)
+	pack, err := m.ReadPack(ctx, langCode)
+	if err == nil {
+		m.ActivatePack(pack)
 	}
+	return err
+}
 
-	if langCode == LangCodeEnUs {
-		m.mu.Lock()
-		m.currentLangCode = langCode
-		m.currentLang = m.enUsLang
-		m.mu.Unlock()
+// ReadPack loads only bundled or cached translations. Network access is explicit.
+func (m *Manager) ReadPack(ctx context.Context, langCode LangCode) (Pack, error) {
+	if !IsSupportedLangCode(string(langCode)) {
+		return Pack{}, fmt.Errorf("unsupported lang code: %s", langCode)
+	}
+	if !IsBundled(langCode) {
+		if m.packs == nil {
+			return Pack{}, fmt.Errorf("language pack cache is unavailable")
+		}
+		return m.packs.read(langCode)
+	}
+	if langCode == LangCodeEnUs && m.enUsLang != nil {
+		return Pack{code: langCode, translations: m.enUsLang}, nil
+	}
+	lang, err := loadLangMap(ctx, langCode)
+	return Pack{code: langCode, translations: lang}, err
+}
+
+// ActivatePack publishes the already validated table and invalidates translation caches.
+func (m *Manager) ActivatePack(pack Pack) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.activatePackLocked(pack)
+}
+
+func (m *Manager) activatePackLocked(pack Pack) {
+	m.currentLangCode = pack.code
+	m.currentLang = pack.translations
+	m.revision++
+}
+
+// RefreshActivePack reloads updated translations only while this pack is the active language.
+func (m *Manager) RefreshActivePack(ctx context.Context, code LangCode) error {
+	if m.GetCurrentLangCode() != code {
 		return nil
 	}
-
-	lang, err := loadLangMap(ctx, langCode)
+	pack, err := m.ReadPack(ctx, code)
 	if err != nil {
 		return err
 	}
-
 	m.mu.Lock()
-	m.currentLangCode = langCode
-	m.currentLang = lang
-	m.mu.Unlock()
+	defer m.mu.Unlock()
+	if m.currentLangCode == code {
+		m.activatePackLocked(pack)
+	}
 	return nil
 }
 
 func (m *Manager) GetCurrentLangCode() LangCode {
+	code, _ := m.ActiveLanguage()
+	return code
+}
+
+// ActiveLanguage returns the code and revision from the same published snapshot.
+func (m *Manager) ActiveLanguage() (LangCode, uint64) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	return m.currentLangCode
+	return m.currentLangCode, m.revision
 }
 
 // GetLangMap returns the parsed table for langCode. The English and current-language tables
@@ -78,10 +117,19 @@ func (m *Manager) GetLangMap(ctx context.Context, langCode LangCode) (map[string
 	case currentLangCode:
 		return currentLang, nil
 	}
-	return loadLangMap(ctx, langCode)
+	pack, err := m.ReadPack(ctx, langCode)
+	return pack.translations, err
 }
 
 func (m *Manager) GetLangJson(ctx context.Context, langCode LangCode) (string, error) {
+	if !IsBundled(langCode) {
+		pack, err := m.ReadPack(ctx, langCode)
+		if err != nil {
+			return "", err
+		}
+		data, err := json.Marshal(pack.translations)
+		return string(data), err
+	}
 	jsonBytes, err := resource.GetLangJson(ctx, string(langCode))
 	if err != nil {
 		return "", err

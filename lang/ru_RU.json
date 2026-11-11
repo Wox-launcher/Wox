@@ -524,6 +524,7 @@
   "ui_runtime_python_version_unsupported": "Python {version} не поддерживается. Wox требует Python {minimumVersion} или новее.",
   "ui_runtime_nodejs_version_unsupported": "Node.js {version} не поддерживается. Wox требует Node.js {minimumVersion} или новее.",
   "ui_themes": "Темы",
+  "ui_theme_omarchy_auto_description": "Следует текущей теме Omarchy.",
   "ui_store_themes": "Темы магазина",
   "ui_installed_themes": "Установленные темы",
   "ui_setting_theme_search_placeholder": "Поиск %d тем",

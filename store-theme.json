@@ -111,6 +111,10 @@
       "ja_JP": {
         "theme_name": "ニット",
         "theme_description": "ブルーグレーとクリーム色のニット枠で、落ち着いた作業空間に。"
+      },
+      "es_ES": {
+        "theme_name": "Knit",
+        "theme_description": "Un marco tejido en gris azulado y crema para un espacio de trabajo más tranquilo."
       }
     }
   },
@@ -286,6 +290,10 @@
       "ja_JP": {
         "theme_name": "8ビットの夜",
         "theme_description": "濃紺に階段状のドット枠を重ね、アイスブルー、ミント、金色を添えたテーマ。"
+      },
+      "es_ES": {
+        "theme_name": "8-Bit Night",
+        "theme_description": "Un lanzador azul marino de estilo pixel art, con marcos escalonados y detalles en azul hielo, menta y dorado."
       }
     }
   },

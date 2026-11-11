@@ -11,10 +11,11 @@ import (
 type languageCacheServices struct {
 	contract.Services
 	language i18n.LangCode
+	revision uint64
 }
 
 func (s *languageCacheServices) GeneralSettings(context.Context, string) (contract.GeneralSettings, error) {
-	return contract.GeneralSettings{LangCode: s.language}, nil
+	return contract.GeneralSettings{LangCode: s.language, LanguageRevision: s.revision}, nil
 }
 func (s *languageCacheServices) LanguageBundle(context.Context, string, i18n.LangCode) (map[string]string, error) {
 	return map[string]string{}, nil
@@ -56,5 +57,14 @@ func TestLanguageChangeInvalidatesTranslatedPluginCaches(t *testing.T) {
 	}
 	if a.aiSettings.PluginMentionsLoaded() || len(a.aiSettings.PluginMentions()) != 0 {
 		t.Fatal("old-language chat plugin mentions remain cached")
+	}
+	a.pluginSettings.cachePlugins(false, nil)
+	a.pluginSettings.SetPluginsLoaded(true)
+	service.revision++
+	if err := a.reloadTranslations(); err != nil {
+		t.Fatal(err)
+	}
+	if _, loaded := a.pluginSettings.CachedPlugins(false); loaded || a.pluginSettings.PluginsLoaded() {
+		t.Fatal("redownloading the active language left translated catalogs cached")
 	}
 }

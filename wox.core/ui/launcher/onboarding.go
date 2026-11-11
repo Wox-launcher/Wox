@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"wox/i18n"
 	"wox/plugin/thirdparty/migrate"
 	"wox/resource"
 	"wox/ui/contract"
@@ -84,8 +85,7 @@ type onboardingThemeState struct {
 func (c *onboardingController) beginSessionLocked(installations []migrate.Installation) {
 	c.open = true
 	c.step = 0
-	c.choice = ""
-	c.choiceAnchor = woxui.Rect{}
+	c.setOnboardingChoice("")
 	c.pageError = ""
 	c.queryHotkey = nil
 	c.plugins = onboardingPluginState{}
@@ -101,8 +101,7 @@ func (c *onboardingController) leaveLocked() bool {
 		c.releaseOnboardingMigrationSession()
 	}
 	c.open = false
-	c.choice = ""
-	c.choiceAnchor = woxui.Rect{}
+	c.setOnboardingChoice("")
 	return wasOpen
 }
 
@@ -550,8 +549,7 @@ func (c *onboardingController) selectOnboardingStep(index int) {
 		c.stopHotkeyRecording()
 	}
 	c.step = index
-	c.choice = ""
-	c.choiceAnchor = woxui.Rect{}
+	c.setOnboardingChoice("")
 	if form := c.hotkeySettings().Form(); form != nil {
 		form.active = true
 		if steps[index].ID == "mainHotkey" {
@@ -1022,15 +1020,13 @@ func (c *onboardingController) openOnboardingChoice(kind string) {
 		return
 	}
 	if c.choice == kind {
-		c.choice = ""
-		c.choiceAnchor = woxui.Rect{}
+		c.setOnboardingChoice("")
 	} else {
-		c.choice = kind
+		c.setOnboardingChoice(kind)
 		id := "onboarding-language"
 		if kind == "glance" {
 			id = "onboarding-glance-choice"
 		}
-		c.choiceAnchor = woxui.Rect{}
 		if c.host != nil {
 			c.choiceAnchor, _ = c.host.BoundsForKey(woxwidget.Key(id))
 		}
@@ -1038,16 +1034,37 @@ func (c *onboardingController) openOnboardingChoice(kind string) {
 	c.invalidateOnboardingWindow()
 }
 
-func (c *onboardingController) onboardingChoices(snapshot settingsSnapshot, kind string, imageScale float32) []launcherview.OnboardingChoice {
+func (c *onboardingController) languagePicker() *languagePickerController {
+	if c.generalSettings != nil {
+		if general := c.generalSettings(); general != nil {
+			return general.languagePicker
+		}
+	}
+	return nil
+}
+
+func (c *onboardingController) setOnboardingChoice(kind string) {
+	if kind != "language" {
+		c.languagePicker().dismiss(onboardingLanguagePicker)
+	}
+	c.choice = kind
+	c.choiceAnchor = woxui.Rect{}
+}
+
+func (c *onboardingController) onboardingChoices(snapshot settingsSnapshot, kind string, imageScale float32) []launcherview.SettingsChoice {
 	if kind == "language" {
-		choices := make([]launcherview.OnboardingChoice, len(snapshot.general.Languages))
+		choices := make([]launcherview.SettingsChoice, len(snapshot.general.Languages))
+		picker := c.languagePicker()
 		for index, choice := range snapshot.general.Languages {
-			choices[index] = launcherview.OnboardingChoice{Value: choice.value, Label: choice.label}
+			code := i18n.LangCode(choice.value)
+			choices[index] = picker.row(choice, snapshot.palette, imageScale, func() {
+				picker.start(onboardingLanguagePicker, code, true, nil)
+			})
 		}
 		return choices
 	}
 	if kind == "glance" {
-		choices := make([]launcherview.OnboardingChoice, 0, len(snapshot.appearance.GlanceCatalog))
+		choices := make([]launcherview.SettingsChoice, 0, len(snapshot.appearance.GlanceCatalog))
 		for _, item := range snapshot.appearance.GlanceCatalog {
 			label := firstNonEmpty(item.Name, item.Ref.GlanceID)
 			source := item.Icon
@@ -1058,7 +1075,7 @@ func (c *onboardingController) onboardingChoices(snapshot settingsSnapshot, kind
 					source = item.Preview.Icon
 				}
 			}
-			choices = append(choices, launcherview.OnboardingChoice{
+			choices = append(choices, launcherview.SettingsChoice{
 				Value: glanceRefJSON(item.Ref), Label: label, Leading: c.imageForTint(source, &snapshot.palette.Text, physicalImageSize(18, imageScale)), Trailing: trailing,
 			})
 		}
@@ -1069,8 +1086,11 @@ func (c *onboardingController) onboardingChoices(snapshot settingsSnapshot, kind
 
 func (c *onboardingController) selectOnboardingChoice(value string) {
 	kind := c.choice
-	c.choice = ""
-	c.choiceAnchor = woxui.Rect{}
+	if picker := c.languagePicker(); kind == "language" && picker != nil && picker.services != nil {
+		picker.start(onboardingLanguagePicker, i18n.LangCode(value), false, func() { c.setOnboardingChoice("") })
+		return
+	}
+	c.setOnboardingChoice("")
 	key := ""
 	switch kind {
 	case "language":
@@ -1174,8 +1194,7 @@ func (c *onboardingController) onOnboardingKey(event woxui.KeyEvent) bool {
 	}
 	switch event.Key {
 	case woxui.KeyEscape:
-		c.choice = ""
-		c.choiceAnchor = woxui.Rect{}
+		c.setOnboardingChoice("")
 		c.invalidateOnboardingWindow()
 	case woxui.KeyArrowLeft:
 		c.selectOnboardingStep(c.step - 1)

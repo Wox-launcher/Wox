@@ -1509,11 +1509,7 @@ func (m *Manager) PostSettingUpdate(ctx context.Context, key string, value strin
 			m.refreshTrayQueryIcons(ctx)
 		}
 	case "LangCode":
-		langCode := vs
-		langErr := i18n.GetI18nManager().UpdateLang(ctx, i18n.LangCode(langCode))
-		if langErr != nil {
-			logger.Error(ctx, fmt.Sprintf("failed to update lang: %s", langErr.Error()))
-		}
+		reconcilePreferredLanguage(ctx)
 	case "EnableAutostart":
 		enabled := vb
 		err := autostart.SetAutostart(ctx, enabled)

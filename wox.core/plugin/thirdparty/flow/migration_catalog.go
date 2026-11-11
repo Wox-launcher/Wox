@@ -366,6 +366,8 @@ func flowLangCode(value string) string {
 		return "pt_BR"
 	case "ru", "ru-ru", "ru_ru":
 		return "ru_RU"
+	case "es", "es-es", "es_es":
+		return "es_ES"
 	default:
 		return ""
 	}

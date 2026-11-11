@@ -7,10 +7,25 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"testing"
 	"wox/internal/assetfs"
 	"wox/util"
 )
+
+func TestOnlyDefaultLanguagesAreEmbedded(t *testing.T) {
+	entries, err := LangFS.ReadDir("lang")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, entry := range entries {
+		names = append(names, entry.Name())
+	}
+	if !slices.Equal(names, []string{"en_US.json", "zh_CN.json"}) {
+		t.Fatalf("embedded language files = %v", names)
+	}
+}
 
 func TestInstallLinuxDesktopIconWritesEmbeddedPNG(t *testing.T) {
 	if !util.IsLinux() {

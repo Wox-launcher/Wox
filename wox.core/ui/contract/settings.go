@@ -164,6 +164,7 @@ type GeneralSettings struct {
 	HideOnLostFocus                    bool
 	ShowTray                           bool
 	LangCode                           i18n.LangCode
+	LanguageRevision                   uint64
 	QueryHotkeys                       []setting.QueryHotkey
 	ResultBindings                     []setting.ResultBinding
 	QueryAliases                       []setting.QueryAlias
@@ -220,6 +221,12 @@ type GeneralSettingsServices interface {
 	// with core and must be treated as read-only.
 	LanguageBundle(ctx context.Context, sessionID string, langCode i18n.LangCode) (map[string]string, error)
 	UpdateGeneralSetting(ctx context.Context, sessionID string, key string, value string) error
+}
+
+// LanguagePackServices is the internal Settings and onboarding language picker contract.
+type LanguagePackServices interface {
+	ChangeLanguage(ctx context.Context, sessionID string, code i18n.LangCode, progress func(i18n.PackProgress)) error
+	RedownloadLanguage(ctx context.Context, sessionID string, code i18n.LangCode, progress func(i18n.PackProgress)) error
 }
 
 // MacOSPermissionStatus contains passive onboarding permission checks.

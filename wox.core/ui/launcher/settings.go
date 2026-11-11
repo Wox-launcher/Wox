@@ -575,6 +575,7 @@ func (a *App) reloadSettingsWithForms(forceForms bool) error {
 		// Domain controllers receive the same authoritative payload in one UI transaction.
 		a.generalSettings.ApplyData(data)
 		a.generalSettings.SetLanguages(languageChoices)
+		a.generalSettings.languagePicker.setCatalog(languages)
 		a.networkSettings.ApplyData(data.HttpProxyEnabled, data.HttpProxyURL)
 		a.webView.syncWebViewActionHotkey()
 		if a.window != nil {
@@ -1137,6 +1138,10 @@ func (c *generalSettingsController) activateSetting(direction int) {
 		return
 	}
 	if item.disabled {
+		return
+	}
+	if item.key == "LangCode" {
+		c.openSettingChoicePicker(c.localizedSettingItem(item))
 		return
 	}
 	if item.key == "UsagePeriod" {

@@ -107,8 +107,8 @@ type Metadata struct {
 	DevPluginDirectory string `json:"-"` // absolute path to dev plugin directory defined in wpm settings, only available when IsDev is true
 
 	// cache for translations
-	translateCache     *util.HashMap[string, string] `json:"-"`
-	translateCacheOnce sync.Once                     `json:"-"`
+	translateCache     *util.HashMap[string, metadataTranslation] `json:"-"`
+	translateCacheOnce sync.Once                                  `json:"-"`
 }
 
 func (m *Metadata) GetIconOrDefault(pluginDirectory string, defaultImage common.WoxImage) common.WoxImage {
@@ -666,15 +666,20 @@ func (m *Metadata) translateEn(ctx context.Context, text common.I18nString) stri
 	return i18n.GetI18nManager().TranslateWoxEnUs(ctx, rawText)
 }
 
+type metadataTranslation struct {
+	revision uint64
+	text     string
+}
+
 func (m *Metadata) translate(ctx context.Context, text common.I18nString) string {
 	rawText := strings.TrimSpace(string(text))
 	m.translateCacheOnce.Do(func() {
-		m.translateCache = util.NewHashMap[string, string]()
+		m.translateCache = util.NewHashMap[string, metadataTranslation]()
 	})
-	langCode := i18n.GetI18nManager().GetCurrentLangCode()
+	langCode, revision := i18n.GetI18nManager().ActiveLanguage()
 	cacheKey := string(langCode) + "|" + rawText
-	if cached, ok := m.translateCache.Load(cacheKey); ok {
-		return cached
+	if cached, ok := m.translateCache.Load(cacheKey); ok && cached.revision == revision {
+		return cached.text
 	}
 
 	translated := i18n.GetI18nManager().TranslateI18nMap(ctx, rawText, m.I18n)
@@ -685,7 +690,7 @@ func (m *Metadata) translate(ctx context.Context, text common.I18nString) string
 	// (glance values, notification titles), and caching every distinct untranslated
 	// string turned this per-plugin map into an unbounded leak.
 	if translated != rawText {
-		m.translateCache.Store(cacheKey, translated)
+		m.translateCache.Store(cacheKey, metadataTranslation{revision: revision, text: translated})
 	}
 	return translated
 }

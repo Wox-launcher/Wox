@@ -90,6 +90,89 @@ func TestSettingsChoiceInputKeys(t *testing.T) {
 	}
 }
 
+func TestSettingsChoiceAccessoryHasIndependentMouseAndKeyboardActions(t *testing.T) {
+	choices, refreshes := 0, 0
+	open := true
+	host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget {
+		trigger := woxwidget.Semantics{Key: "trigger", AutomationID: "trigger", Role: woxui.AccessibilityRoleButton, Label: "Language",
+			Child: woxwidget.Focusable{Key: "trigger", Autofocus: true, Child: woxwidget.Container{Width: 100, Height: 32}}}
+		if !open {
+			return trigger
+		}
+		return woxwidget.Stack{Children: []woxwidget.StackChild{
+			{Child: trigger},
+			{Child: SettingsChoiceView(SettingsChoiceProps{
+				ID: "languages", Width: 280, Height: 240, CurrentValue: "pt_BR",
+				Theme: woxcomponent.ControlTheme{DensityScale: 1.2},
+				Choices: []SettingsChoice{
+					{Value: "pt_BR", Label: "Português", ActionLabel: "Redownload", OnAction: func() { refreshes++ }},
+				},
+				OnChoose: func(int) { choices++ }, OnCancel: func() { open = false },
+			})},
+		}}
+	})
+	defer host.Dispose()
+	host.AttachServices(actionSearchHostServices{})
+	frame := woxui.FrameInfo{Size: woxui.Size{Width: 280, Height: 240}, PixelSize: woxui.PixelSize{Width: 420, Height: 360}, Scale: 1.5}
+	draw := func() { host.Frame(&woxui.DisplayList{}, frame) }
+	draw()
+	if !host.Key(woxui.KeyEvent{Key: woxui.KeyEnter, Down: true}) || choices != 1 || refreshes != 0 {
+		t.Fatalf("Enter on the menu activated %d choices and %d refreshes", choices, refreshes)
+	}
+	host.Key(woxui.KeyEvent{Key: woxui.KeyTab, Down: true})
+	host.Key(woxui.KeyEvent{Key: woxui.KeySpace, Down: true})
+	if choices != 1 || refreshes != 1 {
+		t.Fatalf("Tab and Space activated %d choices and %d refreshes", choices, refreshes)
+	}
+	host.Key(woxui.KeyEvent{Key: woxui.KeyArrowDown, Down: true})
+	host.Key(woxui.KeyEvent{Key: woxui.KeyEnter, Down: true})
+	if choices != 2 || refreshes != 1 {
+		t.Fatalf("arrow navigation did not return focus to row selection")
+	}
+	draw()
+	actionID := "languages-option-0-action"
+	bounds, ok := host.BoundsForKey(woxwidget.Key(actionID))
+	if !ok || bounds.Width <= 0 {
+		t.Fatalf("refresh button has no usable hit bounds: %+v", bounds)
+	}
+	for _, kind := range []woxui.PointerEventKind{woxui.PointerDown, woxui.PointerUp} {
+		host.Pointer(woxui.PointerEvent{Kind: kind, Button: woxui.PointerButtonPrimary, Position: woxui.Point{
+			X: bounds.X + bounds.Width/2, Y: bounds.Y + bounds.Height/2,
+		}})
+	}
+	if choices != 2 || refreshes != 2 {
+		t.Fatalf("mouse activated %d choices and %d refreshes", choices, refreshes)
+	}
+	if !host.Key(woxui.KeyEvent{Key: woxui.KeyEscape, Down: true}) || open {
+		t.Fatal("Escape did not dismiss the menu from the refresh action")
+	}
+	draw()
+	if host.FocusedKey() != "trigger" {
+		t.Fatalf("focus after dismiss = %q, want the original trigger", host.FocusedKey())
+	}
+}
+
+func TestSettingsChoiceLongErrorUsesTooltipAtNarrowWidth(t *testing.T) {
+	props := SettingsChoiceProps{ID: "languages", Theme: woxcomponent.ControlTheme{DensityScale: 1.2}}
+	row := visibleSettingsChoice{choice: SettingsChoice{
+		Label: "Português", Error: "The server returned an invalid language pack for this request",
+		ErrorSummary: "Download failed",
+	}}
+	wide := settingsChoiceAccessories(woxwidget.StateContext{}, props, &settingsChoiceState{}, []visibleSettingsChoice{row}, 0, 700, woxui.Color{})
+	if len(wide) != 1 {
+		t.Fatalf("wide row must show the full error, got %d widgets", len(wide))
+	}
+	message := wide[0].(woxwidget.Container).Child.(woxwidget.Align).Child.(woxwidget.TextBlock)
+	if message.Value != row.choice.Error || message.Color != props.Theme.Error {
+		t.Fatalf("full error = %+v", message)
+	}
+	narrow := settingsChoiceAccessories(woxwidget.StateContext{}, props, &settingsChoiceState{}, []visibleSettingsChoice{row}, 0, 145, woxui.Color{})
+	icon, ok := narrow[len(narrow)-1].(woxwidget.Gesture)
+	if !ok || icon.OnHoverAt == nil {
+		t.Fatal("narrow row lost the error tooltip")
+	}
+}
+
 // TestSettingsChoiceCurrencySearch checks code matching and clearing the search.
 func TestSettingsChoiceCurrencySearch(t *testing.T) {
 	choices := []SettingsChoice{

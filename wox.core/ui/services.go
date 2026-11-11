@@ -20,6 +20,7 @@ import (
 type CoreServices struct{}
 
 var _ contract.Services = (*CoreServices)(nil)
+var _ contract.LanguagePackServices = (*CoreServices)(nil)
 var updateChannelVersionsProvider = updater.GetUpdateChannelVersions
 
 // NewCoreServices creates the process-local UI service facade.
@@ -95,6 +96,8 @@ func (s *CoreServices) AttachView(view contract.View) {
 func (s *CoreServices) Ready(ctx context.Context, sessionID string) error {
 	ctx = uiServiceContext(ctx, sessionID)
 	GetUIManager().PostUIReady(ctx)
+	reconcilePreferredLanguage(ctx)
+	refreshCachedLanguages(ctx)
 	startCloudSyncManagerAfterUIReady(ctx)
 	return nil
 }

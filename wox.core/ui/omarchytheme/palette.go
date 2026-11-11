@@ -181,8 +181,7 @@ func ThemeFromPalette(palette Palette, woxVersion string) (common.Theme, error) 
 		ThemeAuthor:                          "Wox launcher",
 		ThemeUrl:                             "https://www.github.com/wox-launcher/wox",
 		Version:                              "1.0.0",
-		Description:                          "i18n:theme_description",
-		I18n:                                 themeDescriptions,
+		Description:                          "i18n:ui_theme_omarchy_auto_description",
 		IsSystem:                             true,
 		IsInstalled:                          true,
 		BaseBackgroundColor:                  appBackground,
@@ -456,13 +455,4 @@ func withAlpha(hexColor string, alpha float64) string {
 		alpha = 1
 	}
 	return normalized[:7] + fmt.Sprintf("%02X", uint8(math.Floor(255*alpha)))
-}
-
-var themeDescriptions = map[string]map[string]string{
-	"en_US": {"theme_description": "Follows the current Omarchy theme."},
-	"zh_CN": {"theme_description": "跟随当前的 Omarchy 主题。"},
-	"ru_RU": {"theme_description": "Следует текущей теме Omarchy."},
-	"pt_BR": {"theme_description": "Acompanha o tema atual do Omarchy."},
-	"ko_KR": {"theme_description": "현재 Omarchy 테마를 따릅니다."},
-	"ja_JP": {"theme_description": "現在の Omarchy テーマに合わせます。"},
 }

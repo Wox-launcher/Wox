@@ -17,17 +17,28 @@ const (
 	settingsChoiceMenuMargin   = float32(12)
 	settingsChoiceMaxHeight    = float32(360)
 	settingsChoiceMenuMaxWidth = float32(360)
+	settingsChoiceScopeKey     = woxwidget.Key("setting-choice-scope")
 )
 
 // SettingsChoice is one value displayed by the settings dropdown.
 type SettingsChoice struct {
-	Value        string
-	Label        string
-	GroupTooltip string
-	Group        string
-	Leading      *woxui.Image
-	Trailing     string
-	Tooltip      string
+	Value             string
+	Label             string
+	GroupTooltip      string
+	Group             string
+	Leading           *woxui.Image
+	Trailing          string
+	Tooltip           string
+	Status            string
+	StatusIcon        *woxui.Image
+	StatusDescription string
+	Error             string
+	ErrorSummary      string
+	ErrorIcon         *woxui.Image
+	ActionIcon        *woxui.Image
+	ActionLabel       string
+	OnAction          func()
+	Disabled          bool
 }
 
 // SettingsChoiceProps contains the immutable state and actions rendered by the settings dropdown.
@@ -72,6 +83,8 @@ type settingsChoiceState struct {
 	selected         int
 	hovered          int
 	keyboardSelected bool
+	accessoryTip     string
+	accessoryAnchor  woxui.Rect
 }
 
 // InitState creates the dropdown's private query, focus, highlight, and scroll state.
@@ -155,10 +168,16 @@ func buildSettingsChoiceView(context woxwidget.StateContext, props SettingsChoic
 	menuHeight := menuPadding*2 + searchHeight + listHeight
 	menuTop := settingsChoiceMenuTop(props, anchor, menuHeight, listHeight)
 	menu := settingsChoiceMenu(context, props, state, visible, menuWidth, menuHeight, listHeight, menuPadding)
-	return woxwidget.Stack{Width: props.Width, Height: props.Height, Children: []woxwidget.StackChild{
+	layers := []woxwidget.StackChild{
 		{Child: woxwidget.Gesture{ID: "setting-choice-backdrop", OnTap: props.OnCancel, OnScroll: func(woxui.Point) {}, Child: woxwidget.Container{Width: props.Width, Height: props.Height}}},
 		{Left: menuLeft, Top: menuTop, Child: menu},
-	}}
+	}
+	if tooltip, left, top := SettingsInlineTooltipOverlay(SettingsInlineTooltipProps{
+		Width: props.Width, Height: props.Height, Anchor: state.accessoryAnchor, Message: state.accessoryTip, Side: "top", Theme: props.Theme, Window: props.Window,
+	}); tooltip != nil {
+		layers = append(layers, woxwidget.StackChild{Left: left, Top: top, Child: tooltip})
+	}
+	return woxwidget.Stack{Width: props.Width, Height: props.Height, Children: layers}
 }
 
 // settingsChoiceVisibleIndex finds the committed value in the rendered list, skipping group headers.
@@ -298,6 +317,9 @@ func settingsChoiceRowPreferredWidth(item visibleSettingsChoice, props SettingsC
 	if item.choice.Tooltip != "" {
 		width += 28
 	}
+	if item.choice.OnAction != nil || item.choice.StatusIcon != nil {
+		width += props.Theme.Scaled(woxcomponent.SettingsCompactControlHeight)
+	}
 	return width
 }
 
@@ -374,7 +396,8 @@ func settingsChoiceMenu(context woxwidget.StateContext, props SettingsChoiceProp
 			}}}
 		}
 		activate := func() {
-			if props.OnChoose != nil {
+			if !choice.Disabled && props.OnChoose != nil {
+				state.clearAccessoryTip(context)
 				props.OnChoose(visibleChoice.originalIndex)
 			}
 		}
@@ -398,6 +421,7 @@ func settingsChoiceMenu(context woxwidget.StateContext, props SettingsChoiceProp
 			)
 		}
 		rowChildren = append(rowChildren, tooltip)
+		rowChildren = append(rowChildren, settingsChoiceAccessories(context, props, state, visible, index, width, foreground)...)
 		rowContent := woxwidget.Container{
 			Width: width, Height: settingsChoiceRowHeight, Padding: woxwidget.Insets{Left: 16, Right: 8},
 			Child: woxwidget.Flex{Axis: woxwidget.Horizontal, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: rowChildren},
@@ -419,9 +443,14 @@ func settingsChoiceMenu(context woxwidget.StateContext, props SettingsChoiceProp
 				context.SetState(func() { state.hovered = -1 })
 			}
 		}, OnTap: activate, Child: woxwidget.Stack{Width: width, Height: settingsChoiceRowHeight, Children: []woxwidget.StackChild{{Child: rowBackground}, {Child: rowContent}}}}
+		actions := []woxui.AccessibilityAction{woxui.AccessibilityActionActivate}
+		if choice.Disabled {
+			actions = nil
+		}
+		description := strings.TrimSpace(strings.Join([]string{choice.Trailing, choice.StatusDescription, choice.Status, choice.Error}, " "))
 		rows = append(rows, woxwidget.Semantics{
-			Key: key, AutomationID: string(key), Role: woxui.AccessibilityRoleMenuItem, Label: choice.Label, Description: choice.Trailing,
-			Actions: []woxui.AccessibilityAction{woxui.AccessibilityActionActivate}, Selected: selected,
+			Key: key, AutomationID: string(key), Role: woxui.AccessibilityRoleMenuItem, Label: choice.Label, Description: description,
+			Actions: actions, Selected: selected, Disabled: choice.Disabled,
 			OnAction: func(action woxui.AccessibilityAction, _ string) error {
 				if action == woxui.AccessibilityActionActivate {
 					activate()
@@ -483,7 +512,113 @@ func settingsChoiceMenu(context woxwidget.StateContext, props SettingsChoiceProp
 			return state.handleKey(context, props, visible, event)
 		}, Child: surface}
 	}
-	return woxwidget.FocusScope{Key: "setting-choice-scope", Modal: true, Child: surface}
+	return woxwidget.FocusScope{Key: settingsChoiceScopeKey, Modal: true, Child: surface}
+}
+
+// settingsChoiceAccessories fit feedback beside the label and keep secondary actions separately focusable.
+func settingsChoiceAccessories(context woxwidget.StateContext, props SettingsChoiceProps, state *settingsChoiceState, visible []visibleSettingsChoice, index int, width float32, foreground woxui.Color) []woxwidget.Widget {
+	choice := visible[index].choice
+	if choice.Status == "" && choice.StatusIcon == nil && choice.Error == "" && choice.OnAction == nil {
+		return nil
+	}
+	var widgets []woxwidget.Widget
+	actionSize := props.Theme.Scaled(woxcomponent.SettingsCompactControlHeight)
+	iconSize := props.Theme.Scaled(16)
+	style := woxui.TextStyle{Size: props.Theme.Scaled(woxcomponent.SettingsSecondaryFontSize)}
+	textWidth := func(text string, style woxui.TextStyle) float32 {
+		if props.Window != nil {
+			if metrics, err := props.Window.MeasureText(text, style); err == nil && metrics.Size.Width > 0 {
+				return metrics.Size.Width
+			}
+		}
+		return settingsChoiceEstimateTextWidth(text, style.Size)
+	}
+	remaining := width - 32 - textWidth(choice.Label, woxui.TextStyle{Size: props.Theme.Scaled(13)})
+	if choice.OnAction != nil || (choice.StatusIcon != nil && choice.Error == "") {
+		remaining -= actionSize
+	}
+	id := fmt.Sprintf("%s-option-%d", props.ID, index)
+	hover := func(message string) func(bool, woxui.Rect) {
+		return func(inside bool, bounds woxui.Rect) {
+			context.SetState(func() {
+				if inside {
+					state.accessoryTip, state.accessoryAnchor = message, bounds
+				} else if state.accessoryAnchor == bounds {
+					state.accessoryTip = ""
+				}
+			})
+		}
+	}
+	addText := func(text string, color woxui.Color, limit float32) {
+		if limit <= 0 || text == "" {
+			return
+		}
+		widgets = append(widgets, woxwidget.Container{
+			Width: min(limit, textWidth(text, style)+8), Height: settingsChoiceRowHeight,
+			Padding: woxwidget.Insets{Left: 8}, Child: woxwidget.Align{Height: settingsChoiceRowHeight, Vertical: .5,
+				Child: woxwidget.TextBlock{Value: text, MaxLines: 1, Style: style, Color: color}},
+		})
+	}
+	if choice.Error != "" {
+		if textWidth(choice.Error, style)+8 <= remaining {
+			addText(choice.Error, props.Theme.Error, remaining)
+		} else {
+			if textWidth(choice.ErrorSummary, style)+8 <= remaining-actionSize {
+				addText(choice.ErrorSummary, props.Theme.Error, remaining-actionSize)
+			}
+			widgets = append(widgets, woxwidget.Gesture{ID: id + "-error", OnHoverAt: hover(choice.Error), Child: woxwidget.Align{
+				Width: actionSize, Height: settingsChoiceRowHeight, Horizontal: .5, Vertical: .5,
+				Child: woxwidget.Image{Source: choice.ErrorIcon, Width: iconSize, Height: iconSize},
+			}})
+		}
+	} else {
+		addText(choice.Status, foreground, max(remaining, max(float32(0), width/2-actionSize)))
+	}
+	if choice.OnAction != nil {
+		widgets = append(widgets, woxcomponent.WoxIconButton(woxcomponent.IconButtonProps{
+			ID: id + "-action", Label: choice.ActionLabel + " · " + choice.Label, Width: actionSize, Height: actionSize,
+			Icon: woxwidget.Image{Source: choice.ActionIcon, Width: iconSize, Height: iconSize}, Radius: 4,
+			FocusRingColor: props.Theme.Focus, HoverBackground: props.Theme.Border, OnHoverAt: hover(choice.ActionLabel),
+			OnTap: func() {
+				state.clearAccessoryTip(context)
+				choice.OnAction()
+			},
+			OnFocusChange: func(focused bool) {
+				if focused {
+					start := settingsChoiceOffset(visible, index)
+					state.scrollController.EnsureVisible(start, start+settingsChoiceRowHeight)
+				}
+			},
+			OnKey: func(event woxui.KeyEvent) bool {
+				switch event.Key {
+				case woxui.KeyEscape:
+					return state.handleKey(context, props, visible, event)
+				case woxui.KeyArrowUp, woxui.KeyArrowDown:
+					if !event.Down || event.Composing {
+						return false
+					}
+					if props.Filterable {
+						state.queryFocusNode.RequestFocus()
+					} else {
+						context.RequestFocus(settingsChoiceScopeKey)
+					}
+					state.selected = index
+					return state.handleKey(context, props, visible, event)
+				}
+				return false
+			},
+		}))
+	} else if choice.StatusIcon != nil && choice.Error == "" {
+		widgets = append(widgets, woxwidget.Align{Width: actionSize, Height: settingsChoiceRowHeight, Horizontal: .5, Vertical: .5,
+			Child: woxwidget.Image{Source: choice.StatusIcon, Width: iconSize, Height: iconSize}})
+	}
+	return widgets
+}
+
+func (s *settingsChoiceState) clearAccessoryTip(context woxwidget.StateContext) {
+	if s.accessoryTip != "" {
+		context.SetState(func() { s.accessoryTip = "" })
+	}
 }
 
 // settingsChoiceGroupHeader paints a non-selectable category label above option rows.
@@ -555,12 +690,14 @@ func (s *settingsChoiceState) handleKey(context woxwidget.StateContext, props Se
 		})
 		return true
 	case woxui.KeyEnter:
-		if s.selected >= 0 && s.selected < len(visible) && !visible[s.selected].header && props.OnChoose != nil {
+		if s.selected >= 0 && s.selected < len(visible) && !visible[s.selected].header && !visible[s.selected].choice.Disabled && props.OnChoose != nil {
+			s.clearAccessoryTip(context)
 			props.OnChoose(visible[s.selected].originalIndex)
 		}
 		return true
 	case woxui.KeySpace:
-		if !props.Filterable && s.selected >= 0 && s.selected < len(visible) && !visible[s.selected].header && props.OnChoose != nil {
+		if !props.Filterable && s.selected >= 0 && s.selected < len(visible) && !visible[s.selected].header && !visible[s.selected].choice.Disabled && props.OnChoose != nil {
+			s.clearAccessoryTip(context)
 			props.OnChoose(visible[s.selected].originalIndex)
 			return true
 		}

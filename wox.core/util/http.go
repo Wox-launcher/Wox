@@ -171,6 +171,46 @@ func HttpDownloadWithProgress(ctx context.Context, url string, dest string, prog
 	return httpDownloadWithClient(ctx, req, dest, progressCallback, GetHTTPClient(ctx), true)
 }
 
+// HttpDownloadBytes downloads a small resource with a hard size limit and reports transferred bytes.
+func HttpDownloadBytes(ctx context.Context, url string, limit int64, progress func(int64, int64)) ([]byte, error) {
+	req, err := newRequest(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Cache-Control", "no-cache")
+	req.Header.Set("Accept-Encoding", "identity")
+	resp, err := doRequestWithClient(req, GetHTTPClient(ctx), true)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, &HTTPStatusError{Method: req.Method, URL: url, StatusCode: resp.StatusCode}
+	}
+	if resp.ContentLength > limit {
+		return nil, fmt.Errorf("download exceeds %d bytes", limit)
+	}
+	var data bytes.Buffer
+	reader := io.LimitReader(resp.Body, limit+1)
+	buffer := make([]byte, 32*1024)
+	for {
+		n, err := reader.Read(buffer)
+		data.Write(buffer[:n])
+		if int64(data.Len()) > limit {
+			return nil, fmt.Errorf("download exceeds %d bytes", limit)
+		}
+		if n > 0 && progress != nil {
+			progress(int64(data.Len()), resp.ContentLength)
+		}
+		if err == io.EOF {
+			return data.Bytes(), nil
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+}
+
 // ApplyHTTPProxy installs the current proxy switch and address on the shared client.
 // A disabled switch clears the explicit proxy immediately, even when an address is still stored.
 func ApplyHTTPProxy(ctx context.Context, enabled bool, proxyURL string) {

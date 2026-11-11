@@ -3,6 +3,7 @@ package launcher
 import (
 	"context"
 	"strings"
+	"wox/i18n"
 	woxcomponent "wox/ui/launcher/component"
 
 	launcherview "wox/ui/launcher/view"
@@ -26,7 +27,19 @@ type settingChoicePickerSnapshot struct {
 // buildSettingChoicePickerOverlay adapts controller state to the package-independent choice picker view.
 func (c *generalSettingsController) buildSettingChoicePickerOverlay(snapshot *settingChoicePickerSnapshot, palette woxcomponent.ControlTheme, width, height, imageScale float32) woxwidget.Widget {
 	choices := make([]launcherview.SettingsChoice, len(snapshot.item.choices))
+	currentValue := snapshot.item.value
+	isLanguage := snapshot.item.key == "LangCode" && c.languagePicker != nil
+	if isLanguage {
+		currentValue = c.Data().LangCode
+	}
 	for index, choice := range snapshot.item.choices {
+		if isLanguage {
+			code := i18n.LangCode(choice.value)
+			choices[index] = c.languagePicker.row(choice, palette, imageScale, func() {
+				c.languagePicker.start(settingsLanguagePicker, code, true, c.closeSettingChoicePicker)
+			})
+			continue
+		}
 		trailing := snapshot.item.trailers[choice.value]
 		if description := snapshot.item.choiceDescriptions[choice.value]; description != "" {
 			trailing = description
@@ -58,7 +71,7 @@ func (c *generalSettingsController) buildSettingChoicePickerOverlay(snapshot *se
 	return launcherview.SettingsChoiceView(launcherview.SettingsChoiceProps{
 		SelectedValues: selectedValues,
 		ID:             "setting-choice-picker", Width: width, Height: height, Anchor: snapshot.anchor, Filterable: snapshot.item.filterable, Theme: palette, Window: c.settings.settingsNativeWindow(), Title: snapshot.item.title,
-		FilterHint: c.language.translate("i18n:ui_filter_placeholder"), SearchIcon: searchIcon, CurrentValue: snapshot.item.value, Choices: choices, OnChoose: c.chooseSettingChoice, OnCancel: c.closeSettingChoicePicker, OnTooltip: c.settings.setSettingChoiceTooltip,
+		FilterHint: c.language.translate("i18n:ui_filter_placeholder"), SearchIcon: searchIcon, CurrentValue: currentValue, Choices: choices, OnChoose: c.chooseSettingChoice, OnCancel: c.closeSettingChoicePicker, OnTooltip: c.settings.setSettingChoiceTooltip,
 	})
 }
 
@@ -136,6 +149,10 @@ func (c *generalSettingsController) chooseSettingChoice(index int) {
 	}
 	item := state.item
 	choice := state.item.choices[index]
+	if item.key == "LangCode" && c.languagePicker != nil && c.languagePicker.services != nil {
+		c.languagePicker.start(settingsLanguagePicker, i18n.LangCode(choice.value), false, c.closeSettingChoicePicker)
+		return
+	}
 	if !state.multi {
 		c.SetChoicePicker(nil)
 	}

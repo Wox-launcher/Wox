@@ -1,6 +1,7 @@
 package component
 
 import (
+	"fmt"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 )
@@ -78,7 +79,7 @@ func (s *iconButtonState) Build(context woxwidget.StateContext, widget any) woxw
 		Width: props.Width, Height: props.Height, Radius: props.Radius, Color: background,
 		Child: woxwidget.Align{Width: props.Width, Height: props.Height, Horizontal: 0.5, Vertical: 0.5, Child: icon},
 	})}
-	return woxwidget.Semantics{
+	semantics := woxwidget.Semantics{
 		Key: key, AutomationID: props.ID, Role: woxui.AccessibilityRoleButton, Label: props.Label, Actions: actions, Disabled: props.Disabled, Selected: props.Selected,
 		Child: woxwidget.Focusable{Key: key, Disabled: props.Disabled, FocusRingColor: props.FocusRingColor, FocusRingRadius: props.Radius, OnFocusChange: func(focused bool) {
 			if focused != s.focused {
@@ -100,6 +101,16 @@ func (s *iconButtonState) Build(context woxwidget.StateContext, widget any) woxw
 			return true
 		}, Child: content},
 	}
+	if onTap != nil {
+		semantics.OnAction = func(action woxui.AccessibilityAction, _ string) error {
+			if action != woxui.AccessibilityActionActivate {
+				return fmt.Errorf("unsupported icon button action %q", action)
+			}
+			onTap()
+			return nil
+		}
+	}
+	return semantics
 }
 
 func (s *iconButtonState) Dispose() {}

@@ -10,10 +10,10 @@ import (
 	"sync"
 	"wox/common"
 	"wox/common/icons"
+	"wox/i18n"
 	"wox/internal/assetfs"
 	"wox/plugin"
 	"wox/plugin/system"
-	"wox/setting"
 	"wox/setting/definition"
 	"wox/util"
 	"wox/util/clipboard"
@@ -897,7 +897,7 @@ func pickLangValue(i18n map[string]string, fallback string) string {
 }
 
 func (e *EmojiPlugin) getDisplayName(ctx context.Context, entry EmojiData) string {
-	langCode := setting.GetSettingManager().GetWoxSetting(ctx).LangCode.Get()
+	langCode := i18n.GetI18nManager().GetCurrentLangCode()
 	preferred := e.getPreferredLangKeys(string(langCode))
 
 	for _, key := range preferred {
@@ -918,7 +918,7 @@ func (e *EmojiPlugin) getDisplayName(ctx context.Context, entry EmojiData) strin
 }
 
 func (e *EmojiPlugin) getCategoryName(ctx context.Context, entry EmojiData) string {
-	langCode := setting.GetSettingManager().GetWoxSetting(ctx).LangCode.Get()
+	langCode := i18n.GetI18nManager().GetCurrentLangCode()
 	preferred := e.getPreferredLangKeys(string(langCode))
 
 	for _, key := range preferred {

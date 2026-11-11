@@ -19,6 +19,7 @@ type languageServices interface {
 type languageCatalog struct {
 	translationsMu       sync.RWMutex
 	translationsLanguage string
+	coreRevision         uint64
 	translations         map[string]string
 	translationsRevision atomic.Uint64
 }
@@ -57,10 +58,21 @@ func (c *languageCatalog) reload(ctx context.Context, services languageServices,
 		translations = merged
 	}
 	c.translationsMu.Lock()
-	languageChanged := c.translationsLanguage != "" && c.translationsLanguage != string(langCode)
+	if settings.LanguageRevision < c.coreRevision {
+		c.translationsMu.Unlock()
+		return false, nil
+	}
+	languageChanged := c.translationsLanguage != "" && (c.translationsLanguage != string(langCode) || c.coreRevision != settings.LanguageRevision)
 	c.translationsLanguage = string(langCode)
+	c.coreRevision = settings.LanguageRevision
 	c.translations = translations
 	c.translationsMu.Unlock()
 	c.translationsRevision.Add(1)
 	return languageChanged, nil
+}
+
+func (c *languageCatalog) activeCode() string {
+	c.translationsMu.RLock()
+	defer c.translationsMu.RUnlock()
+	return c.translationsLanguage
 }

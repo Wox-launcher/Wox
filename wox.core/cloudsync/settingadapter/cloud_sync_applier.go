@@ -50,6 +50,9 @@ func (a *LocalSettingApplier) ApplyWoxSetting(ctx context.Context, key string, o
 			if httpProxySettingKey(key) {
 				woxSetting.ApplyHTTPProxy(ctx)
 			}
+			if key == "LangCode" {
+				ui.GetUIManager().PostSettingUpdate(ctx, key, "")
+			}
 			return nil
 		case cloudsync.OpUpsert:
 			if err := value.SetFromString(rawValue); err != nil {

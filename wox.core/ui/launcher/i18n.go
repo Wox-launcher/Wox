@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-// reloadTranslations loads the flat language bundle embedded by core.
+// reloadTranslations loads the active language table published by core.
 func (a *App) reloadTranslations() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

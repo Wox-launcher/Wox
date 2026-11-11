@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 	"wox/common"
 	"wox/common/icons"
+	"wox/i18n"
 	"wox/plugin"
 	"wox/util"
 
@@ -23,9 +25,10 @@ type wpmCommandTestAPI struct {
 
 // TestWPMCreateAIPrompt checks that every locale keeps the portable agent instructions intact.
 func TestWPMCreateAIPrompt(t *testing.T) {
-	for _, locale := range []string{"en_US", "zh_CN", "ja_JP", "ko_KR", "pt_BR", "ru_RU"} {
+	for _, language := range i18n.GetSupportedLanguages() {
+		locale := string(language.Code)
 		t.Run(locale, func(t *testing.T) {
-			data, err := os.ReadFile("../../resource/lang/" + locale + ".json")
+			data, err := os.ReadFile(wpmLocalePath(locale))
 			require.NoError(t, err)
 			var translations map[string]string
 			require.NoError(t, json.Unmarshal(data, &translations))
@@ -246,11 +249,19 @@ func TestWPMUpdateEmpty(t *testing.T) {
 	require.Len(t, response.Results, 1)
 	require.Equal(t, "i18n:plugin_wpm_all_up_to_date", response.Results[0].Title)
 	require.Equal(t, plugin.WoxPreview{}, response.Results[0].Preview)
-	for _, locale := range []string{"en_US", "zh_CN", "ja_JP", "ko_KR", "pt_BR", "ru_RU"} {
-		data, err := os.ReadFile("../../resource/lang/" + locale + ".json")
+	for _, language := range i18n.GetSupportedLanguages() {
+		locale := string(language.Code)
+		data, err := os.ReadFile(wpmLocalePath(locale))
 		require.NoError(t, err)
 		var translations map[string]string
 		require.NoError(t, json.Unmarshal(data, &translations))
 		require.NotEmpty(t, translations["plugin_wpm_all_up_to_date"], locale)
 	}
+}
+
+func wpmLocalePath(locale string) string {
+	if i18n.IsBundled(i18n.LangCode(locale)) {
+		return filepath.Join("../../resource/lang", locale+".json")
+	}
+	return filepath.Join("../../../lang", locale+".json")
 }

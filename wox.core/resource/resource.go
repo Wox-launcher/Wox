@@ -20,7 +20,7 @@ var rawHostFS embed.FS
 
 var HostFS = assetfs.New(rawHostFS)
 
-//go:embed lang
+//go:embed lang/en_US.json lang/zh_CN.json
 var rawLangFS embed.FS
 
 var LangFS = assetfs.New(rawLangFS)

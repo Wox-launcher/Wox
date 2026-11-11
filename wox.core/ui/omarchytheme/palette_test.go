@@ -1,6 +1,7 @@
 package omarchytheme
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -138,8 +139,8 @@ func TestThemeFromPaletteFollowsOmarchyColors(t *testing.T) {
 	if theme.ResultItemActiveIndicatorWidth == nil || *theme.ResultItemActiveIndicatorWidth != 0 {
 		t.Fatal("side indicator should stay off")
 	}
-	if theme.Description != "i18n:theme_description" || theme.I18n["zh_CN"]["theme_description"] == "" || theme.I18n["en_US"]["theme_description"] == "" {
-		t.Fatalf("description = %s", theme.Description)
+	if description := theme.GetDescription(context.Background()); description != "Follows the current Omarchy theme." {
+		t.Fatalf("description = %q", description)
 	}
 
 	lightPalette, err := ParsePalette([]byte(flexokiLightColors))

@@ -21,6 +21,9 @@
         },
         "ja_JP": {
           "category_reading": "読書"
+        },
+        "es_ES": {
+          "category_reading": "Lectura"
         }
       }
     },
@@ -45,6 +48,9 @@
         },
         "ja_JP": {
           "category_writing": "執筆"
+        },
+        "es_ES": {
+          "category_writing": "Escritura"
         }
       }
     },
@@ -69,6 +75,9 @@
         },
         "ja_JP": {
           "category_productivity": "生産性"
+        },
+        "es_ES": {
+          "category_productivity": "Productividad"
         }
       }
     }
@@ -122,6 +131,11 @@
           "name_translate_chinese_english": "中国語 / 英語翻訳",
           "desc_translate_chinese_english": "選択したテキストを中国語と英語の間で翻訳します。",
           "prompt_translate_chinese_english": "次のテキストを中国語と英語の間で翻訳してください。テキストが中国語の場合は英語に、それ以外は中国語に翻訳してください。翻訳文のみを返してください:\n{wox:input_text}"
+        },
+        "es_ES": {
+          "name_translate_chinese_english": "Traducir entre chino e inglés",
+          "desc_translate_chinese_english": "Traduce el texto seleccionado entre chino e inglés.",
+          "prompt_translate_chinese_english": "Traduce el siguiente texto entre chino e inglés. Si está en chino, tradúcelo al inglés. En caso contrario, tradúcelo al chino. Devuelve solo la traducción:\n{wox:input_text}"
         }
       }
     },
@@ -173,6 +187,11 @@
           "name_summarize_selection": "選択範囲を要約",
           "desc_summarize_selection": "選択したテキストを簡潔な箇条書きに要約します。",
           "prompt_summarize_selection": "次のテキストから重要な事実を抽出してください。最大 7 つの箇条書きと 1 行の要約を返してください:\n{wox:input_text}"
+        },
+        "es_ES": {
+          "name_summarize_selection": "Resumir la selección",
+          "desc_summarize_selection": "Resume el texto seleccionado en una lista breve.",
+          "prompt_summarize_selection": "Extrae los datos importantes del siguiente texto. Devuelve hasta siete viñetas y un resumen de una línea:\n{wox:input_text}"
         }
       }
     },
@@ -224,6 +243,11 @@
           "name_rewrite_selection": "選択範囲を書き直す",
           "desc_rewrite_selection": "選択したテキストをより明確で自然な表現に書き直します。",
           "prompt_rewrite_selection": "次のテキストをより明確で自然、読みやすく書き直してください。元の意味は保持してください。書き直したテキストのみを返してください:\n{wox:input_text}"
+        },
+        "es_ES": {
+          "name_rewrite_selection": "Reescribir la selección",
+          "desc_rewrite_selection": "Reescribe el texto seleccionado para que sea más claro y natural.",
+          "prompt_rewrite_selection": "Reescribe el siguiente texto para que sea más claro, natural y fácil de leer. Conserva el significado original. Devuelve solo el texto reescrito:\n{wox:input_text}"
         }
       }
     },
@@ -268,6 +292,11 @@
           "name_fix_writing": "文章を校正",
           "desc_fix_writing": "選択したテキストの文法、スペル、句読点、表現を修正します。",
           "prompt_fix_writing": "次のテキストの文法、スペル、句読点、表現を修正してください。元の意味とトーンは保持してください。修正後のテキストのみを返してください:\n{wox:input_text}"
+        },
+        "es_ES": {
+          "name_fix_writing": "Corregir el texto",
+          "desc_fix_writing": "Corrige la gramática, la ortografía, la puntuación y la redacción del texto seleccionado.",
+          "prompt_fix_writing": "Corrige la gramática, la ortografía, la puntuación y la redacción del siguiente texto. Conserva su significado y su tono originales. Devuelve solo el texto corregido:\n{wox:input_text}"
         }
       }
     },
@@ -312,6 +341,11 @@
           "name_make_professional": "ビジネス向けに書き直す",
           "desc_make_professional": "選択したテキストをビジネス向けの丁寧な口調に書き直します。",
           "prompt_make_professional": "次のテキストを専門的で丁寧、簡潔なビジネス口調に書き直してください。元の意味は保持してください。書き直したテキストのみを返してください:\n{wox:input_text}"
+        },
+        "es_ES": {
+          "name_make_professional": "Dar un tono profesional",
+          "desc_make_professional": "Reescribe el texto seleccionado con un tono profesional.",
+          "prompt_make_professional": "Reescribe el siguiente texto con un tono profesional, cortés y conciso, adecuado para el trabajo. Conserva el significado original. Devuelve solo el texto reescrito:\n{wox:input_text}"
         }
       }
     },
@@ -356,6 +390,11 @@
           "name_extract_action_items": "ToDo を抽出",
           "desc_extract_action_items": "選択したテキストからタスク、担当者、期限を抽出します。",
           "prompt_extract_action_items": "次のテキストからアクションアイテムを抽出してください。可能な場合はタスク、担当者、期限を含めてください。情報がない場合は \"未指定\" と書いてください。簡潔な箇条書きで返してください:\n{wox:input_text}"
+        },
+        "es_ES": {
+          "name_extract_action_items": "Extraer tareas",
+          "desc_extract_action_items": "Extrae tareas, responsables y plazos del texto seleccionado.",
+          "prompt_extract_action_items": "Extrae las tareas del siguiente texto. Incluye la tarea, la persona responsable y el plazo cuando estén disponibles. Si falta algún dato, escribe \"Sin especificar\". Devuelve una lista breve con viñetas:\n{wox:input_text}"
         }
       }
     }

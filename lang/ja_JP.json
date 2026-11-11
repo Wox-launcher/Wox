@@ -537,6 +537,7 @@
   "ui_runtime_python_version_unsupported": "Python {version} はサポートされていません。Wox には Python {minimumVersion} 以降が必要です。",
   "ui_runtime_nodejs_version_unsupported": "Node.js {version} はサポートされていません。Wox には Node.js {minimumVersion} 以降が必要です。",
   "ui_themes": "テーマ",
+  "ui_theme_omarchy_auto_description": "現在の Omarchy テーマに合わせます。",
   "ui_store_themes": "テーマストア",
   "ui_installed_themes": "インストール済みテーマ",
   "ui_setting_theme_search_placeholder": "%d 個のテーマを検索",

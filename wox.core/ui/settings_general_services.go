@@ -36,6 +36,7 @@ func (s *CoreServices) GeneralSettings(ctx context.Context, sessionID string) (c
 	if chater := plugin.GetPluginManager().GetAIChatPluginChater(ctx); chater != nil {
 		skills = chater.GetAllSkills(ctx)
 	}
+	language, languageRevision := i18n.GetI18nManager().ActiveLanguage()
 	return contract.GeneralSettings{
 		EnableAutostart:                    woxSetting.EnableAutostart.Get(),
 		MainHotkey:                         woxSetting.MainHotkey.Get(),
@@ -57,7 +58,8 @@ func (s *CoreServices) GeneralSettings(ctx context.Context, sessionID string) (c
 		OnboardingFinished:                 woxSetting.OnboardingFinished.Get(),
 		HideOnLostFocus:                    woxSetting.HideOnLostFocus.Get(),
 		ShowTray:                           woxSetting.ShowTray.Get(),
-		LangCode:                           woxSetting.LangCode.Get(),
+		LangCode:                           language,
+		LanguageRevision:                   languageRevision,
 		QueryHotkeys:                       append([]setting.QueryHotkey(nil), woxSetting.QueryHotkeys.Get()...),
 		ResultBindings:                     resultBindingsFromWoxSetting(woxSetting),
 		QueryAliases:                       append([]setting.QueryAlias(nil), woxSetting.QueryAliases.Get()...),
@@ -108,8 +110,16 @@ func (s *CoreServices) GeneralSettings(ctx context.Context, sessionID string) (c
 
 // AvailableLanguages returns the supported UI language catalog.
 func (s *CoreServices) AvailableLanguages(ctx context.Context, sessionID string) ([]i18n.Lang, error) {
-	_ = uiServiceContext(ctx, sessionID)
-	return append([]i18n.Lang(nil), i18n.GetSupportedLanguages()...), nil
+	manager := i18n.GetI18nManager()
+	languages := i18n.GetSupportedLanguages()
+	for index := range languages {
+		code := languages[index].Code
+		languages[index].Installed = manager.PackInstalled(code)
+		if !languages[index].Installed {
+			languages[index].DownloadError, _ = languageAutomaticErrors.Load(code)
+		}
+	}
+	return languages, nil
 }
 
 // MacOSPermissionStatus checks current permission state without prompting.
@@ -255,7 +265,7 @@ func (s *CoreServices) UpdateGeneralSetting(ctx context.Context, sessionID strin
 	case "ShowTray":
 		woxSetting.ShowTray.Set(boolValue)
 	case "LangCode":
-		woxSetting.LangCode.Set(i18n.LangCode(value))
+		return s.ChangeLanguage(ctx, sessionID, i18n.LangCode(value), nil)
 	case "QueryAliases":
 		var aliases []setting.QueryAlias
 		if err := json.Unmarshal([]byte(value), &aliases); err != nil {

@@ -4,6 +4,10 @@ Wox-owned `go:embed` resources use `wox/internal/assetfs`. Keep source files in
 their original format; do not check in compressed copies. New files under an
 existing embed pattern are discovered automatically.
 
+Only `lang/en_US.json` and `lang/zh_CN.json` are embedded here. The repository's
+top-level `lang/` directory holds the catalogs downloaded from the official
+master branch. Keep both sets in sync when adding or changing translation keys.
+
 ```go
 //go:embed assets
 var rawAssets embed.FS

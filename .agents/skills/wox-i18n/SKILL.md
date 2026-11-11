@@ -15,7 +15,7 @@ Use `wox.core/resource/lang/en_US.json` as the authoritative source for keys, me
 - Keep product names, commands, file paths, URLs, keyboard shortcuts, and technical identifiers unchanged when they are proper names or literal input.
 - Match the tone and terminology already used by the target locale. Prefer natural, concise UI text over literal translation.
 - Keep JSON valid, formatted with two-space indentation and a final newline. Preserve English key order; insert missing entries beside their English counterparts instead of reordering unrelated entries.
-- Do not put Wox-owned translations in Go maps. Keep them in `wox.core/resource/lang/*.json` and reference them with `i18n:` keys, as required by the repository instructions.
+- Keep bundled English and Simplified Chinese in `wox.core/resource/lang/` and downloadable catalogs in the repository's `lang/` directory. Reference translations with `i18n:` keys.
 - Do not blanket-translate third-party entries in `store-plugin.json`; their translations belong to their authors. Wox-owned catalogs such as `store-ai-command.json` are in scope when they contain the target locale.
 
 ## Choose the workflow
@@ -32,7 +32,7 @@ git show 0cfb2a346af4278c5cd385aa649cb9ddb641f461 -- wox.core/i18n/lang.go store
 Then make the smallest complete current-tree change:
 
 1. Confirm the locale code, English language name, and native display name.
-2. Create `wox.core/resource/lang/<locale>.json` with every key from `en_US.json`, in the same order, fully translated.
+2. Create `lang/<locale>.json` with every key from `en_US.json`, in the same order, fully translated. The client downloads it from the official repository's master branch.
 3. Register the `LangCode` and native display name in `wox.core/i18n/lang.go`.
 4. Add the locale to Wox-owned locale maps, currently including `store-ai-command.json`, and to website locale mapping where applicable.
 5. Update current supported-language documentation and any tests that explicitly enumerate languages or translated labels.

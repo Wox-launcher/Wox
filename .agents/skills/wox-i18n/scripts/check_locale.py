@@ -42,14 +42,15 @@ def main() -> int:
     args = parser.parse_args()
 
     repo_root = Path(__file__).resolve().parents[4]
-    lang_dir = repo_root / "wox.core" / "resource" / "lang"
+    bundled_dir = repo_root / "wox.core" / "resource" / "lang"
     locale_path = Path(args.locale)
     if locale_path.suffix != ".json":
+        lang_dir = bundled_dir if args.locale in {"en_US", "zh_CN"} else repo_root / "lang"
         locale_path = lang_dir / f"{args.locale}.json"
     elif not locale_path.is_absolute():
         locale_path = repo_root / locale_path
 
-    base_path = lang_dir / "en_US.json"
+    base_path = bundled_dir / "en_US.json"
     try:
         base = load_catalog(base_path)
         locale = load_catalog(locale_path)

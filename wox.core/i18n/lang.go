@@ -3,8 +3,10 @@ package i18n
 type LangCode string
 
 type Lang struct {
-	Code LangCode
-	Name string
+	Code          LangCode
+	Name          string
+	Installed     bool
+	DownloadError string
 }
 
 const (
@@ -14,6 +16,7 @@ const (
 	LangCodePtBr LangCode = "pt_BR"
 	LangCodeKoKr LangCode = "ko_KR"
 	LangCodeJaJp LangCode = "ja_JP"
+	LangCodeEsEs LangCode = "es_ES"
 )
 
 func GetSupportedLanguages() []Lang {
@@ -41,6 +44,10 @@ func GetSupportedLanguages() []Lang {
 		{
 			Code: LangCodeJaJp,
 			Name: "日本語",
+		},
+		{
+			Code: LangCodeEsEs,
+			Name: "Español",
 		},
 	}
 }

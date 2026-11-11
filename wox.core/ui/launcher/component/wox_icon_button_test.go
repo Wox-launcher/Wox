@@ -9,9 +9,14 @@ import (
 
 func TestWoxIconButtonOwnsHoverAndTapGesture(t *testing.T) {
 	hoverColor := woxui.Color{R: 20, G: 30, B: 40, A: 25}
-	props := IconButtonProps{ID: "close", Label: "Close", Icon: woxwidget.Painter{Width: 16, Height: 16}, Width: 28, Height: 28, Radius: 14, HoverBackground: hoverColor, OnTap: func() {}}
+	taps := 0
+	props := IconButtonProps{ID: "close", Label: "Close", Icon: woxwidget.Painter{Width: 16, Height: 16}, Width: 28, Height: 28, Radius: 14, HoverBackground: hoverColor, OnTap: func() { taps++ }}
 	state := &iconButtonState{}
-	normal := state.Build(woxwidget.StateContext{}, props).(woxwidget.Semantics).Child.(woxwidget.Focusable).Child.(woxwidget.Gesture)
+	semantics := state.Build(woxwidget.StateContext{}, props).(woxwidget.Semantics)
+	if err := semantics.OnAction(woxui.AccessibilityActionActivate, ""); err != nil || taps != 1 {
+		t.Fatalf("accessible activation dispatched %d taps, error %v", taps, err)
+	}
+	normal := semantics.Child.(woxwidget.Focusable).Child.(woxwidget.Gesture)
 	if normal.OnTap == nil || normal.OnHoverAt == nil {
 		t.Fatal("icon button hover and tap are not handled by the same gesture")
 	}
