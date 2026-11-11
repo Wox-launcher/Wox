@@ -59,3 +59,12 @@ func TestBindingKeyUsesNativeChordIdentity(t *testing.T) {
 		t.Fatal("invalid key accepted")
 	}
 }
+
+// TestBindingKeyDistinguishesNumpadDigits checks that both chords can coexist.
+func TestBindingKeyDistinguishesNumpadDigits(t *testing.T) {
+	numpad, numpadErr := BindingKey("ctrl+numpad0")
+	digit, digitErr := BindingKey("ctrl+0")
+	if numpadErr != nil || digitErr != nil || numpad == "" || digit == "" || numpad == digit {
+		t.Fatalf("binding keys should be distinct: keypad=%q (%v), digit=%q (%v)", numpad, numpadErr, digit, digitErr)
+	}
+}

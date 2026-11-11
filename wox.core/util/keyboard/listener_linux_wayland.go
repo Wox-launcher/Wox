@@ -614,7 +614,7 @@ func formatWaylandPreferredTrigger(modifiers Modifier, key Key) (string, error) 
 		return "", err
 	}
 
-	parts := make([]string, 0, 5)
+	parts := make([]string, 0, 6)
 	if modifiers&ModifierCtrl != 0 {
 		parts = append(parts, "CTRL")
 	}
@@ -627,11 +627,18 @@ func formatWaylandPreferredTrigger(modifiers Modifier, key Key) (string, error) 
 	if modifiers&ModifierSuper != 0 {
 		parts = append(parts, "LOGO")
 	}
+	if key >= KeyNumpad0 && key <= KeyNumpad9 {
+		// The KDE portal converts KP_ digits to Qt digit keys. NUM preserves the keypad modifier.
+		parts = append(parts, "NUM")
+	}
 	parts = append(parts, keyName)
 	return strings.Join(parts, "+"), nil
 }
 
 func keyToWaylandTriggerName(key Key) (string, error) {
+	if key >= KeyNumpad0 && key <= KeyNumpad9 {
+		return fmt.Sprintf("KP_%d", key-KeyNumpad0), nil
+	}
 	switch key {
 	case KeyA:
 		return "a", nil

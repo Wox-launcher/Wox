@@ -10,7 +10,7 @@ import (
 
 // TestRecordedHotkeysRoundTrip covers punctuation, navigation, Unicode, and aggregate modifiers.
 func TestRecordedHotkeysRoundTrip(t *testing.T) {
-	for _, key := range []ui.Key{"k", "f12", ",", "`", "中", ui.KeyEnter, ui.KeyArrowLeft, ui.KeyPageDown, ui.KeyInsert} {
+	for _, key := range []ui.Key{"k", "f12", ",", "`", "中", "numpad0", ui.KeyEnter, ui.KeyArrowLeft, ui.KeyPageDown, ui.KeyInsert} {
 		for _, modifiers := range []ui.KeyModifiers{0, ui.KeyModifierControl | ui.KeyModifierShift, ui.KeyModifierMeta | ui.KeyModifierAlt} {
 			e := ui.KeyEvent{Key: key, Modifiers: modifiers, Down: true}
 			value := RecordedHotkey(e)
@@ -33,6 +33,9 @@ func TestRecordedHotkeysRoundTrip(t *testing.T) {
 	}
 	if labels := FormatHotkeyLabels("super+k"); len(labels) != 2 || labels[0] != label || labels[1] != "K" {
 		t.Fatalf("platform labels: %v", labels)
+	}
+	if labels := FormatHotkeyLabels("ctrl+numpad0"); len(labels) != 2 || labels[0] != "Ctrl" || labels[1] != "Numpad 0" {
+		t.Fatalf("keypad labels: %v", labels)
 	}
 }
 

@@ -5,6 +5,7 @@ package keyboard
 /*
 #cgo CFLAGS: -x objective-c
 #cgo LDFLAGS: -framework Cocoa -framework Carbon -framework ApplicationServices -framework IOKit
+#include <Carbon/Carbon.h>
 #include <stdlib.h>
 
 int woxDarwinEnsureKeyboardReady(char **errorOut);
@@ -18,6 +19,7 @@ import "C"
 
 import (
 	"fmt"
+	"slices"
 	"sync"
 	"unsafe"
 	"wox/util"
@@ -353,7 +355,15 @@ func keyboardHookEventCGO(eventKind C.int, keyCode C.uint, modifiers C.uint, cha
 	return 0
 }
 
+var darwinNumpadKeyCodes = [...]uint32{
+	C.kVK_ANSI_Keypad0, C.kVK_ANSI_Keypad1, C.kVK_ANSI_Keypad2, C.kVK_ANSI_Keypad3, C.kVK_ANSI_Keypad4,
+	C.kVK_ANSI_Keypad5, C.kVK_ANSI_Keypad6, C.kVK_ANSI_Keypad7, C.kVK_ANSI_Keypad8, C.kVK_ANSI_Keypad9,
+}
+
 func keyToDarwinKeyCode(key Key) (uint32, error) {
+	if key >= KeyNumpad0 && key <= KeyNumpad9 {
+		return darwinNumpadKeyCodes[key-KeyNumpad0], nil
+	}
 	switch key {
 	case KeyA:
 		return 0, nil
@@ -692,6 +702,9 @@ func darwinKeyCodeToKey(keyCode uint32) Key {
 	case 44:
 		return KeySlash
 	default:
+		if digit := slices.Index(darwinNumpadKeyCodes[:], keyCode); digit >= 0 {
+			return KeyNumpad0 + Key(digit)
+		}
 		return KeyUnknown
 	}
 }

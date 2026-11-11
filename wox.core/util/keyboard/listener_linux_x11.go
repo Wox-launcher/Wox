@@ -4,6 +4,7 @@ package keyboard
 
 /*
 #cgo LDFLAGS: -lX11 -lpthread
+#include <X11/keysym.h>
 #include <stdlib.h>
 
 int woxLinuxEnsureKeyboardReady(char **errorOut);
@@ -218,6 +219,9 @@ func keyboardHookEventCGO(eventKind C.int, keyCode C.uint, modifiers C.uint) C.i
 }
 
 func keyToLinuxKeyCode(key Key) (uint32, error) {
+	if key >= KeyNumpad0 && key <= KeyNumpad9 {
+		return C.XK_KP_0 + uint32(key-KeyNumpad0), nil
+	}
 	switch key {
 	case KeyA:
 		return 0x0061, nil
@@ -365,6 +369,9 @@ func keyToLinuxKeyCode(key Key) (uint32, error) {
 }
 
 func linuxKeyCodeToKey(code uint32) Key {
+	if code >= C.XK_KP_0 && code <= C.XK_KP_9 {
+		return KeyNumpad0 + Key(code-C.XK_KP_0)
+	}
 	switch code {
 	case 0x0061:
 		return KeyA

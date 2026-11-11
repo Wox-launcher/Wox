@@ -1847,6 +1847,7 @@ static NSString *web_view_shortcut_script(void) {
   // Action Hotkey comes from window.__woxActionHotkey; r/o/[ /] stay preview navigation.
   return @"(()=>{if(window.__woxLauncherShortcutsInstalled__)return;window.__woxLauncherShortcutsInstalled__=true;"
           "const woxKey=e=>{if(e.key===' ')return'space';const k=e.key.length===1?e.key.toLowerCase():e.key.toLowerCase();"
+          "if(/^[0-9]$/.test(k)&&e.code==='Numpad'+k)return'numpad'+k;"
           "if(k==='arrowup')return'arrow-up';if(k==='arrowdown')return'arrow-down';if(k==='arrowleft')return'arrow-left';"
           "if(k==='arrowright')return'arrow-right';if(k==='pageup')return'page-up';if(k==='pagedown')return'page-down';"
           "if(k==='esc')return'escape';return k};"
@@ -1970,7 +1971,11 @@ static const char *portable_key(NSEvent *event) {
   if (characters.length == 0) {
     return "";
   }
-  switch ([characters characterAtIndex:0]) {
+  unichar character = [characters characterAtIndex:0];
+  if ((event.modifierFlags & NSEventModifierFlagNumericPad) != 0 && character >= '0' && character <= '9') {
+    return [[@"numpad" stringByAppendingString:characters] UTF8String];
+  }
+  switch (character) {
   case NSInsertFunctionKey:
   case NSHelpFunctionKey:
     return "insert";

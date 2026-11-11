@@ -205,6 +205,9 @@ func isKeyPressed(key Key) bool {
 
 // keyToEvdevKeyCode maps Wox Key values back to Linux kernel key codes.
 func keyToEvdevKeyCode(key Key) (uint16, error) {
+	if key >= KeyNumpad0 && key <= KeyNumpad9 {
+		return evdevNumpadKeyCodes[key-KeyNumpad0], nil
+	}
 	switch key {
 	case KeyA:
 		return 30, nil

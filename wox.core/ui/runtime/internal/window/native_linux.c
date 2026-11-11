@@ -828,6 +828,7 @@ static void on_web_view_load_changed(GtkWidget *web_view, int load_event, gpoint
 static const char *linux_webview_shortcut_script(void) {
   return "(()=>{if(window.__woxLauncherShortcutsInstalled__)return;window.__woxLauncherShortcutsInstalled__=true;"
          "const woxKey=e=>{if(e.key===' ')return'space';const k=e.key.length===1?e.key.toLowerCase():e.key.toLowerCase();"
+         "if(/^[0-9]$/.test(k)&&e.code==='Numpad'+k)return'numpad'+k;"
          "if(k==='arrowup')return'arrow-up';if(k==='arrowdown')return'arrow-down';if(k==='arrowleft')return'arrow-left';"
          "if(k==='arrowright')return'arrow-right';if(k==='pageup')return'page-up';if(k==='pagedown')return'page-down';"
          "if(k==='esc')return'escape';return k};"
@@ -1911,6 +1912,10 @@ static uint8_t portable_modifiers(GdkModifierType state) {
 
 // portable_key keeps GDK key symbols out of the shared Go input contract.
 static const char *portable_key(guint keyval, char text[8]) {
+  if (keyval >= GDK_KEY_KP_0 && keyval <= GDK_KEY_KP_9) {
+    snprintf(text, 8, "numpad%u", keyval - GDK_KEY_KP_0);
+    return text;
+  }
   switch (keyval) {
   case GDK_KEY_BackSpace:
     return "backspace";

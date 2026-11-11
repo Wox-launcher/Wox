@@ -122,6 +122,17 @@ func TestWindowsFunctionKeyVirtualKeyMappingThroughF24(t *testing.T) {
 	}
 }
 
+// TestWindowsNumpadKeyMapping covers the native registration and hook directions.
+func TestWindowsNumpadKeyMapping(t *testing.T) {
+	for digit := Key(0); digit < 10; digit++ {
+		key := KeyNumpad0 + digit
+		code, err := keyToWindowsVK(key)
+		if err != nil || code != 0x60+uint32(digit) || windowsVKToKey(code) != key {
+			t.Fatalf("%s maps to Windows key %#x (%v), reverse %v", key.Character(), code, err, windowsVKToKey(code))
+		}
+	}
+}
+
 func TestWindowsWinHookFallbackComboCoversTakenWinChordsExceptLock(t *testing.T) {
 	for _, tc := range []struct {
 		name      string

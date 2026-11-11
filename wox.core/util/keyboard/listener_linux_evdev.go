@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os/user"
 	"path/filepath"
+	"slices"
 	"sync"
 	"syscall"
 	"unsafe"
@@ -18,6 +19,9 @@ const evKeyEventType = 0x01
 
 // input_event on 64-bit Linux: struct timeval (8+8) + __u16 type + __u16 code + __s32 value = 24 bytes.
 const inputEventSize = 24
+
+// KEY_KP0 through KEY_KP9 from <linux/input-event-codes.h>, in digit order.
+var evdevNumpadKeyCodes = [...]uint16{82, 79, 80, 81, 75, 76, 77, 71, 72, 73}
 
 // EVIOCGBIT returns the bitmap of supported event types for a given ev event type.
 // Linux kernel: EVIOCGBIT(ev,len) = _IOC(_IOC_READ, 'E', 0x20 + ev, len)
@@ -203,6 +207,9 @@ func evdevCodeToKey(code uint16) Key {
 		return KeySlash
 
 	default:
+		if digit := slices.Index(evdevNumpadKeyCodes[:], code); digit >= 0 {
+			return KeyNumpad0 + Key(digit)
+		}
 		return KeyUnknown
 	}
 }

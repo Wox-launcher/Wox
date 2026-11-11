@@ -143,10 +143,23 @@ const (
 	KeyPeriod
 	KeySlash
 	KeyInsert
+	KeyNumpad0
+	KeyNumpad1
+	KeyNumpad2
+	KeyNumpad3
+	KeyNumpad4
+	KeyNumpad5
+	KeyNumpad6
+	KeyNumpad7
+	KeyNumpad8
+	KeyNumpad9
 )
 
 func ParseKey(token string) (Key, error) {
-	switch normalizeKeyAlias(token) {
+	name := normalizeKeyAlias(token)
+	switch name {
+	case "numpad0", "numpad1", "numpad2", "numpad3", "numpad4", "numpad5", "numpad6", "numpad7", "numpad8", "numpad9":
+		return KeyNumpad0 + Key(name[len("numpad")]-'0'), nil
 	case "a":
 		return KeyA, nil
 	case "b":
@@ -333,6 +346,9 @@ func ParseKey(token string) (Key, error) {
 }
 
 func (k Key) Character() string {
+	if k >= KeyNumpad0 && k <= KeyNumpad9 {
+		return fmt.Sprintf("numpad%d", k-KeyNumpad0)
+	}
 	switch k {
 	case KeyA:
 		return "a"

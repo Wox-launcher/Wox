@@ -136,6 +136,9 @@ func hyprlandKeyName(key Key) string {
 		if key >= Key0 && key <= Key9 {
 			return string(rune('0' + (key - Key0)))
 		}
+		if key >= KeyNumpad0 && key <= KeyNumpad9 {
+			return fmt.Sprintf("KP_%d", key-KeyNumpad0)
+		}
 		if key >= KeyF1 && key <= KeyF12 {
 			return fmt.Sprintf("F%d", int(key-KeyF1)+1)
 		}

@@ -140,7 +140,7 @@ func TestRecordingSessionCapturesModifiedFunctionKeys(t *testing.T) {
 	assertRecordedHotkey(t, recorded, recordedHotkey{Hotkey: "ctrl+f12", Kind: hotkeyKindNormalCombo})
 }
 
-func TestRecordingSessionCapturesPunctuationCombos(t *testing.T) {
+func TestRecordingSessionCapturesDistinctNormalCombos(t *testing.T) {
 	var rawHandler keyboard.RawKeyHandler
 	restore := replaceRawKeyListenerForTest(t, func(handler keyboard.RawKeyHandler) (keyboard.RawKeySubscription, error) {
 		rawHandler = handler
@@ -173,6 +173,8 @@ func TestRecordingSessionCapturesPunctuationCombos(t *testing.T) {
 		{keyboard.KeyBackslash, "ctrl+\\"},
 		{keyboard.KeyMinus, "ctrl+-"},
 		{keyboard.KeyEqual, "ctrl+="},
+		{keyboard.Key0, "ctrl+0"},
+		{keyboard.KeyNumpad0, "ctrl+numpad0"},
 	} {
 		if consumed := rawHandler(rawModifierEvent(keyboard.EventTypeKeyDown, tc.key)); !consumed {
 			t.Fatalf("recorded %s should be consumed", tc.hotkey)

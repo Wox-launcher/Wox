@@ -701,6 +701,10 @@ func (a *App) start() error {
 		OnFileDrop:      a.handleFileDrop,
 		OnFileDragEnded: a.resultDrag.handleResultDragEnded,
 		OnKey: func(event woxui.KeyEvent) bool {
+			if event.Down && event.Key == woxui.KeyBackspace && !event.Repeat {
+				util.GetLogger().Debug(a.lifecycleCtx, fmt.Sprintf("launcher backspace: session=%s queryId=%s windowFocused=%t focusedKey=%q composing=%t modifiers=%d",
+					a.sessionID, a.querySession.query.QueryID, host.WindowFocused(), host.FocusedKey(), event.Composing, event.Modifiers))
+			}
 			if event.Down {
 				a.resultDrag.releaseResultFileDragHold()
 			}
@@ -726,6 +730,8 @@ func (a *App) start() error {
 			}
 		},
 		OnFocus: func(event woxui.FocusEvent) {
+			util.GetLogger().Debug(a.lifecycleCtx, fmt.Sprintf("launcher focus: session=%s queryId=%s epoch=%d active=%t focusedKey=%q visible=%t hideOnBlur=%t",
+				a.sessionID, a.querySession.query.QueryID, event.Epoch, event.Active, host.FocusedKey(), a.visible, a.show.HideOnBlur))
 			host.SetWindowFocused(event.Active)
 			a.onFocus(event)
 		},

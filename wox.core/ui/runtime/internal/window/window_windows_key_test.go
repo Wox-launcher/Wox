@@ -9,6 +9,9 @@ func TestWindowsKeyMapsPunctuationVirtualKeys(t *testing.T) {
 		vk  uintptr
 		key Key
 	}{
+		{0x30, "0"},
+		{0x60, "numpad0"},
+		{0x69, "numpad9"},
 		{vk: 0xBD, key: "-"},
 		{vk: 0xBB, key: "="},
 		{vk: 0xDB, key: "["},

@@ -57,3 +57,15 @@ func TestParseKeyAndCharacterSupportFunctionKeysThroughF24(t *testing.T) {
 		}
 	}
 }
+
+// TestNumpadKeyNames checks that keypad digits retain their own shortcut names.
+func TestNumpadKeyNames(t *testing.T) {
+	for digit := Key(0); digit < 10; digit++ {
+		token := "numpad" + string(rune('0'+digit))
+		key, err := ParseKey(token)
+		name, nameErr := KeyName(token)
+		if err != nil || key != KeyNumpad0+digit || key.Character() != token || nameErr != nil || name != token {
+			t.Fatalf("%q resolved to key=%v (%v), name=%q (%v)", token, key, err, name, nameErr)
+		}
+	}
+}

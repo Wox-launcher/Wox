@@ -1794,6 +1794,9 @@ func windowsKey(virtualKey uintptr) Key {
 	if virtualKey >= '0' && virtualKey <= '9' {
 		return Key(string(rune(virtualKey)))
 	}
+	if virtualKey >= win.VK_NUMPAD0 && virtualKey <= win.VK_NUMPAD9 {
+		return Key(fmt.Sprintf("numpad%d", virtualKey-win.VK_NUMPAD0))
+	}
 	if virtualKey >= 0x70 && virtualKey <= 0x87 {
 		return Key(fmt.Sprintf("f%d", virtualKey-0x70+1))
 	}
@@ -2480,6 +2483,18 @@ func (w *platformWindow) handleBlur(nextWindow win.HWND) {
 		return
 	}
 
+	if w.focus.active {
+		foreground := win.GetForegroundWindow()
+		var nextPID, foregroundPID uint32
+		if nextWindow != 0 {
+			win.GetWindowThreadProcessId(nextWindow, &nextPID)
+		}
+		if foreground != 0 {
+			win.GetWindowThreadProcessId(foreground, &foregroundPID)
+		}
+		util.GetLogger().Debug(context.Background(), fmt.Sprintf("windows focus lost: hwnd=%#x epoch=%d next=%#x nextPID=%d foreground=%#x foregroundPID=%d hideOnBlur=%t",
+			w.hwnd, w.focus.epoch, nextWindow, nextPID, foreground, foregroundPID, w.options.HideOnBlur))
+	}
 	w.focus.restorePreviousOnHide = false
 	w.focus.previousForeground = 0
 	w.setActive(false)

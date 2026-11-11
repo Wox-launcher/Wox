@@ -1,4 +1,5 @@
 #include <X11/Xlib.h>
+#include <X11/XKBlib.h>
 #include <X11/keysym.h>
 #include <pthread.h>
 #include <sys/select.h>
@@ -15,6 +16,8 @@ typedef struct HotkeyEntry {
     unsigned int modifiers;
     unsigned int keysym;
     KeyCode keycode;
+    unsigned int grabStates[4];
+    size_t grabCount;
     struct HotkeyEntry *next;
 } HotkeyEntry;
 
@@ -22,6 +25,7 @@ typedef struct ModifierEntry {
     unsigned int keysym;
     KeyCode keycode;
     int pressed;
+    int emitted;
 } ModifierEntry;
 
 typedef struct {
@@ -49,8 +53,19 @@ static pthread_t gThread;
 static int gThreadStarted = 0;
 static int gRawEnabled = 0;
 static HotkeyEntry *gHotkeys = NULL;
+static unsigned int gNumLockMask = 0;
 static ModifierEntry gModifiers[8];
-static ModifierEntry gRawKeys[59];
+static const KeySym rawSyms[] = {
+    XK_Caps_Lock,
+    XK_a, XK_b, XK_c, XK_d, XK_e, XK_f, XK_g, XK_h, XK_i, XK_j, XK_k, XK_l, XK_m,
+    XK_n, XK_o, XK_p, XK_q, XK_r, XK_s, XK_t, XK_u, XK_v, XK_w, XK_x, XK_y, XK_z,
+    XK_0, XK_1, XK_2, XK_3, XK_4, XK_5, XK_6, XK_7, XK_8, XK_9,
+    XK_space, XK_Return, XK_Escape, XK_Tab, XK_Delete, XK_Insert, XK_Left, XK_Right, XK_Up, XK_Down,
+    XK_F1, XK_F2, XK_F3, XK_F4, XK_F5, XK_F6, XK_F7, XK_F8, XK_F9, XK_F10, XK_F11, XK_F12,
+    XK_KP_0, XK_KP_1, XK_KP_2, XK_KP_3, XK_KP_4, XK_KP_5, XK_KP_6, XK_KP_7, XK_KP_8, XK_KP_9
+};
+#define RAW_KEY_COUNT (sizeof(rawSyms) / sizeof(rawSyms[0]))
+static ModifierEntry gRawKeys[RAW_KEY_COUNT];
 static pthread_mutex_t gRequestMutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t gRequestCond = PTHREAD_COND_INITIALIZER;
 static KeyboardRequest gRequest;
@@ -103,19 +118,28 @@ static unsigned int to_x11_modifier_mask(unsigned int modifiers) {
     return mask;
 }
 
-static void grab_key_combination(KeyCode keycode, unsigned int modifiers) {
-    static const unsigned int ignored_masks[] = {0, LockMask, Mod2Mask, LockMask | Mod2Mask};
-    size_t count = sizeof(ignored_masks) / sizeof(ignored_masks[0]);
-    for (size_t i = 0; i < count; i++) {
-        XGrabKey(gDisplay, keycode, modifiers | ignored_masks[i], gRoot, True, GrabModeAsync, GrabModeAsync);
-    }
+static int is_keypad_digit(KeySym keysym) {
+    return keysym >= XK_KP_0 && keysym <= XK_KP_9;
 }
 
-static void ungrab_key_combination(KeyCode keycode, unsigned int modifiers) {
-    static const unsigned int ignored_masks[] = {0, LockMask, Mod2Mask, LockMask | Mod2Mask};
-    size_t count = sizeof(ignored_masks) / sizeof(ignored_masks[0]);
-    for (size_t i = 0; i < count; i++) {
-        XUngrabKey(gDisplay, keycode, modifiers | ignored_masks[i], gRoot);
+static int matches_keypad_digit(KeyCode keycode, unsigned int state, KeySym expected) {
+    unsigned int consumed = 0;
+    KeySym keysym = NoSymbol;
+    return XkbLookupKeySym(gDisplay, keycode, state, &consumed, &keysym) && keysym == expected;
+}
+
+static void grab_key_combination(HotkeyEntry *entry) {
+    int keypad = is_keypad_digit(entry->keysym);
+    unsigned int numlock = keypad ? gNumLockMask : Mod2Mask;
+    unsigned int ignored_masks[] = {0, LockMask, numlock, LockMask | numlock};
+    for (size_t i = 0; i < sizeof(ignored_masks) / sizeof(ignored_masks[0]); i++) {
+        unsigned int state = to_x11_modifier_mask(entry->modifiers) | ignored_masks[i];
+        // A keypad keycode can also produce Insert or an arrow. Leave those chords to the focused app.
+        if (keypad && !matches_keypad_digit(entry->keycode, state, entry->keysym)) {
+            continue;
+        }
+        XGrabKey(gDisplay, entry->keycode, state, gRoot, True, GrabModeAsync, GrabModeAsync);
+        entry->grabStates[entry->grabCount++] = state;
     }
 }
 
@@ -152,10 +176,16 @@ static void process_request(KeyboardRequest *request) {
                 entry->modifiers = request->modifiers;
                 entry->keysym = request->keysym;
                 entry->keycode = keycode;
-                entry->next = gHotkeys;
-                gHotkeys = entry;
-                grab_key_combination(keycode, to_x11_modifier_mask(request->modifiers));
-                XFlush(gDisplay);
+                entry->grabCount = 0;
+                grab_key_combination(entry);
+                if (entry->grabCount == 0) {
+                    free(entry);
+                    set_error(request, "failed to resolve X11 keypad modifier state");
+                } else {
+                    entry->next = gHotkeys;
+                    gHotkeys = entry;
+                    XFlush(gDisplay);
+                }
             }
         }
     } else if (request->action == requestUnregisterHotkey) {
@@ -163,7 +193,9 @@ static void process_request(KeyboardRequest *request) {
         while (*entry) {
             if ((*entry)->id == request->id) {
                 HotkeyEntry *target = *entry;
-                ungrab_key_combination(target->keycode, to_x11_modifier_mask(target->modifiers));
+                for (size_t i = 0; i < target->grabCount; i++) {
+                    XUngrabKey(gDisplay, target->keycode, target->grabStates[i], gRoot);
+                }
                 *entry = target->next;
                 free(target);
                 XFlush(gDisplay);
@@ -209,7 +241,7 @@ static void poll_raw_keys(void) {
     }
 
     XQueryKeymap(gDisplay, keymap);
-    for (int i = 0; i < 59; i++) {
+    for (size_t i = 0; i < RAW_KEY_COUNT; i++) {
         if (gRawKeys[i].keycode == 0) {
             continue;
         }
@@ -222,6 +254,17 @@ static void poll_raw_keys(void) {
         }
 
         gRawKeys[i].pressed = pressed;
+        if (pressed) {
+            gRawKeys[i].emitted = 1;
+            if (is_keypad_digit(gRawKeys[i].keysym)) {
+                XkbStateRec state;
+                gRawKeys[i].emitted = XkbGetState(gDisplay, XkbUseCoreKbd, &state) == Success &&
+                    matches_keypad_digit(gRawKeys[i].keycode, XkbBuildCoreState(state.mods, state.group), gRawKeys[i].keysym);
+            }
+        }
+        if (!gRawKeys[i].emitted) {
+            continue;
+        }
         keyboardHookEventCGO(pressed ? 0 : 1, gRawKeys[i].keysym, current_modifier_mask());
     }
 }
@@ -265,10 +308,12 @@ static void *keyboard_thread_main(void *arg) {
                     continue;
                 }
 
-                unsigned int state = event.xkey.state & ~(LockMask | Mod2Mask);
                 HotkeyEntry *entry = gHotkeys;
                 while (entry) {
-                    if (entry->keycode == event.xkey.keycode && to_x11_modifier_mask(entry->modifiers) == state) {
+                    int keypad = is_keypad_digit(entry->keysym);
+                    unsigned int state = event.xkey.state & ~(LockMask | (keypad ? gNumLockMask : Mod2Mask));
+                    if (entry->keycode == event.xkey.keycode && to_x11_modifier_mask(entry->modifiers) == state &&
+                        (!keypad || matches_keypad_digit(entry->keycode, event.xkey.state, entry->keysym))) {
                         keyboardHotkeyTriggeredCGO(entry->id);
                         break;
                     }
@@ -300,6 +345,7 @@ int woxLinuxEnsureKeyboardReady(char **errorOut) {
     }
 
     gRoot = DefaultRootWindow(gDisplay);
+    gNumLockMask = XkbKeysymToModifiers(gDisplay, XK_Num_Lock);
     int pipefd[2];
     if (pipe(pipefd) != 0) {
         if (errorOut) {
@@ -318,15 +364,7 @@ int woxLinuxEnsureKeyboardReady(char **errorOut) {
         gModifiers[i].pressed = 0;
     }
 
-    KeySym rawSyms[59] = {
-        XK_Caps_Lock,
-        XK_a, XK_b, XK_c, XK_d, XK_e, XK_f, XK_g, XK_h, XK_i, XK_j, XK_k, XK_l, XK_m,
-        XK_n, XK_o, XK_p, XK_q, XK_r, XK_s, XK_t, XK_u, XK_v, XK_w, XK_x, XK_y, XK_z,
-        XK_0, XK_1, XK_2, XK_3, XK_4, XK_5, XK_6, XK_7, XK_8, XK_9,
-        XK_space, XK_Return, XK_Escape, XK_Tab, XK_Delete, XK_Insert, XK_Left, XK_Right, XK_Up, XK_Down,
-        XK_F1, XK_F2, XK_F3, XK_F4, XK_F5, XK_F6, XK_F7, XK_F8, XK_F9, XK_F10, XK_F11, XK_F12
-    };
-    for (int i = 0; i < 59; i++) {
+    for (size_t i = 0; i < RAW_KEY_COUNT; i++) {
         gRawKeys[i].keysym = (unsigned int)rawSyms[i];
         gRawKeys[i].keycode = XKeysymToKeycode(gDisplay, rawSyms[i]);
         gRawKeys[i].pressed = 0;

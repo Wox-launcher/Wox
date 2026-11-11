@@ -16,6 +16,8 @@ import (
 	"sync"
 	"time"
 	"wox/util"
+
+	"github.com/lxn/win"
 )
 
 const (
@@ -423,6 +425,9 @@ func keyboardHookEventCGO(eventKind C.int, vkCode C.uint, modifiers C.uint, scan
 }
 
 func keyToWindowsVK(key Key) (uint32, error) {
+	if key >= KeyNumpad0 && key <= KeyNumpad9 {
+		return win.VK_NUMPAD0 + uint32(key-KeyNumpad0), nil
+	}
 	switch key {
 	case KeyA:
 		return 'A', nil
@@ -618,6 +623,9 @@ func keyToWindowsVK(key Key) (uint32, error) {
 }
 
 func windowsVKToKey(vkCode uint32) Key {
+	if vkCode >= win.VK_NUMPAD0 && vkCode <= win.VK_NUMPAD9 {
+		return KeyNumpad0 + Key(vkCode-win.VK_NUMPAD0)
+	}
 	switch vkCode {
 	case 'A':
 		return KeyA
