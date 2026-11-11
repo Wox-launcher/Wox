@@ -10,6 +10,13 @@ import { AI } from "./ai.js"
 export * from "./setting.js"
 export * from "./ai.js"
 
+export interface GetTriggerKeywordsOption {}
+
+export interface GetTriggerKeywordsResult {
+  /** Effective triggers in configured order, including user overrides, runtime registrations, and "*". */
+  TriggerKeywords: string[]
+}
+
 export interface RegisterTriggerKeywordOption {
   Keyword: string
   QueryHint?: QueryHint
@@ -1735,6 +1742,9 @@ export interface PublicAPI {
    * commands intact; metadata commands take precedence over duplicates.
    */
   RegisterQueryCommands: (ctx: Context, commands: MetadataCommand[]) => Promise<void>
+
+  /** Return a snapshot of this plugin's effective trigger keywords. Skip "*" when building a prefixed query. */
+  GetTriggerKeywords: (ctx: Context, option: GetTriggerKeywordsOption) => Promise<GetTriggerKeywordsResult>
 
   /** Register a runtime trigger; invalid keywords or keywords owned by another enabled plugin fail. */
   RegisterTriggerKeyword: (ctx: Context, option: RegisterTriggerKeywordOption) => Promise<RegisterTriggerKeywordResult>

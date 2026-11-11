@@ -91,6 +91,15 @@ func (w *WebsocketHost) handleRegisterQueryCommands(ctx context.Context, pluginI
 	return "", nil
 }
 
+// handleGetTriggerKeywords returns only the calling plugin's effective triggers.
+func (w *WebsocketHost) handleGetTriggerKeywords(ctx context.Context, pluginInstance *plugin.Instance, request JsonRpcRequest) (any, error) {
+	var option plugin.GetTriggerKeywordsOption
+	if err := json.Unmarshal([]byte(request.Params["option"]), &option); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal trigger keyword options: %w", err)
+	}
+	return pluginInstance.API.GetTriggerKeywords(ctx, option), nil
+}
+
 // handleRegisterTriggerKeyword adapts the RegisterTriggerKeyword wire call to the plugin API.
 func (w *WebsocketHost) handleRegisterTriggerKeyword(ctx context.Context, pluginInstance *plugin.Instance, request JsonRpcRequest) (any, error) {
 	var option plugin.RegisterTriggerKeywordOption

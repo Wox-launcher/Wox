@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -1016,7 +1017,11 @@ func (c *FileSearchPlugin) Query(ctx context.Context, query plugin.Query) plugin
 		c.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: err.Error()})
 		return plugin.QueryResponse{}
 	}
-	results = refineFileSearchResults(results, selectedType, c.fileSearchResultLimitFor(ctx, query, selectedType))
+	resultLimit := c.fileSearchResultLimitFor(ctx, query, selectedType)
+	if query.IsGlobalQuery() {
+		resultLimit++
+	}
+	results = refineFileSearchResults(results, selectedType, resultLimit)
 	queryResults := c.materializeFileSearchResults(ctx, query, results, false, &diagnostics)
 	c.logQueryDiagnostics(ctx, query.Search, diagnostics, len(queryResults), util.GetSystemTimestamp()-queryStartedAt)
 
@@ -1099,6 +1104,14 @@ func (c *FileSearchPlugin) materializeFileSearchResults(ctx context.Context, que
 	// os.Stat/icon setup can make the plugin itself look slow even when the
 	// indexed lookup has already finished.
 	buildStartedAt := util.GetSystemTimestamp()
+	hasMore := false
+	if query.IsGlobalQuery() {
+		limit := c.getConfiguredGlobalResultLimit(ctx)
+		hasMore = len(results) > limit
+		if hasMore {
+			results = results[:limit]
+		}
+	}
 	// Cache file-type icons per extension inside one query because the previous
 	// per-result file-icon conversion retried embedded-icon extraction for every
 	// source file path, which turned an 8ms indexed search into a much slower
@@ -1134,8 +1147,48 @@ func (c *FileSearchPlugin) materializeFileSearchResults(ctx context.Context, que
 		}
 		queryResults = append(queryResults, queryResult)
 	}
+	if hasMore {
+		for _, keyword := range c.api.GetTriggerKeywords(ctx, plugin.GetTriggerKeywordsOption{}).TriggerKeywords {
+			if keyword == "" || keyword == "*" {
+				continue
+			}
+			queryResults = append(queryResults, c.buildFileSearchMoreResult(ctx, query, len(results), keyword))
+			break
+		}
+	}
 	diagnostics.buildElapsedMs = util.GetSystemTimestamp() - buildStartedAt
 	return queryResults
+}
+
+// buildFileSearchMoreResult continues the search through the plugin's configured trigger.
+func (c *FileSearchPlugin) buildFileSearchMoreResult(ctx context.Context, query plugin.Query, visibleCount int, triggerKeyword string) plugin.QueryResult {
+	group, groupScore := fileSearchResultGroup(query)
+	return plugin.QueryResult{
+		Title:      fmt.Sprintf(c.api.GetTranslation(ctx, "plugin_file_search_more"), query.Search),
+		SubTitle:   fmt.Sprintf(c.api.GetTranslation(ctx, "plugin_file_search_more_subtitle"), visibleCount),
+		Icon:       icons.Get(icons.ActionSearch),
+		Group:      group,
+		GroupScore: groupScore,
+		// Keep this navigation row below file hits even after ordinary usage boosts.
+		Score: math.MinInt32,
+		Actions: []plugin.QueryResultAction{{
+			Name:                   "i18n:plugin_file_search_more_action",
+			Icon:                   icons.Get(icons.ActionSearch),
+			PreventHideAfterAction: true,
+			Action: func(ctx context.Context, _ plugin.ActionContext) {
+				queryText := triggerKeyword + " "
+				if query.Command != "" {
+					queryText += query.Command + " "
+				}
+				queryText += query.Search
+				c.api.ChangeQuery(ctx, common.PlainQuery{
+					QueryType:        plugin.QueryTypeInput,
+					QueryText:        queryText,
+					QueryRefinements: query.Refinements,
+				})
+			},
+		}},
+	}
 }
 
 // fileSearchResultGroup keeps global-search file hits in their own section so
@@ -1162,14 +1215,19 @@ func (c *FileSearchPlugin) searchFileQuery(ctx context.Context, query plugin.Que
 		return nil, err
 	}
 	if selectedType != fileSearchTypeRefinementFolder {
-		results = c.appendContentSearchResults(ctx, queryText, results, c.fileSearchResultLimitFor(ctx, query, selectedType))
+		contentLimit := c.fileSearchResultLimitFor(ctx, query, selectedType)
+		if query.IsGlobalQuery() {
+			contentLimit++
+		}
+		results = c.appendContentSearchResults(ctx, queryText, results, contentLimit)
 	}
 	return results, nil
 }
 
 func (c *FileSearchPlugin) fileSearchCandidateLimit(ctx context.Context, query plugin.Query, selectedType string) int {
 	if query.IsGlobalQuery() {
-		return c.getConfiguredGlobalResultLimit(ctx)
+		// One extra candidate detects truncation without counting every match.
+		return c.getConfiguredGlobalResultLimit(ctx) + 1
 	}
 	if selectedType != fileSearchTypeRefinementAll {
 		// Type filters need a wider candidate window before plugin-side filtering.

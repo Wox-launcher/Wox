@@ -16,6 +16,7 @@ sys.modules.setdefault("wox_plugin_host", package)
 
 from wox_plugin import (  # noqa: E402
     Context,
+    GetTriggerKeywordsOption,
     InvokePluginToolHandlerResult,
     PluginToolDescriptor,
     RegisterPluginToolOption,
@@ -30,6 +31,14 @@ from wox_plugin_host.plugin_manager import PluginInstance, plugin_instances, wai
 
 
 class PluginToolHostTest(unittest.IsolatedAsyncioTestCase):
+    async def test_get_trigger_keywords_uses_core_effective_triggers(self):
+        api = PluginAPI(AsyncMock(), "owner", "Owner")
+        ctx = Context.new()
+        api.invoke_method = AsyncMock(return_value={"TriggerKeywords": ["*", "custom", "runtime"]})
+        result = await api.get_trigger_keywords(ctx, GetTriggerKeywordsOption())
+        self.assertEqual(result.trigger_keywords, ["*", "custom", "runtime"])
+        api.invoke_method.assert_awaited_once_with(ctx, "GetTriggerKeywords", {"option": "{}"})
+
     async def test_toast_callback_is_one_shot_and_can_be_released(self):
         api = PluginAPI(AsyncMock(), "toast", "Toast")
         plugin_instances["toast"] = PluginInstance(plugin=object(), api=api, plugin_dir="", module_name="toast", toolbar_msg_actions={}, sys_paths=[])

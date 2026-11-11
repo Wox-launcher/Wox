@@ -6,6 +6,8 @@ import unittest
 from wox_plugin import ChangeQueryParam, Query, QueryElement, QueryHint, QueryType
 from wox_plugin.models.query import MetadataCommand
 from wox_plugin import (
+    GetTriggerKeywordsOption,
+    GetTriggerKeywordsResult,
     RegisterTriggerKeywordOption,
     RegisterTriggerKeywordResult,
     UnregisterTriggerKeywordOption,
@@ -39,6 +41,17 @@ class QueryHintTest(unittest.TestCase):
         self.assertEqual(UnregisterTriggerKeywordOption("g").to_dict(), {"Keyword": "g"})
         self.assertFalse(RegisterTriggerKeywordResult().success)
         self.assertFalse(UnregisterTriggerKeywordResult().success)
+
+    def test_effective_trigger_keywords_snapshot(self):
+        self.assertEqual(GetTriggerKeywordsOption().to_dict(), {})
+        payload = {"TriggerKeywords": ["*", "custom", "runtime"]}
+        result = GetTriggerKeywordsResult.from_dict(payload)
+        payload["TriggerKeywords"][1] = "changed"
+        self.assertEqual(result.trigger_keywords, ["*", "custom", "runtime"])
+        self.assertEqual(GetTriggerKeywordsResult.from_dict({}).trigger_keywords, [])
+        first, second = GetTriggerKeywordsResult(), GetTriggerKeywordsResult()
+        first.trigger_keywords.append("f")
+        self.assertEqual(second.trigger_keywords, [])
 
     def test_round_trip_and_legacy(self):
         structure = QueryHint([QueryElement("volume", "argument", value="50", placeholder="Volume")])

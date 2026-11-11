@@ -285,6 +285,8 @@ from .models.drag_out import (
     DragOutListenResult,
 )
 from .models.trigger_keyword import (
+    GetTriggerKeywordsOption,
+    GetTriggerKeywordsResult,
     RegisterTriggerKeywordOption,
     RegisterTriggerKeywordResult,
     UnregisterTriggerKeywordOption,
@@ -427,6 +429,8 @@ __all__: List[str] = [
     "QueryElement",
     "QueryHint",
     "RegisterTriggerKeywordOption",
+    "GetTriggerKeywordsOption",
+    "GetTriggerKeywordsResult",
     "RegisterTriggerKeywordResult",
     "UnregisterTriggerKeywordOption",
     "UnregisterTriggerKeywordResult",

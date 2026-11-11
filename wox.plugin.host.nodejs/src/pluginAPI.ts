@@ -21,6 +21,8 @@ import {
   OSPermissionResult,
   RegisterTriggerKeywordOption,
   RegisterTriggerKeywordResult,
+  GetTriggerKeywordsOption,
+  GetTriggerKeywordsResult,
   DragOutEvent,
   DragOutListenOption,
   DragOutListenResult,
@@ -381,6 +383,10 @@ export class PluginAPI implements PublicAPI {
 
   async RegisterQueryCommands(ctx: Context, commands: MetadataCommand[]): Promise<void> {
     await this.invokeMethod(ctx, "RegisterQueryCommands", { commands: JSON.stringify(commands) })
+  }
+
+  async GetTriggerKeywords(ctx: Context, option: GetTriggerKeywordsOption): Promise<GetTriggerKeywordsResult> {
+    return (await this.invokeMethod(ctx, "GetTriggerKeywords", { option: JSON.stringify(option) })) as GetTriggerKeywordsResult
   }
 
   async RegisterTriggerKeyword(ctx: Context, option: RegisterTriggerKeywordOption): Promise<RegisterTriggerKeywordResult> {

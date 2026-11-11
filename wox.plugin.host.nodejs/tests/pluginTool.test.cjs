@@ -89,6 +89,18 @@ test("unload drains work even after Core stops waiting", async () => {
   assert.equal(stopped, true)
 })
 
+test("GetTriggerKeywords forwards options and preserves the effective trigger order", async () => {
+  const api = new PluginAPI({}, "owner", "Owner")
+  const ctx = context()
+  api.invokeMethod = async (actualContext, method, params) => {
+    assert.equal(actualContext, ctx)
+    assert.equal(method, "GetTriggerKeywords")
+    assert.deepEqual(JSON.parse(params.option), {})
+    return { TriggerKeywords: ["*", "custom", "runtime"] }
+  }
+  assert.deepEqual(await api.GetTriggerKeywords(ctx, {}), { TriggerKeywords: ["*", "custom", "runtime"] })
+})
+
 test("duplicate registration and failed unregister preserve the original handler", async () => {
   const api = new PluginAPI({}, "owner", "Owner")
   const results = [{ Error: null }, { Error: { Code: "TOOL_ALREADY_REGISTERED" } }, { Error: { Code: "EXECUTION_FAILED" } }, { Error: null }]

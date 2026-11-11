@@ -1,9 +1,26 @@
-"""Runtime trigger registration with optional semantic input hints."""
+"""Effective trigger keywords and runtime registration with optional input hints."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Optional
 
 from .query_hint import QueryHint
+
+
+@dataclass
+class GetTriggerKeywordsOption:
+    def to_dict(self) -> dict[str, Any]:
+        return {}
+
+
+@dataclass
+class GetTriggerKeywordsResult:
+    """Effective triggers in configured order, including user overrides, runtime registrations, and '*'."""
+
+    trigger_keywords: list[str] = field(default_factory=list)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "GetTriggerKeywordsResult":
+        return cls(trigger_keywords=list(data.get("TriggerKeywords") or []))
 
 
 @dataclass

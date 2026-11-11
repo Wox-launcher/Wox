@@ -113,6 +113,8 @@ func TestPluginRequestInvalidArgumentsReply(t *testing.T) {
 		{"Log", nil, `"msg"`},
 		{"Log", map[string]string{"msg": ""}, `"level"`},
 		{"GetTranslation", nil, `"key"`},
+		{"GetTriggerKeywords", nil, "unmarshal trigger keyword options"},
+		{"GetTriggerKeywords", map[string]string{"option": "{"}, "unmarshal trigger keyword options"},
 		{"GetUpdatableResult", nil, `"resultId"`},
 		{"UpdateResult", nil, `"result"`},
 		{"RemoveResult", nil, `"option"`},
@@ -281,6 +283,10 @@ func (a *requestTestAPI) GetSetting(_ context.Context, key string) string {
 	return "value:" + key
 }
 
+func (a *requestTestAPI) GetTriggerKeywords(context.Context, plugin.GetTriggerKeywordsOption) plugin.GetTriggerKeywordsResult {
+	return plugin.GetTriggerKeywordsResult{TriggerKeywords: []string{"*", "custom"}}
+}
+
 func (a *requestTestAPI) GetTranslation(_ context.Context, key string) string {
 	return "translated:" + key
 }
@@ -337,6 +343,9 @@ func TestPluginRequestPreservesLegacyWireValues(t *testing.T) {
 	}
 	if got := call("GetSetting", map[string]string{"key": ""}); got != "value:" {
 		t.Fatalf("empty key response = %#v", got)
+	}
+	if got := call("GetTriggerKeywords", map[string]string{"option": "{}"}).(map[string]any)["TriggerKeywords"].([]any); len(got) != 2 || got[0] != "*" || got[1] != "custom" {
+		t.Fatalf("trigger keywords response = %#v", got)
 	}
 	call("ChangeQuery", map[string]string{"queryType": "input", "queryText": "", "queryHint": "{"})
 	if api.query.QueryType != plugin.QueryTypeInput || api.query.QueryText != "" || api.query.QueryHint != nil {

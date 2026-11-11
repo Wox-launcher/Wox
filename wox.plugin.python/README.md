@@ -40,6 +40,13 @@ immediately. For runtime registration, pass `debounce_ms` to
 Trigger/command overrides apply to input queries only.
 See the [metadata example and precedence rules](../wox.core/plugin/README.md#query-scheduling).
 
+`await api.get_trigger_keywords(ctx, GetTriggerKeywordsOption())` returns a
+`GetTriggerKeywordsResult` whose `trigger_keywords` list contains this plugin's
+effective triggers in configured order, including user overrides, runtime
+registrations, and `*`. For a query that continues searching inside the plugin,
+use the first non-empty trigger other than `*`, followed by the command (when
+present) and search text. If there is no concrete trigger, omit the action.
+
 Use `WoxPreview(..., default_hidden=True)` to keep a result's preview collapsed initially.
 Users can open it with the row icon or toggle it with Ctrl/Cmd+P. The manual choice
 applies to all results in the current query, including live updates. A new query restores

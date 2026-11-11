@@ -2,10 +2,66 @@ package plugin
 
 import (
 	"context"
+	"encoding/json"
+	"path/filepath"
 	"slices"
 	"sync"
 	"testing"
+	"wox/database"
+	"wox/setting"
+
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
+	gormlogger "gorm.io/gorm/logger"
 )
+
+// TestAPIGetTriggerKeywords covers effective user/runtime triggers and protects the routing list from caller mutation.
+func TestAPIGetTriggerKeywords(t *testing.T) {
+	instance := &Instance{Metadata: Metadata{TriggerKeywords: []string{"*", "f"}}}
+	api := &APIImpl{pluginInstance: instance}
+	result := api.GetTriggerKeywords(t.Context(), GetTriggerKeywordsOption{})
+	if !slices.Equal(result.TriggerKeywords, []string{"*", "f"}) {
+		t.Fatalf("metadata triggers = %v", result.TriggerKeywords)
+	}
+	result.TriggerKeywords[1] = "changed"
+	if !slices.Equal(instance.GetTriggerKeywords(), []string{"*", "f"}) {
+		t.Fatal("caller mutated metadata triggers")
+	}
+
+	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "settings.db")), &gorm.Config{Logger: gormlogger.Default.LogMode(gormlogger.Silent)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = sqlDB.Close() })
+	if err := db.AutoMigrate(&database.PluginSetting{}, &database.Oplog{}); err != nil {
+		t.Fatal(err)
+	}
+	instance.Setting = setting.NewPluginSetting(setting.NewPluginSettingStore(db, "file-test"), nil)
+	if err := instance.Setting.TriggerKeywords.SetLocal([]string{"*", "files"}); err != nil {
+		t.Fatal(err)
+	}
+	instance.setRuntimeTriggerKeywords([]string{"find"})
+	result = api.GetTriggerKeywords(t.Context(), GetTriggerKeywordsOption{})
+	if !slices.Equal(result.TriggerKeywords, []string{"*", "files", "find"}) {
+		t.Fatalf("effective triggers = %v", result.TriggerKeywords)
+	}
+	result.TriggerKeywords[1], result.TriggerKeywords[2] = "changed", "changed"
+	if !slices.Equal(instance.GetTriggerKeywords(), []string{"*", "files", "find"}) {
+		t.Fatal("caller mutated configured or runtime triggers")
+	}
+	instance.setRuntimeTriggerKeywords(nil)
+	if got := api.GetTriggerKeywords(t.Context(), GetTriggerKeywordsOption{}).TriggerKeywords; !slices.Equal(got, []string{"*", "files"}) {
+		t.Fatalf("removed runtime triggers survived: %v", got)
+	}
+	encoded, err := json.Marshal((&APIImpl{pluginInstance: &Instance{}}).GetTriggerKeywords(t.Context(), GetTriggerKeywordsOption{}))
+	if err != nil || string(encoded) != `{"TriggerKeywords":[]}` {
+		t.Fatalf("empty wire result = %s, error = %v", encoded, err)
+	}
+}
 
 // TestRuntimeTriggerKeywords verifies registration, replacement and lifecycle cleanup through query parsing.
 func TestRuntimeTriggerKeywords(t *testing.T) {

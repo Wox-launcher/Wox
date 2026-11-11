@@ -76,6 +76,10 @@ func (e StubAPI) OnDragOut(ctx context.Context, option plugin.DragOutListenOptio
 func (e StubAPI) RegisterQueryCommands(ctx context.Context, commands []plugin.MetadataCommand) {
 }
 
+func (e StubAPI) GetTriggerKeywords(context.Context, plugin.GetTriggerKeywordsOption) plugin.GetTriggerKeywordsResult {
+	return plugin.GetTriggerKeywordsResult{TriggerKeywords: []string{}}
+}
+
 func (e StubAPI) AIChatStream(ctx context.Context, model common.Model, conversations []common.Conversation, options common.ChatOptions, callback common.ChatStreamFunc) error {
 	return nil
 }

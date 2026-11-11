@@ -82,16 +82,16 @@ func TestFileSearchResultLimitForContentUsesNameWindow(t *testing.T) {
 	if got := search.fileSearchResultLimitFor(ctx, global, fileSearchTypeRefinementAll); got != fileSearchGlobalResultLimit {
 		t.Fatalf("global query should cap results at %d, got %d", fileSearchGlobalResultLimit, got)
 	}
-	if got := search.fileSearchCandidateLimit(ctx, global, fileSearchTypeRefinementAll); got != fileSearchGlobalResultLimit {
-		t.Fatalf("global query candidate limit should be %d, got %d", fileSearchGlobalResultLimit, got)
+	if got := search.fileSearchCandidateLimit(ctx, global, fileSearchTypeRefinementAll); got != fileSearchGlobalResultLimit+1 {
+		t.Fatalf("global query candidate limit should include one overflow hit, got %d", got)
 	}
 
 	custom := &FileSearchPlugin{api: fileSearchSettingAPI{settings: map[string]string{fileGlobalResultLimitSettingKey: "25"}}}
 	if got := custom.fileSearchResultLimitFor(ctx, global, fileSearchTypeRefinementAll); got != 25 {
 		t.Fatalf("configured global result limit should be 25, got %d", got)
 	}
-	if got := custom.fileSearchCandidateLimit(ctx, global, fileSearchTypeRefinementAll); got != 25 {
-		t.Fatalf("configured global candidate limit should be 25, got %d", got)
+	if got := custom.fileSearchCandidateLimit(ctx, global, fileSearchTypeRefinementAll); got != 26 {
+		t.Fatalf("configured global candidate limit should include one overflow hit, got %d", got)
 	}
 	if got := custom.fileSearchResultLimitFor(ctx, triggered, fileSearchTypeRefinementAll); got != fileSearchResultLimit+fileSearchContentResultLimit {
 		t.Fatalf("triggered search should ignore the global result limit, got %d", got)

@@ -131,6 +131,14 @@ Negative scoped values reject metadata loading or registration; rejected command
 registration retains the previous command list and logs the error. Runtime commands
 and their debounce values are copied before publication and read under a shared lock.
 
+`API.GetTriggerKeywords(ctx, GetTriggerKeywordsOption{})` returns a copied list in
+`GetTriggerKeywordsResult.TriggerKeywords`. It contains the calling plugin's
+effective triggers in configured order: user overrides replace metadata defaults,
+and runtime registrations follow. The global trigger `*` is included. To continue
+a global search inside the plugin, choose the first non-empty trigger other than
+`*` and build `trigger + " " + command + " " + search`, omitting an empty command.
+When there is no concrete trigger, omit that navigation action.
+
 The existing alias-job deadline test lives in `query_scheduler_test.go`.
 Query planning, fallback, result binding and UI smoke coverage continue to
 exercise the Manager entry point.

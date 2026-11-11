@@ -21,6 +21,12 @@ import (
 
 type LogLevel = string
 
+type GetTriggerKeywordsOption struct{}
+
+type GetTriggerKeywordsResult struct {
+	TriggerKeywords []string
+}
+
 type RegisterTriggerKeywordOption struct {
 	Keyword   string
 	QueryHint *common.QueryHint
@@ -108,6 +114,10 @@ type API interface {
 	// RegisterQueryCommands replaces runtime query commands. Invalid debounce values leave the
 	// previous commands intact; metadata commands take precedence over duplicates.
 	RegisterQueryCommands(ctx context.Context, commands []MetadataCommand)
+
+	// GetTriggerKeywords returns a snapshot of this plugin's effective triggers in configured order,
+	// including user overrides, runtime registrations, and "*" when global search is enabled.
+	GetTriggerKeywords(ctx context.Context, option GetTriggerKeywordsOption) GetTriggerKeywordsResult
 
 	// RegisterTriggerKeyword registers a runtime trigger. It fails for invalid keywords or keywords
 	// owned by another enabled plugin; re-registering this plugin's keyword succeeds.
@@ -613,6 +623,11 @@ func (a *APIImpl) RegisterQueryCommands(ctx context.Context, commands []Metadata
 
 func (a *APIImpl) RegisterTriggerKeyword(ctx context.Context, option RegisterTriggerKeywordOption) RegisterTriggerKeywordResult {
 	return RegisterTriggerKeywordResult{Success: GetPluginManager().registerTriggerKeyword(a.pluginInstance, option)}
+}
+
+// GetTriggerKeywords copies the effective list so callers cannot mutate routing state.
+func (a *APIImpl) GetTriggerKeywords(ctx context.Context, option GetTriggerKeywordsOption) GetTriggerKeywordsResult {
+	return GetTriggerKeywordsResult{TriggerKeywords: append([]string{}, a.pluginInstance.GetTriggerKeywords()...)}
 }
 
 func (a *APIImpl) UnregisterTriggerKeyword(ctx context.Context, option UnregisterTriggerKeywordOption) UnregisterTriggerKeywordResult {

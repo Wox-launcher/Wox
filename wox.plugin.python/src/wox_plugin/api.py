@@ -28,6 +28,8 @@ from .models.drag_out import (
     DragOutListenResult,
 )
 from .models.trigger_keyword import (
+    GetTriggerKeywordsOption,
+    GetTriggerKeywordsResult,
     RegisterTriggerKeywordOption,
     RegisterTriggerKeywordResult,
     UnregisterTriggerKeywordOption,
@@ -691,6 +693,10 @@ class PublicAPI(Protocol):
                 ),
             ])
         """
+        ...
+
+    async def get_trigger_keywords(self, ctx: Context, option: GetTriggerKeywordsOption) -> GetTriggerKeywordsResult:
+        """Return this plugin's effective triggers, including '*'; skip it when building a prefixed query."""
         ...
 
     async def register_trigger_keyword(self, ctx: Context, option: RegisterTriggerKeywordOption) -> RegisterTriggerKeywordResult:

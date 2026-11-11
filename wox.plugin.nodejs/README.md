@@ -25,6 +25,12 @@ the static trigger setting, and `RegisterQueryCommands` accepts `DebounceMs` on
 each `MetadataCommand`. Trigger/command overrides apply to input queries only.
 See the [metadata example and precedence rules](../wox.core/plugin/README.md#query-scheduling).
 
+`await api.GetTriggerKeywords(ctx, {})` returns `{ TriggerKeywords: string[] }`
+with this plugin's effective triggers in configured order, including user overrides,
+runtime registrations, and `*`. For a query that continues searching inside the
+plugin, use the first non-empty trigger other than `*`, followed by the command
+(when present) and search text. If there is no concrete trigger, omit the action.
+
 Set `Preview.DefaultHidden: true` on a result to keep its preview collapsed initially.
 Users can open it with the row icon or toggle it with Ctrl/Cmd+P. The manual choice
 applies to all results in the current query, including live updates. A new query restores
