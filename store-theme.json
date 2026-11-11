@@ -212,7 +212,7 @@
     "Id": "9eb51a7c-0538-40b7-b05c-aedf88af534f",
     "Name": "i18n:theme_name",
     "Author": "dragonish",
-    "Version": "1.0.1",
+    "Version": "1.0.2",
     "MinWoxVersion": "2.4.5",
     "Description": "i18n:theme_description",
     "ImageTheme": true,
@@ -227,7 +227,7 @@
       "https://raw.githubusercontent.com/dragonish/Wox.Theme.WesternOilPainting/main/screenshot.jpg"
     ],
     "DateCreated": "2026-10-26 22:11:51",
-    "DateUpdated": "2026-10-26 22:11:51",
+    "DateUpdated": "2026-11-11 12:04:46",
     "I18n": {
       "en_US": {
         "theme_name": "Western Oil Painting",
