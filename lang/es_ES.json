@@ -2006,6 +2006,8 @@
   "plugin_clipboard_ignored_applications_app": "Aplicación",
   "plugin_clipboard_copy": "Copiar",
   "plugin_clipboard_image_restore_failed": "No se pudo restaurar la imagen en el portapapeles. Intente copiar la imagen de nuevo.",
+  "plugin_clipboard_send_via_localsend": "Enviar por LocalSend",
+  "plugin_clipboard_localsend_image_missing": "Esta imagen ya no está disponible. Cópiala de nuevo para enviarla.",
   "plugin_clipboard_open_path": "Abrir ruta",
   "plugin_clipboard_open_containing_folder": "Abrir la carpeta contenedora",
   "plugin_clipboard_open_link": "Abrir enlace",

@@ -100,6 +100,15 @@ func (w *WebsocketHost) handleGetTriggerKeywords(ctx context.Context, pluginInst
 	return pluginInstance.API.GetTriggerKeywords(ctx, option), nil
 }
 
+// handleGetPluginInfo adapts the plugin metadata lookup to the host transport.
+func (w *WebsocketHost) handleGetPluginInfo(ctx context.Context, pluginInstance *plugin.Instance, request JsonRpcRequest) (any, error) {
+	var option plugin.GetPluginInfoOption
+	if err := json.Unmarshal([]byte(request.Params["option"]), &option); err != nil {
+		return plugin.GetPluginInfoResult{TriggerKeywords: []string{}, ErrMsg: err.Error()}, nil
+	}
+	return pluginInstance.API.GetPluginInfo(ctx, option), nil
+}
+
 // handleRegisterTriggerKeyword adapts the RegisterTriggerKeyword wire call to the plugin API.
 func (w *WebsocketHost) handleRegisterTriggerKeyword(ctx context.Context, pluginInstance *plugin.Instance, request JsonRpcRequest) (any, error) {
 	var option plugin.RegisterTriggerKeywordOption

@@ -23,6 +23,8 @@ import {
   RegisterTriggerKeywordResult,
   GetTriggerKeywordsOption,
   GetTriggerKeywordsResult,
+  GetPluginInfoOption,
+  GetPluginInfoResult,
   DragOutEvent,
   DragOutListenOption,
   DragOutListenResult,
@@ -387,6 +389,10 @@ export class PluginAPI implements PublicAPI {
 
   async GetTriggerKeywords(ctx: Context, option: GetTriggerKeywordsOption): Promise<GetTriggerKeywordsResult> {
     return (await this.invokeMethod(ctx, "GetTriggerKeywords", { option: JSON.stringify(option) })) as GetTriggerKeywordsResult
+  }
+
+  async GetPluginInfo(ctx: Context, option: GetPluginInfoOption): Promise<GetPluginInfoResult> {
+    return (await this.invokeMethod(ctx, "GetPluginInfo", { option: JSON.stringify(option) })) as GetPluginInfoResult
   }
 
   async RegisterTriggerKeyword(ctx: Context, option: RegisterTriggerKeywordOption): Promise<RegisterTriggerKeywordResult> {

@@ -80,6 +80,10 @@ func (e StubAPI) GetTriggerKeywords(context.Context, plugin.GetTriggerKeywordsOp
 	return plugin.GetTriggerKeywordsResult{TriggerKeywords: []string{}}
 }
 
+func (e StubAPI) GetPluginInfo(context.Context, plugin.GetPluginInfoOption) plugin.GetPluginInfoResult {
+	return plugin.GetPluginInfoResult{TriggerKeywords: []string{}}
+}
+
 func (e StubAPI) AIChatStream(ctx context.Context, model common.Model, conversations []common.Conversation, options common.ChatOptions, callback common.ChatStreamFunc) error {
 	return nil
 }

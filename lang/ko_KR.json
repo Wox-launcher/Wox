@@ -2006,6 +2006,8 @@
   "plugin_clipboard_ignored_applications_app": "애플리케이션",
   "plugin_clipboard_copy": "복사",
   "plugin_clipboard_image_restore_failed": "이미지를 클립보드에 복원할 수 없습니다. 이미지를 다시 복사해 보세요.",
+  "plugin_clipboard_send_via_localsend": "LocalSend로 보내기",
+  "plugin_clipboard_localsend_image_missing": "이 이미지를 더 이상 사용할 수 없습니다. 다시 복사한 후 보내세요.",
   "plugin_clipboard_open_path": "경로 열기",
   "plugin_clipboard_open_containing_folder": "상위 폴더 열기",
   "plugin_clipboard_open_link": "링크 열기",

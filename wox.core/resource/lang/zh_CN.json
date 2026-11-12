@@ -2007,6 +2007,8 @@
   "plugin_clipboard_ignored_applications_app": "应用",
   "plugin_clipboard_copy": "复制",
   "plugin_clipboard_image_restore_failed": "无法将图片恢复到剪贴板，请重新复制图片后再试。",
+  "plugin_clipboard_send_via_localsend": "通过 LocalSend 发送",
+  "plugin_clipboard_localsend_image_missing": "这张图片已不存在，请重新复制后发送。",
   "plugin_clipboard_open_path": "打开此路径",
   "plugin_clipboard_open_containing_folder": "打开所在文件夹",
   "plugin_clipboard_open_link": "打开链接",

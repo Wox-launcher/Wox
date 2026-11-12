@@ -21,6 +21,9 @@ func (l *pluginLifecycle) loadScriptPlugins(ctx context.Context) ([]Metadata, er
 
 	userScriptPluginDirectory := util.GetLocation().GetUserScriptPluginsDirectory()
 	scriptFiles, readErr := os.ReadDir(userScriptPluginDirectory)
+	if os.IsNotExist(readErr) {
+		return nil, nil
+	}
 	if readErr != nil {
 		return nil, fmt.Errorf("failed to read user script plugin directory: %w", readErr)
 	}

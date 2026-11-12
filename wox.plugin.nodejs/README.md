@@ -25,6 +25,11 @@ the static trigger setting, and `RegisterQueryCommands` accepts `DebounceMs` on
 each `MetadataCommand`. Trigger/command overrides apply to input queries only.
 See the [metadata example and precedence rules](../wox.core/plugin/README.md#query-scheduling).
 
+`await api.GetPluginInfo(ctx, { PluginId: id })` looks up a local plugin without starting it.
+`Installed` describes local presence, `Enabled` reflects saved preferences, and `Ready`
+reports runtime availability. Installed plugins also return their display name, version,
+effective triggers, and icon when available. Check `ErrMsg` for lookup errors.
+
 `await api.GetTriggerKeywords(ctx, {})` returns `{ TriggerKeywords: string[] }`
 with this plugin's effective triggers in configured order, including user overrides,
 runtime registrations, and `*`. For a query that continues searching inside the

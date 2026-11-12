@@ -1,5 +1,17 @@
 package setting
 
+import (
+	"errors"
+	"wox/database"
+
+	"gorm.io/gorm"
+)
+
+const (
+	pluginDisabledKey        = "Disabled"
+	pluginTriggerKeywordsKey = "TriggerKeywords"
+)
+
 type PluginSetting struct {
 	// Is this plugin disabled by user
 	Disabled *PluginSettingValue[bool]
@@ -17,9 +29,23 @@ func NewPluginSetting(store *PluginSettingStore, defaultSettingsInMetadata map[s
 	return &PluginSetting{
 		store:                     store,
 		defaultSettingsInMetadata: defaultSettingsInMetadata,
-		Disabled:                  NewPluginSettingValue(store, "Disabled", false),
-		TriggerKeywords:           NewPluginSettingValue(store, "TriggerKeywords", []string{}),
+		Disabled:                  NewPluginSettingValue(store, pluginDisabledKey, false),
+		TriggerKeywords:           NewPluginSettingValue(store, pluginTriggerKeywordsKey, []string{}),
 	}
+}
+
+// ReadPluginRoutingSettings reads persisted routing for a plugin without a live settings instance.
+func ReadPluginRoutingSettings(pluginID string) (bool, []string, error) {
+	store := NewPluginSettingStore(database.GetDB(), pluginID)
+	var disabled bool
+	if err := store.Get(pluginDisabledKey, &disabled); err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return false, nil, err
+	}
+	var triggerKeywords []string
+	if err := store.Get(pluginTriggerKeywordsKey, &triggerKeywords); err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return false, nil, err
+	}
+	return disabled, triggerKeywords, nil
 }
 
 // Try to get the value of the setting. If the setting is not found, return the default value in metadata if exist, otherwise return empty string

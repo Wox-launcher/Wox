@@ -25,19 +25,13 @@ func (l *pluginLifecycle) loadPlugins(ctx context.Context) error {
 	return l.loadUserPlugins(ctx, false)
 }
 
-// loadUserPlugins restores installed plugins without changing their persisted enablement.
-func (l *pluginLifecycle) loadUserPlugins(ctx context.Context, wait bool) error {
-	if util.IsThirdPartyPluginsDisabled() {
-		logger.Info(ctx, "troubleshooting mode: skipping third-party plugins and runtime hosts")
-		return nil
-	}
-
-	logger.Debug(ctx, "start loading user plugin metadata")
+// discoverUserPluginMetadata reads local plugin sources without starting their runtimes.
+func (l *pluginLifecycle) discoverUserPluginMetadata(ctx context.Context) ([]Metadata, error) {
+	var discoveryErrors []error
 	basePluginDirectory := util.GetLocation().GetPluginDirectory()
 	pluginDirectories, readErr := os.ReadDir(basePluginDirectory)
-	if readErr != nil {
-		logger.Warn(ctx, fmt.Sprintf("failed to read plugin directory (%s), continue without user plugins: %s", basePluginDirectory, readErr.Error()))
-		pluginDirectories = []os.DirEntry{}
+	if readErr != nil && !os.IsNotExist(readErr) {
+		discoveryErrors = append(discoveryErrors, fmt.Errorf("read plugin directory: %w", readErr))
 	}
 
 	var metaDataList []Metadata
@@ -53,6 +47,10 @@ func (l *pluginLifecycle) loadUserPlugins(ctx context.Context, wait bool) error 
 		metadata, metadataErr := l.ParseMetadata(ctx, pluginDirectory)
 		if metadataErr != nil {
 			logger.Error(ctx, metadataErr.Error())
+			var pathErr *os.PathError
+			if errors.As(metadataErr, &pathErr) && !errors.Is(pathErr, os.ErrNotExist) {
+				discoveryErrors = append(discoveryErrors, metadataErr)
+			}
 			continue
 		}
 
@@ -86,14 +84,14 @@ func (l *pluginLifecycle) loadUserPlugins(ctx context.Context, wait bool) error 
 	// Load script plugins
 	scriptMetaDataList, err := l.loadScriptPlugins(ctx)
 	if err != nil {
-		logger.Error(ctx, fmt.Sprintf("failed to load script plugins: %s", err.Error()))
+		discoveryErrors = append(discoveryErrors, fmt.Errorf("discover script plugins: %w", err))
 	} else {
 		metaDataList = append(metaDataList, scriptMetaDataList...)
 	}
 
 	singleFileMetaDataList, err := l.loadSingleFilePlugins(ctx)
 	if err != nil {
-		logger.Error(ctx, fmt.Sprintf("failed to load single-file plugins: %s", err.Error()))
+		discoveryErrors = append(discoveryErrors, fmt.Errorf("discover single-file plugins: %w", err))
 	} else {
 		metaDataList = append(metaDataList, singleFileMetaDataList...)
 	}
@@ -105,10 +103,24 @@ func (l *pluginLifecycle) loadUserPlugins(ctx context.Context, wait bool) error 
 		}
 		discovered, discoverErr := catalog.DiscoverMetadata(ctx)
 		if discoverErr != nil {
-			logger.Error(ctx, fmt.Sprintf("failed to load %s plugins: %s", host.GetRuntime(ctx), discoverErr.Error()))
+			discoveryErrors = append(discoveryErrors, fmt.Errorf("discover %s plugins: %w", host.GetRuntime(ctx), discoverErr))
 			continue
 		}
 		metaDataList = append(metaDataList, discovered...)
+	}
+	return metaDataList, errors.Join(discoveryErrors...)
+}
+
+// loadUserPlugins restores installed plugins without changing their persisted enablement.
+func (l *pluginLifecycle) loadUserPlugins(ctx context.Context, wait bool) error {
+	if util.IsThirdPartyPluginsDisabled() {
+		logger.Info(ctx, "troubleshooting mode: skipping third-party plugins and runtime hosts")
+		return nil
+	}
+
+	metaDataList, discoveryErr := l.discoverUserPluginMetadata(ctx)
+	if discoveryErr != nil {
+		logger.Error(ctx, discoveryErr.Error())
 	}
 
 	uniqueMetadata := make([]Metadata, 0, len(metaDataList))

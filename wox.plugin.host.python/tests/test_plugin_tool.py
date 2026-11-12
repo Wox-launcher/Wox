@@ -16,6 +16,7 @@ sys.modules.setdefault("wox_plugin_host", package)
 
 from wox_plugin import (  # noqa: E402
     Context,
+    GetPluginInfoOption,
     GetTriggerKeywordsOption,
     InvokePluginToolHandlerResult,
     PluginToolDescriptor,
@@ -38,6 +39,28 @@ class PluginToolHostTest(unittest.IsolatedAsyncioTestCase):
         result = await api.get_trigger_keywords(ctx, GetTriggerKeywordsOption())
         self.assertEqual(result.trigger_keywords, ["*", "custom", "runtime"])
         api.invoke_method.assert_awaited_once_with(ctx, "GetTriggerKeywords", {"option": "{}"})
+
+    async def test_get_plugin_info_parses_the_target_snapshot(self):
+        api = PluginAPI(AsyncMock(), "owner", "Owner")
+        ctx = Context.new()
+        api.invoke_method = AsyncMock(
+            return_value={
+                "PluginId": "target",
+                "Installed": True,
+                "Enabled": True,
+                "Ready": False,
+                "Version": "1.0.0",
+                "Icon": {"ImageType": "absolute", "ImageData": "/plugin/icon.png"},
+                "TriggerKeywords": ["target"],
+            }
+        )
+        result = await api.get_plugin_info(ctx, GetPluginInfoOption(plugin_id="target"))
+        api.invoke_method.assert_awaited_once_with(ctx, "GetPluginInfo", {"option": '{"PluginId": "target"}'})
+        self.assertTrue(result.installed and result.enabled)
+        self.assertFalse(result.ready)
+        self.assertEqual(result.version, "1.0.0")
+        self.assertEqual(result.trigger_keywords, ["target"])
+        self.assertEqual(result.icon.image_data, "/plugin/icon.png")
 
     async def test_toast_callback_is_one_shot_and_can_be_released(self):
         api = PluginAPI(AsyncMock(), "toast", "Toast")

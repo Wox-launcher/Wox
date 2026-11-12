@@ -141,6 +141,7 @@ var pluginRequestHandlers = map[string]pluginRequestHandler{
 	"RegisterQueryCommands":    (*WebsocketHost).handleRegisterQueryCommands,
 	"RegisterTriggerKeyword":   (*WebsocketHost).handleRegisterTriggerKeyword,
 	"GetTriggerKeywords":       (*WebsocketHost).handleGetTriggerKeywords,
+	"GetPluginInfo":            (*WebsocketHost).handleGetPluginInfo,
 	"UnregisterTriggerKeyword": (*WebsocketHost).handleUnregisterTriggerKeyword,
 	"RegisterPluginTool":       (*WebsocketHost).handleRegisterPluginTool,
 	"UnregisterPluginTool":     (*WebsocketHost).handleUnregisterPluginTool,

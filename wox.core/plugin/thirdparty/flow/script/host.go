@@ -132,11 +132,7 @@ func (h *Host) DiscoverMetadata(ctx context.Context) ([]plugin.Metadata, error) 
 	if !util.IsWindows() {
 		return nil, nil
 	}
-	root := manifest.CollectionDirectory()
-	if err := util.GetLocation().EnsureDirectoryExist(root); err != nil {
-		return nil, err
-	}
-	return discoverMetadata(ctx, root)
+	return discoverMetadata(ctx, manifest.CollectionDirectory())
 }
 
 func discoverMetadata(ctx context.Context, root string) ([]plugin.Metadata, error) {

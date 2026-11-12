@@ -125,11 +125,7 @@ func (h *Host) DiscoverMetadata(ctx context.Context) ([]plugin.Metadata, error) 
 	if runtime.GOOS != "windows" {
 		return nil, nil
 	}
-	root := manifest.CollectionDirectory()
-	if err := util.GetLocation().EnsureDirectoryExist(root); err != nil {
-		return nil, err
-	}
-	return MetadataFrom(ctx, root)
+	return MetadataFrom(ctx, manifest.CollectionDirectory())
 }
 
 // MetadataFrom lists C# and F# plugins under root.

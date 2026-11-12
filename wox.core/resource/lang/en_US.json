@@ -2006,6 +2006,8 @@
   "plugin_clipboard_ignored_applications_app": "Application",
   "plugin_clipboard_copy": "Copy",
   "plugin_clipboard_image_restore_failed": "Could not restore the image to the clipboard. Try copying the image again.",
+  "plugin_clipboard_send_via_localsend": "Send via LocalSend",
+  "plugin_clipboard_localsend_image_missing": "This image is no longer available. Copy it again to send it.",
   "plugin_clipboard_open_path": "Open path",
   "plugin_clipboard_open_containing_folder": "Open containing folder",
   "plugin_clipboard_open_link": "Open link",

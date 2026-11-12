@@ -273,6 +273,7 @@ func (m *Manager) mergeQueryLayouts(metadataLayout QueryLayout, responseLayout Q
 
 func (m *Manager) queryForPlugin(ctx context.Context, pluginInstance *Instance, query Query) (response QueryResponse) {
 	query = m.applyScopeForPlugin(query, pluginInstance)
+	query.ContextData = query.contextDataForPlugin(pluginInstance.Metadata.Id)
 	pluginLabel := queryDiagnosticPluginLabel(pluginInstance)
 	queryForPluginStart := util.GetSystemTimestamp()
 	queryForPluginTimingStart := time.Now()
@@ -1781,7 +1782,8 @@ func (m *Manager) NewQuery(ctx context.Context, plainQuery common.PlainQuery) (Q
 	if plainQuery.QueryType == QueryTypeInput {
 		newQuery := plainQuery.QueryText
 		woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
-		if len(woxSetting.QueryAliases.Get()) > 0 {
+		// A handoff already supplies the recipient's actual trigger keyword.
+		if contextData[QueryContextDataRecipientKey] == "" && len(woxSetting.QueryAliases.Get()) > 0 {
 			originQuery := plainQuery.QueryText
 			expandedQuery := m.expandQueryAlias(ctx, plainQuery.QueryText, woxSetting.QueryAliases.Get())
 			if originQuery != expandedQuery {
@@ -1794,6 +1796,9 @@ func (m *Manager) NewQuery(ctx context.Context, plainQuery common.PlainQuery) (Q
 		query.SessionId = util.GetContextSessionId(ctx)
 		query.Refinements = refinements
 		query.ContextData = contextData
+		if contextData[QueryContextDataRecipientKey] != "" && query.IsGlobalQuery() {
+			query.ContextData = nil
+		}
 		if conflictErr := m.newTriggerKeywordConflictErrorIfNeeded(ctx, query); conflictErr != nil {
 			return query, nil, conflictErr
 		}

@@ -101,6 +101,19 @@ test("GetTriggerKeywords forwards options and preserves the effective trigger or
   assert.deepEqual(await api.GetTriggerKeywords(ctx, {}), { TriggerKeywords: ["*", "custom", "runtime"] })
 })
 
+test("GetPluginInfo forwards the target plugin ID", async () => {
+  const api = new PluginAPI({}, "owner", "Owner")
+  const ctx = context()
+  const info = { PluginId: "target", Installed: true, Enabled: true, Ready: false, Version: "1.0.0", TriggerKeywords: ["target"] }
+  api.invokeMethod = async (actualContext, method, params) => {
+    assert.equal(actualContext, ctx)
+    assert.equal(method, "GetPluginInfo")
+    assert.deepEqual(JSON.parse(params.option), { PluginId: "target" })
+    return info
+  }
+  assert.deepEqual(await api.GetPluginInfo(ctx, { PluginId: "target" }), info)
+})
+
 test("duplicate registration and failed unregister preserve the original handler", async () => {
   const api = new PluginAPI({}, "owner", "Owner")
   const results = [{ Error: null }, { Error: { Code: "TOOL_ALREADY_REGISTERED" } }, { Error: { Code: "EXECUTION_FAILED" } }, { Error: null }]

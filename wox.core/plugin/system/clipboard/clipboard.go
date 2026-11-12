@@ -826,9 +826,11 @@ func (c *ClipboardPlugin) Query(ctx context.Context, query plugin.Query) plugin.
 	var favoriteScores map[string]int64
 	selectedType := c.getSelectedClipboardType(query)
 	showFavorites := c.api.GetSetting(ctx, showFavoritesByDefaultSettingKey) == "true"
+	localSend := sync.OnceValue(func() localSendTarget { return getLocalSendTarget(ctx) })
 	addResult := func(record ClipboardRecord) *plugin.QueryResult {
 		iconRecords = append(iconRecords, record)
 		result := c.convertRecordToResult(ctx, record, query)
+		c.appendLocalSendAction(&result, record, localSend)
 		if record.IsFavorite && !query.IsGlobalQuery() {
 			result.Score = favoriteScores[record.ID]
 		}
@@ -1328,6 +1330,7 @@ func (c *ClipboardPlugin) handleMRURestore(ctx context.Context, mruData plugin.M
 		return nil, err
 	}
 	result := c.convertRecordToResult(ctx, *record, plugin.Query{Env: mruData.Env})
+	c.appendLocalSendAction(&result, *record, func() localSendTarget { return getLocalSendTarget(ctx) })
 	return &result, nil
 }
 

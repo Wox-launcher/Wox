@@ -292,6 +292,7 @@ from .models.trigger_keyword import (
     UnregisterTriggerKeywordOption,
     UnregisterTriggerKeywordResult,
 )
+from .models.plugin_info import GetPluginInfoOption, GetPluginInfoResult
 from .models.plugin_tool import (
     InvokePluginToolHandlerOption,
     InvokePluginToolHandlerResult,
@@ -431,6 +432,8 @@ __all__: List[str] = [
     "RegisterTriggerKeywordOption",
     "GetTriggerKeywordsOption",
     "GetTriggerKeywordsResult",
+    "GetPluginInfoOption",
+    "GetPluginInfoResult",
     "RegisterTriggerKeywordResult",
     "UnregisterTriggerKeywordOption",
     "UnregisterTriggerKeywordResult",

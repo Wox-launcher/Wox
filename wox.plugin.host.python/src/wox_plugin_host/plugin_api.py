@@ -42,6 +42,8 @@ from wox_plugin import (
     RegisterTriggerKeywordResult,
     GetTriggerKeywordsOption,
     GetTriggerKeywordsResult,
+    GetPluginInfoOption,
+    GetPluginInfoResult,
     DragOutEvent,
     DragOutListenOption,
     DragOutListenResult,
@@ -400,6 +402,10 @@ class PluginAPI(PublicAPI):
         """Read this plugin's effective triggers from core."""
         result = await self.invoke_method(ctx, "GetTriggerKeywords", {"option": json.dumps(option.to_dict())})
         return GetTriggerKeywordsResult.from_dict(result if isinstance(result, dict) else {})
+
+    async def get_plugin_info(self, ctx: Context, option: GetPluginInfoOption) -> GetPluginInfoResult:
+        result = await self.invoke_method(ctx, "GetPluginInfo", {"option": json.dumps(option.to_dict())})
+        return GetPluginInfoResult.from_dict(result)
 
     async def register_trigger_keyword(self, ctx: Context, option: RegisterTriggerKeywordOption) -> RegisterTriggerKeywordResult:
         """Forward a typed trigger declaration and decode registration success."""

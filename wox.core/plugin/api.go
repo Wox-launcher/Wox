@@ -119,6 +119,9 @@ type API interface {
 	// including user overrides, runtime registrations, and "*" when global search is enabled.
 	GetTriggerKeywords(ctx context.Context, option GetTriggerKeywordsOption) GetTriggerKeywordsResult
 
+	// GetPluginInfo looks up a locally installed plugin by ID without starting it.
+	GetPluginInfo(ctx context.Context, option GetPluginInfoOption) GetPluginInfoResult
+
 	// RegisterTriggerKeyword registers a runtime trigger. It fails for invalid keywords or keywords
 	// owned by another enabled plugin; re-registering this plugin's keyword succeeds.
 	RegisterTriggerKeyword(ctx context.Context, option RegisterTriggerKeywordOption) RegisterTriggerKeywordResult

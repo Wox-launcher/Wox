@@ -18,6 +18,7 @@ from .models.woxview import WoxViewScatterChartPropsPointsItem
 from .models.log import LogLevel
 from .models.mru import MRUData
 from .models.preview import WoxPreview
+from .models.plugin_info import GetPluginInfoOption, GetPluginInfoResult
 from .models.query import ChangeQueryParam, CopyParams, MetadataCommand, Query, RefreshQueryParam
 from .models.result import Result, UpdatableResult  # noqa: F401
 from .models.setting import PluginSettingDefinitionItem
@@ -697,6 +698,10 @@ class PublicAPI(Protocol):
 
     async def get_trigger_keywords(self, ctx: Context, option: GetTriggerKeywordsOption) -> GetTriggerKeywordsResult:
         """Return this plugin's effective triggers, including '*'; skip it when building a prefixed query."""
+        ...
+
+    async def get_plugin_info(self, ctx: Context, option: GetPluginInfoOption) -> GetPluginInfoResult:
+        """Look up a local plugin by ID without starting its runtime."""
         ...
 
     async def register_trigger_keyword(self, ctx: Context, option: RegisterTriggerKeywordOption) -> RegisterTriggerKeywordResult:

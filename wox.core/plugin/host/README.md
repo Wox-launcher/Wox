@@ -12,8 +12,8 @@ Operation handlers live with related protocol behavior:
 
 - `plugin_request_app.go`: app visibility, clipboard, screenshot, appearance,
   notifications, logging and toolbar messages.
-- `plugin_request_query.go`: query changes, query commands, trigger keywords and
-  incremental results.
+- `plugin_request_query.go`: query changes, query commands, plugin information,
+  trigger keywords and incremental results.
 - `plugin_request_settings.go`: setting reads and both setting-write contracts.
 - `plugin_request_callbacks.go`: callback registrations and callback payloads.
 - `plugin_request_tools.go`: plugin tool options, structured errors and callback

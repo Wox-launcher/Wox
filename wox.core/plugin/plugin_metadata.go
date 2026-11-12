@@ -11,7 +11,7 @@ import (
 func (l *pluginLifecycle) ParseMetadata(ctx context.Context, pluginDirectory string) (Metadata, error) {
 	configPath := path.Join(pluginDirectory, "plugin.json")
 	if _, statErr := os.Stat(configPath); statErr != nil {
-		return Metadata{}, fmt.Errorf("missing plugin.json file in %s", configPath)
+		return Metadata{}, fmt.Errorf("cannot access plugin.json: %w", statErr)
 	}
 
 	metadataJson, err := os.ReadFile(configPath)

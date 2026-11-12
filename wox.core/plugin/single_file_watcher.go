@@ -20,10 +20,10 @@ func (l *pluginLifecycle) loadSingleFilePlugins(ctx context.Context) ([]Metadata
 	logger.Debug(ctx, "start loading single-file plugin metadata")
 
 	directory := util.GetLocation().GetUserSingleFilePluginsDirectory()
-	if err := util.GetLocation().EnsureDirectoryExist(directory); err != nil {
-		return nil, fmt.Errorf("failed to ensure single-file plugin directory: %w", err)
-	}
 	entries, readErr := os.ReadDir(directory)
+	if os.IsNotExist(readErr) {
+		return nil, nil
+	}
 	if readErr != nil {
 		return nil, fmt.Errorf("failed to read single-file plugin directory: %w", readErr)
 	}

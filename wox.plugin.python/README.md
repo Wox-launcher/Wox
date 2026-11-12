@@ -40,6 +40,11 @@ immediately. For runtime registration, pass `debounce_ms` to
 Trigger/command overrides apply to input queries only.
 See the [metadata example and precedence rules](../wox.core/plugin/README.md#query-scheduling).
 
+`await api.get_plugin_info(ctx, GetPluginInfoOption(plugin_id=id))` looks up a local
+plugin without starting it. The result reports `installed`, `enabled`, and `ready`
+along with its name, version, effective triggers, and icon when available. Check
+`err_msg` for lookup errors.
+
 `await api.get_trigger_keywords(ctx, GetTriggerKeywordsOption())` returns a
 `GetTriggerKeywordsResult` whose `trigger_keywords` list contains this plugin's
 effective triggers in configured order, including user overrides, runtime

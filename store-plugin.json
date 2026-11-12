@@ -427,7 +427,7 @@
     "Id": "407fdbba-bdab-4bc1-aa09-b46e811155a6",
     "Name": "LocalSend",
     "Author": "qianlifeng",
-    "Version": "0.1.0",
+    "Version": "0.1.3",
     "MinWoxVersion": "2.5.0",
     "Runtime": "nodejs",
     "Description": "i18n:plugin_description",

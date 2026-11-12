@@ -2822,6 +2822,8 @@
   "plugin_clipboard_ignored_applications_app": "Aplicativo",
   "plugin_clipboard_copy": "Copiar",
   "plugin_clipboard_image_restore_failed": "Não foi possível restaurar a imagem para a área de transferência. Tente copiar a imagem novamente.",
+  "plugin_clipboard_send_via_localsend": "Enviar via LocalSend",
+  "plugin_clipboard_localsend_image_missing": "Esta imagem não está mais disponível. Copie-a novamente para enviar.",
   "plugin_clipboard_open_path": "Abrir caminho",
   "plugin_clipboard_open_containing_folder": "Abrir pasta contendo",
   "plugin_clipboard_open_link": "Abrir link",

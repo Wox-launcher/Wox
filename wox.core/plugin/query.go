@@ -3,6 +3,7 @@ package plugin
 import (
 	"context"
 	"encoding/json"
+	"maps"
 	"strings"
 	"wox/common"
 	"wox/setting/definition"
@@ -21,6 +22,10 @@ const (
 	QueryTypeInput     QueryType = "input"     // user input query
 	QueryTypeSelection QueryType = "selection" // user selection query
 )
+
+// QueryContextDataRecipientKey marks a core handoff whose data belongs to one plugin.
+// The recipient still needs to match the query through normal keyword routing.
+const QueryContextDataRecipientKey = "__wox_query_context_recipient"
 
 const (
 	QueryResultActionTypeExecute QueryResultActionType = "execute"
@@ -117,6 +122,20 @@ func (q *Query) IsGlobalQuery() bool {
 // HasScope reports whether this query carries an explicit plugin allowlist.
 func (q *Query) HasScope() bool {
 	return !q.Scope.IsEmpty()
+}
+
+// contextDataForPlugin keeps handoff data private if the query's routing changes.
+func (q Query) contextDataForPlugin(pluginID string) common.ContextData {
+	recipient := q.ContextData[QueryContextDataRecipientKey]
+	if recipient == "" {
+		return q.ContextData
+	}
+	if q.TriggerKeyword == "" || !strings.EqualFold(recipient, pluginID) {
+		return nil
+	}
+	data := maps.Clone(q.ContextData)
+	delete(data, QueryContextDataRecipientKey)
+	return data
 }
 
 func (q *Query) String() string {

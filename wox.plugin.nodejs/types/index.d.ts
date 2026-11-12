@@ -17,6 +17,23 @@ export interface GetTriggerKeywordsResult {
   TriggerKeywords: string[]
 }
 
+export interface GetPluginInfoOption {
+  PluginId: string
+}
+
+/** Local plugin information. Ready indicates that its runtime is available. */
+export interface GetPluginInfoResult {
+  PluginId: string
+  Installed: boolean
+  Enabled: boolean
+  Ready: boolean
+  Name: string
+  Version: string
+  Icon?: WoxImage
+  TriggerKeywords: string[]
+  ErrMsg?: string
+}
+
 export interface RegisterTriggerKeywordOption {
   Keyword: string
   QueryHint?: QueryHint
@@ -1745,6 +1762,9 @@ export interface PublicAPI {
 
   /** Return a snapshot of this plugin's effective trigger keywords. Skip "*" when building a prefixed query. */
   GetTriggerKeywords: (ctx: Context, option: GetTriggerKeywordsOption) => Promise<GetTriggerKeywordsResult>
+
+  /** Look up a local plugin by ID without starting its runtime. */
+  GetPluginInfo: (ctx: Context, option: GetPluginInfoOption) => Promise<GetPluginInfoResult>
 
   /** Register a runtime trigger; invalid keywords or keywords owned by another enabled plugin fail. */
   RegisterTriggerKeyword: (ctx: Context, option: RegisterTriggerKeywordOption) => Promise<RegisterTriggerKeywordResult>

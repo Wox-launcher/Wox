@@ -2823,6 +2823,8 @@
   "plugin_clipboard_ignored_applications_app": "Приложение",
   "plugin_clipboard_copy": "Копировать",
   "plugin_clipboard_image_restore_failed": "Не удалось восстановить изображение в буфере обмена. Попробуйте скопировать изображение ещё раз.",
+  "plugin_clipboard_send_via_localsend": "Отправить через LocalSend",
+  "plugin_clipboard_localsend_image_missing": "Это изображение больше недоступно. Скопируйте его снова, чтобы отправить.",
   "plugin_clipboard_open_path": "Открыть путь",
   "plugin_clipboard_open_containing_folder": "Открыть содержащую папку",
   "plugin_clipboard_open_link": "Открыть ссылку",
