@@ -2,6 +2,8 @@
 
 Wox uses the operating system OCR implementation by default. It does not download an OCR model until an OCR consumer selects and downloads `PaddleOCR v6 Small`.
 
+On Windows, Wox tries the optional Windows App SDK AI helper first and falls back to calling `Windows.Media.Ocr` directly through WinRT. The built-in engine uses the OCR languages installed in Windows.
+
 Each OCR consumer keeps its own `ocr_model` setting. The setting stores `system` or `paddle_ppocrv6_small`; model files themselves are shared.
 
 The local layout is:

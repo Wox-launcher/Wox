@@ -182,10 +182,8 @@ func normalizeRequest(request Request) (Request, error) {
 		return Request{}, fmt.Errorf("ocr image path is empty")
 	}
 
-	// Feature fix: callers may build cache paths with slash-tolerant helpers
-	// that still work for normal file IO, but Windows WinRT OCR rejects mixed
-	// separators in StorageFile.GetFileFromPathAsync. Normalize once at the OCR
-	// boundary so every platform helper receives an absolute native path.
+	// WinRT expects a fully qualified path with native separators. Normalize
+	// paths at the OCR boundary because callers can build them with mixed slashes.
 	imagePath = filepath.Clean(imagePath)
 	if absolutePath, err := filepath.Abs(imagePath); err == nil {
 		imagePath = absolutePath
