@@ -376,23 +376,27 @@ func TestTextOverlayIconTextGap(t *testing.T) {
 	}
 }
 
-func TestToastActionNeedsOwnRow(t *testing.T) {
+func TestToastInlineTextWidth(t *testing.T) {
 	minTextWidth := textOverlayScaled(200)
+	// Subtracting this reserved width from an exact fit rounds the remaining width down.
+	reservedWidth := float32(180.48999)
+	shortTitleWidth := float32(85.49)
 	for _, tc := range []struct {
 		name        string
-		available   float32
-		action      float32
+		windowWidth float32
 		naturalText float32
-		wantBelow   bool
+		wantWidth   float32
+		wantFits    bool
 	}{
-		{"wide window", minTextWidth + 150 + runtimeTextLeadingGap, 150, 500, false},
-		{"narrow window", minTextWidth + 150 + runtimeTextLeadingGap - 1, 150, 500, true},
-		{"short message", 150 + runtimeTextLeadingGap + 50, 150, 50, false},
-		{"no action", 50, 0, 500, false},
+		{"room for long message to wrap", reservedWidth + minTextWidth, 500, minTextWidth, true},
+		{"too narrow for long message", reservedWidth + minTextWidth - 1, 500, 0, false},
+		{"fractional title fits exactly", reservedWidth + shortTitleWidth, shortTitleWidth, shortTitleWidth, true},
+		{"too narrow for short title", reservedWidth + shortTitleWidth - 1, shortTitleWidth, 0, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := toastActionNeedsOwnRow(tc.available, tc.action, tc.naturalText); got != tc.wantBelow {
-				t.Fatalf("action below = %v, want %v", got, tc.wantBelow)
+			width, fits := toastInlineTextWidth(tc.windowWidth, reservedWidth, tc.naturalText)
+			if width != tc.wantWidth || fits != tc.wantFits {
+				t.Fatalf("inline text width = %v, fits = %v, want %v, %v", width, fits, tc.wantWidth, tc.wantFits)
 			}
 		})
 	}
@@ -416,10 +420,15 @@ func TestToastBuildContainsOptionalTitleAndAction(t *testing.T) {
 	if !ok || field.TextColor != secondary {
 		t.Fatalf("titled toast message color = %+v, want secondary %+v", field.TextColor, secondary)
 	}
-	hasTitle, hasAction := false, false
+	hasTitle, hasAction, hasActionGap := false, false, false
 	walkTextOverlayWidget(root, func(child woxwidget.Widget) {
 		if text, ok := child.(woxwidget.TextBlock); ok && text.Value == "title" {
 			hasTitle = true
+		}
+		if row, ok := child.(woxwidget.Flex); ok && row.Axis == woxwidget.Horizontal && len(row.Children) == 2 {
+			if button, ok := row.Children[1].(woxwidget.Semantics); ok && button.AutomationID == "toast-action" {
+				hasActionGap = row.Gap == textOverlayScaled(runtimeToastActionGap)
+			}
 		}
 		if button, ok := child.(woxwidget.Semantics); ok && button.AutomationID == "toast-action" {
 			hasAction = button.Label == "open"
@@ -428,8 +437,8 @@ func TestToastBuildContainsOptionalTitleAndAction(t *testing.T) {
 			}
 		}
 	})
-	if !hasTitle || !hasAction || !clicked {
-		t.Fatalf("title=%v action=%v clicked=%v", hasTitle, hasAction, clicked)
+	if !hasTitle || !hasAction || !hasActionGap || !clicked {
+		t.Fatalf("title=%v action=%v action gap=%v clicked=%v", hasTitle, hasAction, hasActionGap, clicked)
 	}
 	instance.options.ToastTitle = ""
 	root = instance.build(woxui.FrameInfo{Size: instance.layout.windowSize})

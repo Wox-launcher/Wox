@@ -33,6 +33,8 @@ const (
 	runtimeTextTitleIconSize      = float32(20)
 	runtimeTextTooltipHeight      = float32(28)
 	runtimeTextTooltipGap         = float32(4)
+	runtimeToastActionGap         = float32(16)
+	runtimeToastExtraWidth        = float32(8)
 )
 
 // defaultTextOverlayBackground matches the launcher palette when no theme is registered.
@@ -223,19 +225,21 @@ func (instance *runtimeTextOverlay) measure(window *woxui.Window, workArea woxui
 	}
 
 	natural, _ := window.MeasureText(instance.options.Message, style)
-	toastTextWidth := natural.Size.Width
+	naturalTextWidth := natural.Size.Width
+	if instance.options.ToastTitle != "" {
+		title, _ := window.MeasureText(instance.options.ToastTitle, woxui.TextStyle{Size: textOverlayFontSize(instance.options), Weight: woxui.FontWeightSemibold})
+		naturalTextWidth = max(naturalTextWidth, title.Size.Width)
+	}
 	padding := textOverlayPadding(instance.options)
-	windowWidth := natural.Size.Width + leadingReserve + tipReserve + hotkeyReserve + closeReserve + padding.Left + padding.Right
+	reservedWidth := leadingReserve + tipReserve + hotkeyReserve + closeReserve + padding.Left + padding.Right
+	windowWidth := reservedWidth + naturalTextWidth
 	actionWidth := float32(0)
+	inlineReservedWidth := reservedWidth
 	if instance.options.ToastActionLabel != "" {
 		label, _ := window.MeasureText(instance.options.ToastActionLabel, woxui.TextStyle{Size: textOverlayScaled(12)})
 		actionWidth = label.Size.Width + textOverlayScaled(24)
-		windowWidth += actionWidth + runtimeTextLeadingGap
-	}
-	if instance.options.ToastTitle != "" {
-		title, _ := window.MeasureText(instance.options.ToastTitle, woxui.TextStyle{Size: textOverlayFontSize(instance.options), Weight: woxui.FontWeightSemibold})
-		toastTextWidth = max(toastTextWidth, title.Size.Width)
-		windowWidth = max(windowWidth, title.Size.Width+leadingReserve+closeReserve+actionWidth+runtimeTextLeadingGap+padding.Left+padding.Right)
+		inlineReservedWidth += actionWidth + textOverlayScaled(runtimeToastActionGap)
+		windowWidth = inlineReservedWidth + naturalTextWidth + textOverlayScaled(runtimeToastExtraWidth)
 	}
 	if titleBarHeight > 0 && (instance.options.Title != "" || instance.titleIcon != nil) {
 		titleWidth := float32(0)
@@ -272,10 +276,14 @@ func (instance *runtimeTextOverlay) measure(window *woxui.Window, workArea woxui
 	}
 
 	contentWidth := max(float32(1), windowWidth-padding.Left-padding.Right)
-	textWidth := max(float32(1), contentWidth-leadingReserve-tipReserve-hotkeyReserve-closeReserve)
-	actionBelow := toastActionNeedsOwnRow(textWidth, actionWidth, toastTextWidth)
-	if actionWidth > 0 && !actionBelow {
-		textWidth -= actionWidth + runtimeTextLeadingGap
+	textWidth := max(float32(1), windowWidth-reservedWidth)
+	actionBelow := false
+	if actionWidth > 0 {
+		inlineTextWidth, fits := toastInlineTextWidth(windowWidth, inlineReservedWidth, naturalTextWidth)
+		actionBelow = !fits
+		if fits {
+			textWidth = inlineTextWidth
+		}
 	}
 	textLayout := woxwidget.LayoutTextBlock(window, instance.options.Message, style, textWidth, 0, 0)
 	textHeight := textLayout.Size.Height + runtimeTextBottomPadding
@@ -324,9 +332,14 @@ func (instance *runtimeTextOverlay) measure(window *woxui.Window, workArea woxui
 	}
 }
 
-// toastActionNeedsOwnRow keeps long messages readable when the screen is narrow.
-func toastActionNeedsOwnRow(textWidth, actionWidth, naturalTextWidth float32) bool {
-	return actionWidth > 0 && textWidth-actionWidth-runtimeTextLeadingGap < min(textOverlayScaled(200), naturalTextWidth)
+// toastInlineTextWidth compares the window against the required width before
+// subtracting reserved space, so rounding cannot move the button on an exact fit.
+func toastInlineTextWidth(windowWidth, reservedWidth, naturalTextWidth float32) (width float32, fits bool) {
+	minimumTextWidth := max(1, min(textOverlayScaled(200), naturalTextWidth))
+	if windowWidth < reservedWidth+minimumTextWidth {
+		return 0, false
+	}
+	return max(minimumTextWidth, windowWidth-reservedWidth), true
 }
 
 func textOverlayIconTextGap(options Options) float32 {
@@ -406,13 +419,12 @@ func (instance *runtimeTextOverlay) build(frame woxui.FrameInfo) woxwidget.Widge
 		leading = woxwidget.Image{Source: instance.icon, Width: size, Height: size, Fit: woxwidget.ImageFitContain}
 	}
 	if leading != nil {
-		row = append(row, woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: textOverlayIconTextGap(instance.options), CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{leading, textContent}})
-	} else {
-		row = append(row, textContent)
+		textContent = woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: textOverlayIconTextGap(instance.options), CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{leading, textContent}}
 	}
 	if layout.toastActionWidth > 0 && !layout.toastActionBelow {
-		row = append(row, instance.toastButton(chrome))
+		textContent = woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: textOverlayScaled(runtimeToastActionGap), CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{textContent, instance.toastButton(chrome)}}
 	}
+	row = append(row, textContent)
 	if chip := textOverlayHotkeyChip(instance.window, instance.options.HotkeyLabels, chrome); chip != nil {
 		row = append(row, chip)
 	}
