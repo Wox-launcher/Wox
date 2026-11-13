@@ -2335,5 +2335,27 @@
     },
     "DateCreated": "2026-11-10 09:10:00",
     "DateUpdated": "2026-11-10 09:10:00"
+  },
+  {
+    "Id": "3c4ce4c8-fdc4-479c-bf66-16e550e75e43",
+    "Name": "Dictionary",
+    "Author": "skulltrail",
+    "Version": "0.1.0",
+    "MinWoxVersion": "2.0.4",
+    "Runtime": "nodejs",
+    "Description": "Look up word definitions directly in Wox.",
+    "IconUrl": "https://raw.githubusercontent.com/skulltrail/Wox.Plugin.Dictionary/main/images/icon.svg",
+    "Website": "https://github.com/skulltrail/Wox.Plugin.Dictionary",
+    "DownloadUrl": "https://github.com/skulltrail/Wox.Plugin.Dictionary/releases/latest/download/wox.plugin.Dictionary.wox",
+    "ScreenshotUrls": [
+      "https://raw.githubusercontent.com/skulltrail/Wox.Plugin.Dictionary/main/images/define.png"
+    ],
+    "SupportedOS": [
+      "Windows",
+      "Darwin",
+      "Linux"
+    ],
+    "DateCreated": "2026-11-12 21:31:43",
+    "DateUpdated": "2026-11-13 04:30:36"
   }
 ]
