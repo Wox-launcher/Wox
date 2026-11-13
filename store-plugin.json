@@ -2340,7 +2340,7 @@
     "Id": "3c4ce4c8-fdc4-479c-bf66-16e550e75e43",
     "Name": "Dictionary",
     "Author": "skulltrail",
-    "Version": "0.1.0",
+    "Version": "0.2.0",
     "MinWoxVersion": "2.0.4",
     "Runtime": "nodejs",
     "Description": "Look up word definitions directly in Wox.",
@@ -2356,6 +2356,6 @@
       "Linux"
     ],
     "DateCreated": "2026-11-12 21:31:43",
-    "DateUpdated": "2026-11-13 04:30:36"
+    "DateUpdated": "2026-11-13 13:44:33"
   }
 ]
