@@ -269,8 +269,8 @@ type ScreenshotRect struct {
 type CaptureScreenshotRequest struct {
 	// ExportDirectory is an in-process history destination supplied by Wox-owned callers.
 	ExportDirectory string `json:"-"`
-	// OnClipboardReady runs on the capture worker after successful publication, before history or scene work.
-	// This in-process callback lets Wox-owned callers notify immediately without changing file-based API completion.
+	// OnClipboardReady runs on the capture worker after a successful clipboard write, so callers can
+	// distinguish later history or scene errors from a failure to publish the image.
 	OnClipboardReady func() `json:"-"`
 	// Editable scenes are opt-in for Wox-owned screenshot history, never third-party captures.
 	SaveEditableScene  bool     `json:"saveEditableScene,omitempty"`

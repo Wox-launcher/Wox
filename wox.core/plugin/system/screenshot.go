@@ -995,20 +995,18 @@ func (p *ScreenshotPlugin) runScreenshot(ctx context.Context, editPath string) {
 	p.runScreenshotRequest(ctx, editPath, request, plugin.GetPluginManager().GetUI())
 }
 
-// runScreenshotRequest notifies as soon as pixels become pasteable; the capture worker then finishes history and scene preparation.
+// runScreenshotRequest handles capture results and schedules follow-up work for saved screenshots.
 func (p *ScreenshotPlugin) runScreenshotRequest(ctx context.Context, editPath string, request common.CaptureScreenshotRequest, ui common.UI) {
 	directory, jobs := p.beginScreenshotStorageUse()
 	defer jobs.Done()
 	request.ExportDirectory = directory
-	clipboardNotified := false
+	// A later history write can fail without returning the clipboard status in the result.
+	clipboardReady := false
 	request.OnClipboardReady = func() {
-		if !clipboardNotified {
-			clipboardNotified = true
-			p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: "i18n:plugin_screenshot_capture_clipboard_success"})
-		}
+		clipboardReady = true
 	}
 	result, err := ui.CaptureScreenshot(ctx, request)
-	if clipboardNotified && (err != nil || result.Status == common.CaptureScreenshotStatusFailed) {
+	if clipboardReady && (err != nil || result.Status == common.CaptureScreenshotStatusFailed) {
 		// A failed history write cannot undo the clipboard image already delivered to the user.
 		detail := result.ErrorMessage
 		if err != nil {
@@ -1081,9 +1079,6 @@ func (p *ScreenshotPlugin) runScreenshotRequest(ctx context.Context, editPath st
 			return
 		}
 
-		if !clipboardNotified {
-			p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: "plugin_screenshot_capture_success"})
-		}
 		if result.ClipboardWarningMessage != "" {
 			p.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("screenshot clipboard warning: %s", result.ClipboardWarningMessage))
 			p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: "plugin_screenshot_capture_clipboard_warning"})
