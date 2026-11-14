@@ -332,7 +332,7 @@
     "Id": "ecbd0343-616c-4d95-b7d0-1e49a6cbb5d4",
     "Name": "i18n:theme_name",
     "Author": "dragonish",
-    "Version": "1.0.0",
+    "Version": "1.0.1",
     "MinWoxVersion": "2.4.5",
     "Description": "i18n:theme_description",
     "ImageTheme": true,
@@ -347,7 +347,7 @@
       "https://raw.githubusercontent.com/dragonish/Wox.Theme.RetroTerminal/main/screenshot.jpg"
     ],
     "DateCreated": "2026-11-13 22:54:38",
-    "DateUpdated": "2026-11-13 22:54:38",
+    "DateUpdated": "2026-11-14 03:03:50",
     "I18n": {
       "en_US": {
         "theme_name": "Retro Terminal",
