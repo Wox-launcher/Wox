@@ -5530,8 +5530,11 @@ static bool rasterize_text_line(WoxLinuxTextRaster *raster, const char *text, co
   float baseline = content_baseline;
   float height = content_height;
   expand_line_box(&height, &baseline, ref_height, ref_baseline);
-  float shift = baseline - content_baseline;
-  if (shift > 0.01f) {
+  // Snap the baseline in device pixels so horizontal stems do not land
+  // between pixel rows when logical font metrics have a fractional ascent.
+  float device_baseline = baseline * scale;
+  float shift = baseline - content_baseline + (roundf(device_baseline) - device_baseline) / scale;
+  if (fabsf(shift) > 0.0001f) {
     cairo_translate(raster->cairo, 0.0, shift);
   }
   pango_cairo_show_layout(raster->cairo, raster->layout);
