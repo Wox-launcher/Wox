@@ -265,7 +265,7 @@ func (a *ApplicationPlugin) getIgnoreRuleMatchersSnapshot() []appIgnoreMatcher {
 }
 
 func buildIgnoreRuleCandidates(info appInfo, displayName string) []string {
-	candidates := info.GetSearchCandidates(displayName)
+	candidates := info.buildSearchCandidates(displayName, true)
 	// Ignore rules match name and path only. Identity is the resolved process
 	// name on Windows shortcuts (for example searchhost.exe for Search.lnk),
 	// so using it here would make ".exe" select every shortcut.

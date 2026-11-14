@@ -204,13 +204,23 @@ func (a *appInfo) GetDisplayPath() string {
 }
 
 func (a *appInfo) GetSearchCandidates(displayName string) []string {
-	candidates := []string{displayName, a.Name}
-	candidates = append(candidates, a.SearchableNames...)
+	// Windows Settings URIs and UWP package IDs can produce unrelated fuzzy matches.
+	return a.buildSearchCandidates(displayName, a.Type != AppTypeWindowsSetting && a.Type != AppTypeUWP)
+}
 
-	baseName := filepath.Base(a.Path)
-	candidates = append(candidates, baseName)
-	if ext := filepath.Ext(baseName); ext != "" {
-		candidates = append(candidates, strings.TrimSuffix(baseName, ext))
+// buildSearchCandidates normalizes the fields shared by launcher search and ignore rules.
+func (a *appInfo) buildSearchCandidates(displayName string, includeRawNameAndFilename bool) []string {
+	candidates := []string{displayName}
+	if includeRawNameAndFilename {
+		candidates = append(candidates, a.Name)
+	}
+	candidates = append(candidates, a.SearchableNames...)
+	if includeRawNameAndFilename {
+		baseName := filepath.Base(a.Path)
+		candidates = append(candidates, baseName)
+		if ext := filepath.Ext(baseName); ext != "" {
+			candidates = append(candidates, strings.TrimSuffix(baseName, ext))
+		}
 	}
 
 	var filtered []string
