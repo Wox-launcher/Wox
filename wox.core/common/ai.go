@@ -75,6 +75,8 @@ type ChatStreamData struct {
 	// Conversations preserves interleaved assistant/tool output from agent providers.
 	// When absent, consumers use the legacy aggregated fields above.
 	Conversations []Conversation
+	// IterationLimitReached identifies a terminal limit error for internal chat consumers.
+	IterationLimitReached bool `json:"-"`
 }
 
 func (c *ChatStreamData) IsNotFinished() bool {

@@ -47,10 +47,9 @@ func (p *GrokCLIProvider) modelNames(ctx context.Context, workspace string) ([]s
 
 // turnCommand configures only this invocation, preserving the user's CLI settings.
 func (p *GrokCLIProvider) turnCommand(workspace, model, effort, bridgeURL string, maxTurns int) ([]string, []string, error) {
-	if maxTurns <= 0 {
+	if maxTurns == 0 {
 		maxTurns = 25
 	}
-	limit := fmt.Sprint(maxTurns)
 	enabledTools := ""
 	if bridgeURL != "" {
 		enabledTools = "search_tool,use_tool"
@@ -65,7 +64,10 @@ func (p *GrokCLIProvider) turnCommand(workspace, model, effort, bridgeURL string
 			return nil, nil, err
 		}
 	}
-	args := []string{"--no-auto-update", "--prompt-file", filepath.Join(workspace, "prompt.txt"), "--model", model, "--output-format", "streaming-json", "--cwd", workspace, "--tools", enabledTools, "--permission-mode", "dontAsk", "--no-plan", "--no-subagents", "--no-memory", "--disable-web-search", "--max-turns", limit, "--system-prompt-override", installedInstructions(bridgeURL), "--storage-mode", "local"}
+	args := []string{"--no-auto-update", "--prompt-file", filepath.Join(workspace, "prompt.txt"), "--model", model, "--output-format", "streaming-json", "--cwd", workspace, "--tools", enabledTools, "--permission-mode", "dontAsk", "--no-plan", "--no-subagents", "--no-memory", "--disable-web-search", "--system-prompt-override", installedInstructions(bridgeURL), "--storage-mode", "local"}
+	if maxTurns > 0 {
+		args = append(args, "--max-turns", fmt.Sprint(maxTurns))
+	}
 	if bridgeURL != "" {
 		args = append(args, "--allow", "MCPTool(wox__*)")
 	}
@@ -93,11 +95,17 @@ func decodeGrokLine(line []byte) (installedEvent, error) {
 	case "end":
 		// An ACP stream can end because it hit a limit or was cancelled.
 		// A successful process exit alone does not mean the agent answered.
-		if reason := value.Get("stopReason").String(); reason != "end_turn" {
+		switch reason := value.Get("stopReason").String(); reason {
+		case "max_turn_requests":
+			return event, fmt.Errorf("Grok: %w", ErrChatIterationLimit)
+		case "end_turn":
+			event.done = true
+		default:
 			return event, fmt.Errorf("Grok stopped without completing its turn (stopReason=%q)", reason)
 		}
-		event.done = true
-	case "error", "max_turns_reached":
+	case "max_turns_reached":
+		return event, fmt.Errorf("Grok: %w", ErrChatIterationLimit)
+	case "error":
 		return event, fmt.Errorf("Grok: %s %s", value.Get("type"), value.Get("message"))
 	}
 	return event, nil

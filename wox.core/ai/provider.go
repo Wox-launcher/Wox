@@ -9,6 +9,9 @@ import (
 
 var ChatStreamNoContentErr = errors.New("chat stream no content")
 
+// ErrChatIterationLimit marks a provider's terminal turn limit.
+var ErrChatIterationLimit = errors.New("chat iteration limit reached")
+
 var providerFactories = map[common.ProviderName]func(ctx context.Context, providerSetting setting.AIProvider) Provider{}
 
 type Provider interface {

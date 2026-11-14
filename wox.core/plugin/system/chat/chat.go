@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -15,9 +16,11 @@ import (
 	"wox/common"
 	"wox/common/icons"
 	"wox/database"
+	"wox/i18n"
 	"wox/plugin"
 	"wox/setting"
 	"wox/setting/definition"
+	"wox/setting/validator"
 	"wox/util"
 	"wox/util/selection"
 
@@ -36,6 +39,8 @@ const aiChatSettingKeyPrefix = "chat:"
 
 const aiChatEnterChatModeActionId = "__wox_internal_enter_chat_mode__"
 const aiChatAttachmentsContextKey = "ai_chat_attachments"
+const aiChatMaxToolCallRoundsSettingKey = "max_tool_call_rounds"
+const aiChatDefaultMaxToolCallRounds = 100
 
 const ToolOpenChatWithAttachments = "open_chat_with_attachments"
 
@@ -111,6 +116,19 @@ func (r *AIChatPlugin) GetMetadata() plugin.Metadata {
 					},
 				},
 			},
+			{
+				Type: definition.PluginSettingDefinitionTypeTextBox,
+				Value: &definition.PluginSettingValueTextBox{
+					Key:          aiChatMaxToolCallRoundsSettingKey,
+					DefaultValue: strconv.Itoa(aiChatDefaultMaxToolCallRounds),
+					Label:        "i18n:plugin_ai_chat_max_tool_call_rounds",
+					Tooltip:      "i18n:plugin_ai_chat_max_tool_call_rounds_tooltip",
+					Validators: []validator.PluginSettingValidator{{
+						Type:  validator.PluginSettingValidatorTypeIsNumber,
+						Value: &validator.PluginSettingValidatorIsNumber{IsInteger: true},
+					}},
+				},
+			},
 		},
 		Features: []plugin.MetadataFeature{
 			{
@@ -136,6 +154,23 @@ func (r *AIChatPlugin) GetMetadata() plugin.Metadata {
 			},
 		},
 	}
+}
+
+// HandleSettingUpdate validates the round limit before the usual settings save.
+func (r *AIChatPlugin) HandleSettingUpdate(ctx context.Context, key, value string) (bool, error) {
+	if key == aiChatMaxToolCallRoundsSettingKey && parseChatRoundLimit(value) == 0 {
+		return true, errors.New(i18n.GetI18nManager().TranslateWox(ctx, "i18n:plugin_ai_chat_max_tool_call_rounds_invalid"))
+	}
+	return false, nil
+}
+
+// parseChatRoundLimit accepts -1 for unlimited rounds and returns zero for invalid values.
+func parseChatRoundLimit(value string) int {
+	limit, err := strconv.Atoi(strings.TrimSpace(value))
+	if err != nil || limit < -1 {
+		return 0
+	}
+	return limit
 }
 
 // configurePluginBuiltinToolHooks wires builtin tools that need plugin manager access.
@@ -735,9 +770,13 @@ func (r *AIChatPlugin) Chat(ctx context.Context, aiChatData common.AIChatData, c
 			})
 		})
 	}
+	maxRounds := parseChatRoundLimit(r.api.GetSetting(ctx, aiChatMaxToolCallRoundsSettingKey))
+	if maxRounds == 0 {
+		maxRounds = aiChatDefaultMaxToolCallRounds
+	}
 	chatErr := r.api.AIChatStream(chatCtx, aiChatData.Model, runtimeContext.Conversations, common.ChatOptions{
 		Tools:          r.initialToolsForRuntime(ctx, mentionIDs(aiChatData.Conversations, common.AIMentionKindPlugin)),
-		LoopPolicy:     common.LoopPolicy{MaxIterations: 25, RetryOnFailure: true, MaxRetries: 3},
+		LoopPolicy:     common.LoopPolicy{MaxIterations: maxRounds, RetryOnFailure: true, MaxRetries: 3},
 		DebugTrace:     runtimeContext.DebugTrace,
 		DebugTraceName: "chat",
 	}, func(streamResult common.ChatStreamData) {
@@ -770,7 +809,7 @@ func (r *AIChatPlugin) Chat(ctx context.Context, aiChatData common.AIChatData, c
 				}
 				r.appendOrUpdateConversation(&aiChatData, conversation)
 			}
-		} else if streamResult.Data != "" || streamResult.Reasoning != "" {
+		} else if !streamResult.IterationLimitReached && (streamResult.Data != "" || streamResult.Reasoning != "") {
 			r.appendOrUpdateConversationAtEnd(&aiChatData, common.Conversation{
 				Id:        responseId,
 				Role:      common.ConversationRoleAssistant,
@@ -827,6 +866,14 @@ func (r *AIChatPlugin) Chat(ctx context.Context, aiChatData common.AIChatData, c
 			// The loop now continues inside AIChatStream; Chat() is only invoked once.
 		} else if isTerminalError {
 			cleanupActiveCancel()
+			if streamResult.IterationLimitReached {
+				message := r.api.GetTranslation(ctx, "i18n:plugin_ai_chat_provider_tool_call_limit_reached")
+				if maxRounds > 0 {
+					message = fmt.Sprintf(r.api.GetTranslation(ctx, "i18n:plugin_ai_chat_tool_call_limit_reached"), maxRounds)
+				}
+				r.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: message})
+				return
+			}
 			util.GetLogger().Error(ctx, fmt.Sprintf("AI: chat stream ended with error, saving chat data: %.512s", streamResult.Data))
 		}
 	})

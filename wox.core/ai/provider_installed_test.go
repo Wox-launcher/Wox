@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -97,6 +98,56 @@ func TestGrokStopReason(t *testing.T) {
 			}
 		} else if err == nil || event.done {
 			t.Fatalf("interrupted turn accepted: %q", reason)
+		}
+		if errors.Is(err, ErrChatIterationLimit) != (reason == "max_turn_requests") {
+			t.Fatalf("wrong limit classification for %q: %v", reason, err)
+		}
+	}
+	_, err := decodeGrokLine([]byte(`{"type":"max_turns_reached"}`))
+	if !errors.Is(err, ErrChatIterationLimit) {
+		t.Fatalf("Grok turn limit error = %v", err)
+	}
+}
+
+// TestClaudeCodeTurnLimit distinguishes an exhausted turn budget from other CLI failures.
+func TestClaudeCodeTurnLimit(t *testing.T) {
+	_, err := decodeClaudeCodeLine([]byte(`{"type":"result","subtype":"error_max_turns","is_error":true}`))
+	if !errors.Is(err, ErrChatIterationLimit) {
+		t.Fatalf("Claude turn limit error = %v", err)
+	}
+	_, err = decodeClaudeCodeLine([]byte(`{"type":"result","subtype":"error_max_budget_usd","is_error":true}`))
+	if err == nil || errors.Is(err, ErrChatIterationLimit) {
+		t.Fatalf("Claude spending limit error = %v", err)
+	}
+}
+
+// TestInstalledTurnLimitFlag checks that each CLI uses its default unlimited behavior on request.
+func TestInstalledTurnLimitFlag(t *testing.T) {
+	for _, name := range []common.ProviderName{"claude-cli", "grok-cli"} {
+		provider := providerFactories[name](context.Background(), setting.AIProvider{Name: name})
+		cli := provider.(interface {
+			turnCommand(string, string, string, string, int) ([]string, []string, error)
+		})
+		for _, tc := range []struct {
+			limit int
+			flag  string
+		}{
+			{limit: 0, flag: "25"},
+			{limit: 100, flag: "100"},
+			{limit: -1},
+		} {
+			args, _, err := cli.turnCommand(t.TempDir(), "test", "", "", tc.limit)
+			if err != nil {
+				t.Fatal(err)
+			}
+			index := slices.Index(args, "--max-turns")
+			if tc.flag == "" {
+				if index >= 0 {
+					t.Fatalf("%s: passed a turn limit for %d", name, tc.limit)
+				}
+			} else if index < 0 || index+1 >= len(args) || args[index+1] != tc.flag {
+				t.Fatalf("%s: want --max-turns %s for %d, got %v", name, tc.flag, tc.limit, args)
+			}
 		}
 	}
 }
@@ -452,6 +503,10 @@ func TestInstalledBridgeDynamicTools(t *testing.T) {
 	b.options.LoopPolicy.MaxIterations = 2
 	if err := invoke(name, map[string]any{"text": "test"}); err == nil {
 		t.Fatal("tool budget ignored")
+	}
+	b.options.LoopPolicy.MaxIterations = -1
+	if err := invoke(name, map[string]any{"text": "test"}); err != nil {
+		t.Fatalf("unlimited tool budget rejected a call: %v", err)
 	}
 }
 

@@ -2,6 +2,7 @@ package plugin
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"image"
 	"sync"
@@ -760,7 +761,12 @@ func (a *APIImpl) runChatLoop(ctx context.Context, model common.Model, conversat
 				Status:    string(common.ChatStreamStatusError),
 				Error:     drainErr.Error(),
 			})
-			callback(common.ChatStreamData{Status: common.ChatStreamStatusError, Data: drainErr.Error(), ToolCalls: []common.ToolCallInfo{}})
+			callback(common.ChatStreamData{
+				Status:                common.ChatStreamStatusError,
+				Data:                  drainErr.Error(),
+				ToolCalls:             []common.ToolCallInfo{},
+				IterationLimitReached: errors.Is(drainErr, ai.ErrChatIterationLimit),
+			})
 			return
 		}
 		if streamedResult == nil {
@@ -835,6 +841,7 @@ func (a *APIImpl) runChatLoop(ctx context.Context, model common.Model, conversat
 		callback(*streamedResult)
 	}
 
+	limitMessage := fmt.Sprintf("chat loop exceeded max iterations (%d)", policy.MaxIterations)
 	opts.DebugTrace.AppendEvent(common.AIChatDebugEvent{
 		Type:      common.AIChatDebugEventModelCallError,
 		Name:      debugTraceName,
@@ -842,12 +849,13 @@ func (a *APIImpl) runChatLoop(ctx context.Context, model common.Model, conversat
 		CallId:    fmt.Sprintf("%s-%d", debugTraceName, policy.MaxIterations),
 		Model:     model,
 		Status:    string(common.ChatStreamStatusError),
-		Error:     fmt.Sprintf("chat loop exceeded max iterations (%d)", policy.MaxIterations),
+		Error:     limitMessage,
 	})
 	callback(common.ChatStreamData{
-		Status:    common.ChatStreamStatusError,
-		Data:      fmt.Sprintf("chat loop exceeded max iterations (%d)", policy.MaxIterations),
-		ToolCalls: []common.ToolCallInfo{},
+		Status:                common.ChatStreamStatusError,
+		Data:                  limitMessage,
+		ToolCalls:             []common.ToolCallInfo{},
+		IterationLimitReached: true,
 	})
 }
 

@@ -36,17 +36,19 @@ func (p *ClaudeCodeCLIProvider) modelNames(ctx context.Context, workspace string
 
 // turnCommand configures only this invocation, preserving the user's CLI settings.
 func (p *ClaudeCodeCLIProvider) turnCommand(workspace, model, effort, bridgeURL string, maxTurns int) ([]string, []string, error) {
-	if maxTurns <= 0 {
+	if maxTurns == 0 {
 		maxTurns = 25
 	}
-	limit := fmt.Sprint(maxTurns)
 
 	servers := map[string]any{}
 	if bridgeURL != "" {
 		servers["wox"] = map[string]any{"type": "http", "url": bridgeURL}
 	}
 	config, _ := json.Marshal(map[string]any{"mcpServers": servers})
-	args := []string{"-p", "--model", model, "--input-format", "text", "--output-format", "stream-json", "--verbose", "--include-partial-messages", "--no-session-persistence", "--disable-slash-commands", "--setting-sources", "", "--tools", "", "--strict-mcp-config", "--mcp-config", string(config), "--no-chrome", "--max-turns", limit, "--system-prompt", installedInstructions(bridgeURL)}
+	args := []string{"-p", "--model", model, "--input-format", "text", "--output-format", "stream-json", "--verbose", "--include-partial-messages", "--no-session-persistence", "--disable-slash-commands", "--setting-sources", "", "--tools", "", "--strict-mcp-config", "--mcp-config", string(config), "--no-chrome", "--system-prompt", installedInstructions(bridgeURL)}
+	if maxTurns > 0 {
+		args = append(args, "--max-turns", fmt.Sprint(maxTurns))
+	}
 	if bridgeURL != "" {
 		args = append(args, "--allowedTools", "mcp__wox__*")
 	}
@@ -74,6 +76,9 @@ func decodeClaudeCodeLine(line []byte) (installedEvent, error) {
 			event.reasoning = delta.Get("thinking").String()
 		}
 	case "result":
+		if value.Get("subtype").String() == "error_max_turns" {
+			return event, fmt.Errorf("Claude: %w", ErrChatIterationLimit)
+		}
 		if value.Get("is_error").Bool() {
 			return event, fmt.Errorf("Claude: %s %s", value.Get("result"), value.Get("errors"))
 		}
