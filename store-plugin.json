@@ -2357,5 +2357,33 @@
     ],
     "DateCreated": "2026-11-12 21:31:43",
     "DateUpdated": "2026-11-13 13:44:33"
+  },
+  {
+    "Id": "7ee8c76f-96db-4cba-b307-1528766c647c",
+    "Name": "Stickies",
+    "Author": "dragonish",
+    "Version": "1.0.0",
+    "MinWoxVersion": "2.5.0",
+    "Runtime": "nodejs",
+    "Description": "i18n:plugin_desc",
+    "IconUrl": "https://raw.githubusercontent.com/dragonish/Wox.Plugin.Stickies/main/images/app.png",
+    "Website": "https://github.com/dragonish/Wox.Plugin.Stickies",
+    "DownloadUrl": "https://github.com/dragonish/Wox.Plugin.Stickies/releases/latest/download/wox.plugin.stickies.wox",
+    "ScreenshotUrls": [
+      "https://raw.githubusercontent.com/dragonish/Wox.Plugin.Stickies/main/screenshot.jpg"
+    ],
+    "SupportedOS": [
+      "Windows"
+    ],
+    "I18n": {
+      "en_US": {
+        "plugin_desc": "Create, browse, search and manage Stickies notes from Wox."
+      },
+      "zh_CN": {
+        "plugin_desc": "通过 Wox 创建、浏览、搜索和管理 Stickies 便签。"
+      }
+    },
+    "DateCreated": "2026-11-15 09:52:41",
+    "DateUpdated": "2026-11-15 09:52:41"
   }
 ]
