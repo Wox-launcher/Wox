@@ -358,5 +358,67 @@
         "theme_description": "复古终端绿配黑：等宽字体、青色链接，阶梯像素边框配 >█ 标签。"
       }
     }
+  },
+  {
+    "Id": "623556b9-b278-4a94-acb9-21cfcef7e0bb",
+    "Name": "i18n:theme_name",
+    "Author": "dragonish",
+    "Version": "1.0.0",
+    "MinWoxVersion": "2.4.4",
+    "Description": "i18n:theme_description",
+    "ImageTheme": false,
+    "IconColors": {
+      "Background": "#1A1B26FF",
+      "Query": "#292E4299",
+      "Selected": "#394B70FF"
+    },
+    "Website": "https://gist.github.com/dragonish/f097c25e33c793b0fe10d923025436fb",
+    "DownloadUrl": "https://gist.githubusercontent.com/dragonish/f097c25e33c793b0fe10d923025436fb/raw/Wox.Theme.TokyoNight.json",
+    "ScreenshotUrls": [
+      "https://gist.github.com/user-attachments/assets/cc821ea6-738f-4219-963b-624d4888b736"
+    ],
+    "DateCreated": "2026-11-15 20:41:46",
+    "DateUpdated": "2026-11-15 20:41:46",
+    "I18n": {
+      "en_US": {
+        "theme_name": "Tokyo Night",
+        "theme_description": "A clean Wox port of the Tokyo Night palette: deep blue-black background, soft blue-white text, blue-gray selection with a purple indicator. Unofficial port, not affiliated with the original authors."
+      },
+      "zh_CN": {
+        "theme_name": "东京之夜",
+        "theme_description": "Tokyo Night 配色的 Wox 移植：深蓝黑底、柔和蓝白文字，蓝灰选中配紫色指示条。非官方移植，与原作者无关。"
+      }
+    }
+  },
+  {
+    "Id": "b43c062b-9527-4f52-82a0-ce4f96676dd0",
+    "Name": "i18n:theme_name",
+    "Author": "dragonish",
+    "Version": "1.0.0",
+    "MinWoxVersion": "2.4.4",
+    "Description": "i18n:theme_description",
+    "ImageTheme": false,
+    "IconColors": {
+      "Background": "#E6E7EDFF",
+      "Query": "#FFFFFFFF",
+      "Selected": "#C9CDD6FF"
+    },
+    "Website": "https://gist.github.com/dragonish/8724090b5bbbdad6383644afb8e44305",
+    "DownloadUrl": "https://gist.githubusercontent.com/dragonish/8724090b5bbbdad6383644afb8e44305/raw/Wox.Theme.TokyoNightLight.json",
+    "ScreenshotUrls": [
+      "https://gist.github.com/user-attachments/assets/006c8965-a996-4b08-a1b7-70add511f50e"
+    ],
+    "DateCreated": "2026-11-15 20:41:46",
+    "DateUpdated": "2026-11-15 20:41:46",
+    "I18n": {
+      "en_US": {
+        "theme_name": "Tokyo Night Light",
+        "theme_description": "A clean Wox port of the Tokyo Night Light palette: soft gray background, dark blue-gray text, light gray selection with a purple indicator. Unofficial port, not affiliated with the original authors."
+      },
+      "zh_CN": {
+        "theme_name": "东京之夜浅色",
+        "theme_description": "Tokyo Night Light 配色的 Wox 移植：浅灰底、深蓝灰文字，浅灰选中配紫色指示条。非官方移植，与原作者无关。"
+      }
+    }
   }
 ]
