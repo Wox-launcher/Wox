@@ -24,6 +24,41 @@ The provider list is grouped into **API** and **Installed CLI**. API providers u
 | Model | The model used by chat, commands, or generation features. |
 | CLI | The installed local command for an Installed CLI provider. |
 
+## Search Public Documentation with MCP
+
+AI Chat can use an MCP server for a technical lookup and include links to the original sources. For example, [Parallel MCP setup](https://docs.parallel.ai/integrations/mcp/quickstart) provides a hosted search server with rate-limited access without a Parallel API key. You still need a configured AI provider that supports tool calls.
+
+1. Open **Settings -> AI -> MCP Servers -> Edit JSON**.
+2. Add the `Parallel` entry below inside `mcpServers`, keeping any existing server entries. Saving this editor replaces the full server list.
+3. Save, then check that the Parallel row shows `1 tools`. The `enabledTools` list makes only `web_search` available from this server.
+
+```json
+{
+  "mcpServers": {
+    "Parallel": {
+      "type": "http",
+      "url": "https://mcp.parallel.ai/mcp",
+      "headers": {
+        "User-Agent": "Wox"
+      },
+      "enabledTools": ["web_search"]
+    }
+  }
+}
+```
+
+Open a new AI Chat, select your provider and model, and enter a public documentation query:
+
+```text
+Use Parallel to find the official Python documentation for creating a virtual environment with venv. Include the original source URL in your answer. Search public documentation only.
+```
+
+Expand the tool activity to check that the search ran as `Parallel/web_search`. Check that the answer links to an original documentation page returned by the tool. If the search fails or returns no useful sources, ask the model to say so instead of inventing a citation.
+
+An enabled MCP tool named `web_search` takes precedence over Wox's built-in search tool. To return to built-in search, edit the Parallel server row, select **Disabled**, and save, then start a new chat. Leave the built-in `web_search` tool enabled if you want to use it.
+
+Only enter queries you intend to send to Parallel. Chat content also goes to your selected AI provider; avoid attaching private files, clipboard text, or selected text to this lookup.
+
 ## Security Notes
 
 - Treat API keys like passwords.

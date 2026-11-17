@@ -24,6 +24,41 @@ provider 列表会分成 **API** 和 **已安装的 CLI**。API provider 使用�
 | Model | 聊天、命令或生成类功能使用的模型。 |
 | CLI | 已安装 CLI provider 使用的本地命令。 |
 
+## 使用 MCP 查询公开文档
+
+AI 对话可以通过 MCP 服务器查询技术资料，并在回答中附上原始来源链接。例如，[Parallel MCP setup](https://docs.parallel.ai/integrations/mcp/quickstart) 提供托管搜索服务，无需 Parallel API key 即可在限流范围内使用。你仍需配置支持工具调用的 AI provider。
+
+1. 打开 **设置 -> AI -> MCP 服务器 -> 编辑 JSON**。
+2. 将下面的 `Parallel` 条目添加到 `mcpServers` 中，保留已有的服务器条目。保存此编辑器会替换整个服务器列表。
+3. 保存后，检查 Parallel 行是否显示 1 个工具。`enabledTools` 列表仅开放此服务器的 `web_search` 工具。
+
+```json
+{
+  "mcpServers": {
+    "Parallel": {
+      "type": "http",
+      "url": "https://mcp.parallel.ai/mcp",
+      "headers": {
+        "User-Agent": "Wox"
+      },
+      "enabledTools": ["web_search"]
+    }
+  }
+}
+```
+
+新建 AI 对话，选择 provider 和模型，然后输入公开文档查询：
+
+```text
+使用 Parallel 查找 Python 官方文档中使用 venv 创建虚拟环境的方法。在回答中包含原始来源 URL。仅搜索公开文档。
+```
+
+展开工具活动，确认搜索显示为 `Parallel/web_search`。检查回答是否链接到工具返回的原始文档页面。如果搜索失败或没有返回有用的来源，请让模型如实说明，不要编造引用。
+
+已启用且名为 `web_search` 的 MCP 工具会优先于 Wox 的内置搜索工具。要恢复内置搜索，请编辑 Parallel 服务器行，勾选 **禁用** 并保存，然后新建对话。如果要使用内置 `web_search`，请保持该内置工具启用。
+
+只输入你打算发送给 Parallel 的查询。对话内容也会发送给所选 AI provider；进行此查询时，请避免附加私有文件、剪贴板或选中文本。
+
 ## 安全注意事项
 
 - 把 API key 当作密码处理。
