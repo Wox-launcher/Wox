@@ -308,8 +308,9 @@ func fuzzyMatchRunes(text string, pattern string, originalRunes []rune, textRune
 
 	// Try fuzzy match on the original text
 	result := fuzzyMatchCore(originalRunes, textRunes, patternRunes)
-	if result.IsMatch {
-		if len(patternRunes) >= 3 && !containsRunes(textRunes, patternRunes) {
+	isContiguous := len(patternRunes) < 3 || containsRunes(textRunes, patternRunes)
+	if result.IsMatch && (isContiguous || canAnchorScatteredMatch(originalRunes, textRunes, patternRunes)) {
+		if !isContiguous {
 			result.Score = max(1, result.Score-8)
 		}
 		return result
@@ -411,7 +412,8 @@ func fuzzyMatchASCIIAtLeast(text string, pattern string, minimum int64) FuzzyMat
 	if patternIdx != patternLen {
 		return FuzzyMatchResult{}
 	}
-	if patternIdx == patternLen {
+	isContiguous := patternLen < 3 || containsFoldASCII(text, pattern)
+	if patternIdx == patternLen && (isContiguous || canAnchorScatteredMatchASCII(text, pattern)) {
 		var score int64
 		if shouldUseOptimalAlignment(textLen, patternLen) {
 			bestScore, ok := calculateBestAlignmentScoreASCII(text, pattern)
@@ -425,7 +427,7 @@ func fuzzyMatchASCIIAtLeast(text string, pattern string, minimum int64) FuzzyMat
 		minScore := calculateMinScoreThreshold(patternLen, textLen)
 		if score >= minScore {
 			// Penalize scattered matches only after the eligibility check so abbreviations remain searchable.
-			if patternLen >= 3 && !containsFoldASCII(text, pattern) {
+			if !isContiguous {
 				score = max(1, score-8)
 			}
 			return FuzzyMatchResult{IsMatch: true, Score: score}
@@ -552,6 +554,52 @@ func calculateMatchBonus(originalRunes []rune, matchIdx int) int64 {
 	}
 
 	return bonus
+}
+
+// canAnchorScatteredMatchASCII reports whether pattern is a subsequence of text whose first
+// character starts a word. Scattered matches of three or more characters must start at a word
+// so abbreviations such as "vsc" keep matching, while letters that begin inside a word and are
+// collected across a sentence, such as "mingw" in "From thought to insight, with agents", do not.
+func canAnchorScatteredMatchASCII(text string, pattern string) bool {
+	first := toLowerByte(pattern[0])
+	for start := 0; start < len(text); start++ {
+		if toLowerByte(text[start]) != first || calculateMatchBonusASCII(text, start) == 0 {
+			continue
+		}
+		// The earliest word-start anchor leaves the most text for the remaining characters.
+		matched := 1
+		for textIdx := start + 1; textIdx < len(text) && matched < len(pattern); textIdx++ {
+			if toLowerByte(text[textIdx]) == toLowerByte(pattern[matched]) {
+				matched++
+			}
+		}
+		return matched == len(pattern)
+	}
+	return false
+}
+
+// canAnchorScatteredMatch is the normalized-rune version of canAnchorScatteredMatchASCII.
+func canAnchorScatteredMatch(originalRunes []rune, textRunes []rune, patternRunes []rune) bool {
+	for start := range textRunes {
+		if textRunes[start] != patternRunes[0] || !isWordStart(originalRunes, start) {
+			continue
+		}
+		matched := 1
+		for textIdx := start + 1; textIdx < len(textRunes) && matched < len(patternRunes); textIdx++ {
+			if textRunes[textIdx] == patternRunes[matched] {
+				matched++
+			}
+		}
+		return matched == len(patternRunes)
+	}
+	return false
+}
+
+// isWordStart extends the scoring boundaries with Han/non-Han transitions, because titles such as
+// "钉钉DingTalk" have no separator or case change before the Latin word.
+func isWordStart(originalRunes []rune, idx int) bool {
+	return calculateMatchBonus(originalRunes, idx) > 0 ||
+		unicode.Is(unicode.Han, originalRunes[idx-1]) != unicode.Is(unicode.Han, originalRunes[idx])
 }
 
 // calculateLeadingGapPenalty caps the front-of-string penalty so early misses do not dominate ranking.

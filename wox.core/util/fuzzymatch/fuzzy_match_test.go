@@ -177,6 +177,58 @@ func TestFuzzyMatchScoreComparison(t *testing.T) {
 	}
 }
 
+// fuzzyMatchAllEntryPoints runs every public matcher so ASCII and normalized-rune paths stay consistent.
+func fuzzyMatchAllEntryPoints(text string, query string) []FuzzyMatchResult {
+	pattern := PreparePattern(query)
+	return []FuzzyMatchResult{
+		FuzzyMatch(text, query, false),
+		FuzzyMatchPrepared(PrepareText(text), pattern, false),
+		FuzzyMatchPattern(text, pattern, isASCII(text), false),
+		FuzzyMatchPatternAtLeast(text, pattern, isASCII(text), false, 1),
+	}
+}
+
+// Issue #4728: "mingw" matched app titles and file names whose letters only appear scattered from the middle of a word.
+func TestFuzzyMatchRejectsScatteredMatchStartingInsideWord(t *testing.T) {
+	texts := []string{
+		"From thought to insight, with agents",
+		"Streamlabs streaming software",
+		"SystemSettingsAdminFlows",
+		"SystemSettingsAdminFlows.exe",
+		"From thought to insight, with agents — SiYuan",
+		"Streamlabs streaming software for creators who broadcast every day",
+		"Streamlabs streaming software für Kreative, die jeden Tag live übertragen",
+	}
+	for _, text := range texts {
+		for _, result := range fuzzyMatchAllEntryPoints(text, "mingw") {
+			assert.False(t, result.IsMatch, "mingw should not match %q", text)
+		}
+	}
+}
+
+func TestFuzzyMatchKeepsScatteredMatchStartingAtWordBoundary(t *testing.T) {
+	cases := []struct {
+		text  string
+		query string
+	}{
+		{"MinGW Installer", "mingw"},
+		{"x86_64-w64-mingw32-gcc", "mingw"},
+		{"Visual Studio Code", "vsc"},
+		{"moduleNameResolver", "mnr"},
+		{"show-task-view", "shot"},
+		{"Show the current awake status", "shot"},
+		{"Visual Studio Code — Insiders", "vsc"},
+		{"aXbXcXdef", "abc"},
+		{"钉钉DingTalk", "dtalk"},
+		{"微信WeChat", "wcht"},
+	}
+	for _, c := range cases {
+		for _, result := range fuzzyMatchAllEntryPoints(c.text, c.query) {
+			assert.True(t, result.IsMatch, "%q should match %q", c.query, c.text)
+		}
+	}
+}
+
 func TestFuzzyMatchPinyinAdvanced(t *testing.T) {
 	// Full pinyin match
 	assert.True(t, FuzzyMatch("微信", "weixin", true).IsMatch)
