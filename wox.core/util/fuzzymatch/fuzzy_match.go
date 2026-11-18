@@ -309,7 +309,7 @@ func fuzzyMatchRunes(text string, pattern string, originalRunes []rune, textRune
 	// Try fuzzy match on the original text
 	result := fuzzyMatchCore(originalRunes, textRunes, patternRunes)
 	isContiguous := len(patternRunes) < 3 || containsRunes(textRunes, patternRunes)
-	if result.IsMatch && (isContiguous || canAnchorScatteredMatch(originalRunes, textRunes, patternRunes)) {
+	if result.IsMatch && (isContiguous || hasWordAlignedSubsequence(originalRunes, textRunes, patternRunes)) {
 		if !isContiguous {
 			result.Score = max(1, result.Score-8)
 		}
@@ -413,7 +413,7 @@ func fuzzyMatchASCIIAtLeast(text string, pattern string, minimum int64) FuzzyMat
 		return FuzzyMatchResult{}
 	}
 	isContiguous := patternLen < 3 || containsFoldASCII(text, pattern)
-	if patternIdx == patternLen && (isContiguous || canAnchorScatteredMatchASCII(text, pattern)) {
+	if patternIdx == patternLen && (isContiguous || hasWordAlignedSubsequenceASCII(text, pattern)) {
 		var score int64
 		if shouldUseOptimalAlignment(textLen, patternLen) {
 			bestScore, ok := calculateBestAlignmentScoreASCII(text, pattern)
@@ -556,43 +556,77 @@ func calculateMatchBonus(originalRunes []rune, matchIdx int) int64 {
 	return bonus
 }
 
-// canAnchorScatteredMatchASCII reports whether pattern is a subsequence of text whose first
-// character starts a word. Scattered matches of three or more characters must start at a word
-// so abbreviations such as "vsc" keep matching, while letters that begin inside a word and are
-// collected across a sentence, such as "mingw" in "From thought to insight, with agents", do not.
-func canAnchorScatteredMatchASCII(text string, pattern string) bool {
-	first := toLowerByte(pattern[0])
-	for start := 0; start < len(text); start++ {
-		if toLowerByte(text[start]) != first || calculateMatchBonusASCII(text, start) == 0 {
-			continue
-		}
-		// The earliest word-start anchor leaves the most text for the remaining characters.
-		matched := 1
-		for textIdx := start + 1; textIdx < len(text) && matched < len(pattern); textIdx++ {
-			if toLowerByte(text[textIdx]) == toLowerByte(pattern[matched]) {
-				matched++
-			}
-		}
-		return matched == len(pattern)
-	}
-	return false
+// wordAlignedMatchState tracks, for each pattern prefix, whether it can end before the current
+// text position (anyEarlier) and whether it can end inside the word being scanned (inCurrentWord).
+type wordAlignedMatchState struct {
+	anyEarlier    []bool
+	inCurrentWord []bool
 }
 
-// canAnchorScatteredMatch is the normalized-rune version of canAnchorScatteredMatchASCII.
-func canAnchorScatteredMatch(originalRunes []rune, textRunes []rune, patternRunes []rune) bool {
-	for start := range textRunes {
-		if textRunes[start] != patternRunes[0] || !isWordStart(originalRunes, start) {
+// newWordAlignedMatchState keeps common short patterns on the stack-backed buffers.
+func newWordAlignedMatchState(patternLen int, anyEarlier, inCurrentWord *[64]bool) wordAlignedMatchState {
+	if patternLen <= len(anyEarlier) {
+		return wordAlignedMatchState{anyEarlier: anyEarlier[:patternLen], inCurrentWord: inCurrentWord[:patternLen]}
+	}
+	return wordAlignedMatchState{anyEarlier: make([]bool, patternLen), inCurrentWord: make([]bool, patternLen)}
+}
+
+// advance consumes one text position. matches reports whether pattern[j] equals the text at
+// that position; wordStart reports whether the position begins a word.
+func (s wordAlignedMatchState) advance(wordStart bool, matches func(patternIdx int) bool) {
+	if wordStart {
+		clear(s.inCurrentWord)
+	}
+	// Walk the pattern backwards so pattern[j-1] still describes earlier text positions.
+	for j := len(s.anyEarlier) - 1; j >= 0; j-- {
+		if !matches(j) {
 			continue
 		}
-		matched := 1
-		for textIdx := start + 1; textIdx < len(textRunes) && matched < len(patternRunes); textIdx++ {
-			if textRunes[textIdx] == patternRunes[matched] {
-				matched++
+		canEnd := wordStart
+		if j > 0 {
+			if wordStart {
+				canEnd = s.anyEarlier[j-1]
+			} else {
+				canEnd = s.inCurrentWord[j-1]
 			}
 		}
-		return matched == len(patternRunes)
+		if canEnd {
+			s.anyEarlier[j] = true
+			s.inCurrentWord[j] = true
+		}
 	}
-	return false
+}
+
+// hasWordAlignedSubsequenceASCII reports whether pattern can be matched so that every word the
+// match touches is entered at its first character; letters may still be skipped inside a word.
+// This keeps abbreviations such as "vsc", "pshop" (Photoshop) and "ntpd" (Notepad) while rejecting
+// letters collected from the middle of several words, such as "readwise" in
+// "Replace sounds with visual cues" or "mingw" in "From thought to insight, with agents".
+func hasWordAlignedSubsequenceASCII(text string, pattern string) bool {
+	var anyEarlier, inCurrentWord [64]bool
+	state := newWordAlignedMatchState(len(pattern), &anyEarlier, &inCurrentWord)
+	last := len(pattern) - 1
+	for textIdx := 0; textIdx < len(text) && !state.anyEarlier[last]; textIdx++ {
+		textChar := toLowerByte(text[textIdx])
+		state.advance(calculateMatchBonusASCII(text, textIdx) > 0, func(patternIdx int) bool {
+			return textChar == toLowerByte(pattern[patternIdx])
+		})
+	}
+	return state.anyEarlier[last]
+}
+
+// hasWordAlignedSubsequence is the normalized-rune version of hasWordAlignedSubsequenceASCII.
+func hasWordAlignedSubsequence(originalRunes []rune, textRunes []rune, patternRunes []rune) bool {
+	var anyEarlier, inCurrentWord [64]bool
+	state := newWordAlignedMatchState(len(patternRunes), &anyEarlier, &inCurrentWord)
+	last := len(patternRunes) - 1
+	for textIdx := 0; textIdx < len(textRunes) && !state.anyEarlier[last]; textIdx++ {
+		textChar := textRunes[textIdx]
+		state.advance(isWordStart(originalRunes, textIdx), func(patternIdx int) bool {
+			return textChar == patternRunes[patternIdx]
+		})
+	}
+	return state.anyEarlier[last]
 }
 
 // isWordStart extends the scoring boundaries with Han/non-Han transitions, because titles such as

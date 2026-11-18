@@ -188,25 +188,30 @@ func fuzzyMatchAllEntryPoints(text string, query string) []FuzzyMatchResult {
 	}
 }
 
-// Issue #4728: "mingw" matched app titles and file names whose letters only appear scattered from the middle of a word.
-func TestFuzzyMatchRejectsScatteredMatchStartingInsideWord(t *testing.T) {
-	texts := []string{
-		"From thought to insight, with agents",
-		"Streamlabs streaming software",
-		"SystemSettingsAdminFlows",
-		"SystemSettingsAdminFlows.exe",
-		"From thought to insight, with agents — SiYuan",
-		"Streamlabs streaming software for creators who broadcast every day",
-		"Streamlabs streaming software für Kreative, die jeden Tag live übertragen",
+// Issue #4728: queries matched titles and descriptions by collecting letters from the middle of several words.
+func TestFuzzyMatchRejectsScatteredMatchEnteringWordsMidway(t *testing.T) {
+	cases := []struct {
+		text  string
+		query string
+	}{
+		{"From thought to insight, with agents", "mingw"},
+		{"Streamlabs streaming software", "mingw"},
+		{"SystemSettingsAdminFlows", "mingw"},
+		{"SystemSettingsAdminFlows.exe", "mingw"},
+		{"From thought to insight, with agents — SiYuan", "mingw"},
+		{"Replace sounds with visual cues", "readwise"},
+		{"Replace sounds with visual cues — Control Panel", "readwise"},
+		{"Read your website chats, leads and tickets, and ask your Asyntai AI chatbot, right from Wox.", "readwise"},
+		{"aXbXcXdef", "abc"},
 	}
-	for _, text := range texts {
-		for _, result := range fuzzyMatchAllEntryPoints(text, "mingw") {
-			assert.False(t, result.IsMatch, "mingw should not match %q", text)
+	for _, c := range cases {
+		for _, result := range fuzzyMatchAllEntryPoints(c.text, c.query) {
+			assert.False(t, result.IsMatch, "%q should not match %q", c.query, c.text)
 		}
 	}
 }
 
-func TestFuzzyMatchKeepsScatteredMatchStartingAtWordBoundary(t *testing.T) {
+func TestFuzzyMatchKeepsScatteredMatchEnteringWordsAtStart(t *testing.T) {
 	cases := []struct {
 		text  string
 		query string
@@ -218,7 +223,13 @@ func TestFuzzyMatchKeepsScatteredMatchStartingAtWordBoundary(t *testing.T) {
 		{"show-task-view", "shot"},
 		{"Show the current awake status", "shot"},
 		{"Visual Studio Code — Insiders", "vsc"},
-		{"aXbXcXdef", "abc"},
+		{"Visual Studio Code", "vs code"},
+		{"XMLHttpRequest", "xhr"},
+		{"Notepad", "ntpd"},
+		{"Notepad — Windows", "ntpd"},
+		{"Adobe Photoshop", "pshop"},
+		{"Windows PowerShell", "pwsh"},
+		{"Readwise", "readwise"},
 		{"钉钉DingTalk", "dtalk"},
 		{"微信WeChat", "wcht"},
 	}
