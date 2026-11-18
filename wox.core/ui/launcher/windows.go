@@ -41,13 +41,7 @@ func (a *settingsWindowController) ensureSettingsWindow() (*woxui.ManagedWindow,
 			OnFocus: func(event woxui.FocusEvent) {
 				host.SetWindowFocused(event.Active)
 			},
-			OnKey: func(event woxui.KeyEvent) bool {
-				// Recording captures combos before focused buttons can consume Space or Enter.
-				if a.hotkeyRecordingUsesSettingsWindow() && a.onSettingsWindowKey(event) {
-					return true
-				}
-				return a.dispatchWindowKey(event, host, "", a.requestSettingsClose, a.onSettingsWindowKey)
-			},
+			OnKey: a.onKey,
 			OnTextInput: func(event woxui.TextInputEvent) {
 				if !host.TextInput(event) {
 					a.onSettingsWindowTextInput(event)

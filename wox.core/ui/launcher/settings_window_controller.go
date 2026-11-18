@@ -80,6 +80,27 @@ func (a *App) bindSettingsWindow() {
 	c.tooltips = &a.tooltips
 }
 
+// onKey gives dialogs and page editors ownership of Escape before closing Settings.
+func (c *settingsWindowController) onKey(event woxui.KeyEvent) bool {
+	// Recording captures combos before focused buttons can consume Space or Enter.
+	if c.hotkeyRecordingUsesSettingsWindow() && c.onSettingsWindowKey(event) {
+		return true
+	}
+	escape := event.Down && !event.Composing && event.Key == woxui.KeyEscape && event.Modifiers == 0
+	// Holding Escape must not dismiss successive dialogs or close their settings window.
+	if escape && event.Repeat {
+		return true
+	}
+	if c.dispatchWindowKey(event, c.host, "", c.requestSettingsClose, c.onSettingsWindowKey) {
+		return true
+	}
+	if escape {
+		c.requestSettingsClose()
+		return true
+	}
+	return false
+}
+
 func (c *settingsWindowController) setSettingChoiceTooltip(inside bool, text string, anchor woxui.Rect) {
 	c.setSettingsHoverTooltip(inside, text, anchor, "top")
 }
