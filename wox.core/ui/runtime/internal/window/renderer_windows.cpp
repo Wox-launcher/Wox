@@ -725,6 +725,50 @@ extern "C" int32_t wox_renderer_set_font_family(WoxRenderer *renderer, const cha
 	return S_OK;
 }
 
+// drain_renderer_gpu_work quiesces pending D2D, D3D and compositor work before teardown.
+// Releasing a device with submitted work can block inside the graphics driver.
+static void drain_renderer_gpu_work(WoxRenderer *renderer) {
+  if (renderer->d2d_context != nullptr) {
+    renderer->d2d_context->Flush();
+  }
+
+  if (renderer->device != nullptr) {
+    ID3D11DeviceContext *context = nullptr;
+    renderer->device->GetImmediateContext(&context);
+    if (context != nullptr) {
+      context->ClearState();
+      context->Flush();
+      context->Release();
+    }
+  }
+
+  // Detach swap chains from the composition tree before the compositor or device is released.
+  if (renderer->composition_visual != nullptr) {
+    renderer->composition_visual->SetContent(nullptr);
+  }
+  if (renderer->overlay_visual != nullptr) {
+    renderer->overlay_visual->SetContent(nullptr);
+  }
+  if (renderer->composition_device != nullptr) {
+    const HRESULT commit_result = renderer->composition_device->Commit();
+    if (SUCCEEDED(commit_result)) {
+      IDCompositionDevice2 *composition_device2 = nullptr;
+      if (SUCCEEDED(renderer->composition_device->QueryInterface(IID_PPV_ARGS(&composition_device2)))) {
+        composition_device2->WaitForCommitCompletion();
+        composition_device2->Release();
+      }
+    }
+  }
+
+  if (renderer->device != nullptr) {
+    IDXGIDevice3 *dxgi_device = nullptr;
+    if (SUCCEEDED(renderer->device->QueryInterface(IID_PPV_ARGS(&dxgi_device)))) {
+      dxgi_device->Trim();
+      dxgi_device->Release();
+    }
+  }
+}
+
 static void destroy_renderer(WoxRenderer *renderer) {
   if (renderer == nullptr) {
     return;
@@ -739,6 +783,7 @@ static void destroy_renderer(WoxRenderer *renderer) {
     }
     renderer->d2d_context->EndDraw();
   }
+  drain_renderer_gpu_work(renderer);
   release_retired_image_bitmaps(renderer);
   finish_composite_bitmaps(renderer, true);
   if (renderer->d2d_context != nullptr) {

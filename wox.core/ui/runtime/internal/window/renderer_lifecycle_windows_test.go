@@ -7,6 +7,7 @@ import (
 	"image"
 	"image/color"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -88,6 +89,121 @@ func TestHiddenRendererTrimCancellation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+}
+
+// TestRendererRecreatesAfterHiddenTrim verifies that the 30-second cleanup still
+// releases the complete renderer and that both backends can create it again.
+func TestRendererRecreatesAfterHiddenTrim(t *testing.T) {
+	if os.Getenv("WOX_WINDOW_NATIVE_TEST") != "1" {
+		t.Skip("set WOX_WINDOW_NATIVE_TEST=1 for native window integration")
+	}
+	for _, test := range []struct {
+		name     string
+		software bool
+		warp     string
+	}{
+		{name: "Hardware", software: false, warp: "warp=0"},
+		{name: "Software", software: true, warp: "warp=1"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			previousRendering := SoftwareRenderingEnabled()
+			ConfigureSoftwareRendering(test.software)
+			t.Cleanup(func() { ConfigureSoftwareRendering(previousRendering) })
+
+			result := make(chan error, 1)
+			err := Run(func() error {
+				window, err := Open(WindowOptions{
+					Title: "Wox renderer recreate test", Size: Size{Width: 240, Height: 100}, Nonactivating: true,
+					OnFrame: func(list *DisplayList, frame FrameInfo) {
+						list.Clear(Color{R: 32, G: 160, B: 96, A: 255})
+						list.DrawText("Drained renderer", Rect{X: 8, Y: 8, Width: frame.Size.Width - 16, Height: 24}, TextStyle{Size: 16}, Color{A: 255})
+					},
+				})
+				if err != nil {
+					return err
+				}
+				diagnostics, err := window.native.renderer.diagnostics()
+				if err != nil {
+					_ = window.Close()
+					return err
+				}
+				if !strings.Contains(diagnostics, test.warp) {
+					_ = window.Close()
+					return fmt.Errorf("renderer backend mismatch: want %s, got %s", test.warp, diagnostics)
+				}
+				go func() {
+					defer window.Close()
+					result <- exerciseRendererTrimRecreate(window)
+				}()
+				return nil
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := <-result; err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+// exerciseRendererTrimRecreate verifies complete release followed by successful recreation.
+func exerciseRendererTrimRecreate(window *Window) error {
+	for cycle := 0; cycle < 20; cycle++ {
+		frames := window.FrameMetrics().PresentedFrameCount
+		if _, err := window.ShowInactive(); err != nil {
+			return fmt.Errorf("cycle %d: initial show: %w", cycle, err)
+		}
+		if window.FrameMetrics().PresentedFrameCount <= frames {
+			return fmt.Errorf("cycle %d: initial show did not present a frame", cycle)
+		}
+		if err := window.Hide(); err != nil {
+			return err
+		}
+
+		var trimErr error
+		if err := Call(func() {
+			native := window.native
+			trimErr = native.executeCommand(windowCommand{kind: windowCommandTrimRenderer}).err
+			if trimErr == nil && native.renderer.handle != nil {
+				trimErr = fmt.Errorf("cycle %d: trim retained the renderer", cycle)
+			}
+			if trimErr == nil && native.renderer.residentBytes() != 0 {
+				trimErr = fmt.Errorf("cycle %d: trim retained cached GPU resources", cycle)
+			}
+		}); err != nil {
+			return err
+		}
+		if trimErr != nil {
+			return trimErr
+		}
+
+		frames = window.FrameMetrics().PresentedFrameCount
+		if _, err := window.ShowInactive(); err != nil {
+			return fmt.Errorf("cycle %d: show after trim: %w", cycle, err)
+		}
+		var verifyErr error
+		if err := Call(func() {
+			currentHandle := fmt.Sprintf("%p", window.native.renderer.handle)
+			if currentHandle == "0x0" {
+				verifyErr = fmt.Errorf("cycle %d: show did not recreate the renderer", cycle)
+				return
+			}
+			if window.FrameMetrics().PresentedFrameCount <= frames {
+				verifyErr = fmt.Errorf("cycle %d: recreated renderer did not present a frame", cycle)
+				return
+			}
+			if _, err := window.MeasureText("Drained renderer", TextStyle{Size: 16}); err != nil {
+				verifyErr = fmt.Errorf("cycle %d: measure text after recreate: %w", cycle, err)
+			}
+		}); err != nil {
+			return err
+		}
+		if verifyErr != nil {
+			return verifyErr
+		}
+	}
+	return nil
 }
 
 // exerciseHiddenRendererLifecycle repeats the production delay without forcing GC or native trims.
