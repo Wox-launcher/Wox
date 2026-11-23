@@ -57,6 +57,7 @@ func NotesToolbar(props NotesToolbarProps) woxwidget.Widget {
 	width, active, theme := props.Width, props.Active, props.Theme
 	const buttonSize = float32(32)
 	const iconSize = float32(16)
+	const sidebarSize = float32(36)
 	hoverBackground := woxcomponent.TitleBarAlpha(theme.ToolbarText, 20)
 	button := func(id, label string, icon woxwidget.Widget, disabled bool, action func()) woxwidget.Widget {
 		onTap := func() {
@@ -84,12 +85,12 @@ func NotesToolbar(props NotesToolbarProps) woxwidget.Widget {
 	}}
 	contentRight := woxcomponent.TitleBarChromeWidth(props.Platform, true, true)
 	titleLeft, titleRight, titleAlignment := NotesTitleSlot(props.Platform, contentRight)
+	sidebarLeft := float32(42)
+	if props.Platform == "darwin" {
+		sidebarLeft = woxcomponent.MacTitleBarControlsInset
+	}
 	if props.OnSidebar != nil {
-		if props.Platform == "darwin" {
-			titleLeft += 32
-		} else {
-			titleLeft += 44
-		}
+		titleLeft = max(titleLeft, sidebarLeft+sidebarSize+6)
 	}
 	drag := woxwidget.Semantics{AutomationID: "notes.toolbar.drag", Role: woxui.AccessibilityRoleGroup, Label: props.Label, Child: woxwidget.Gesture{
 		ID:          "notes.toolbar.drag",
@@ -113,12 +114,8 @@ func NotesToolbar(props NotesToolbarProps) woxwidget.Widget {
 		OnMinimize: props.OnMinimize, OnMaximize: props.OnMaximize, OnClose: props.OnClose,
 	})})
 	if props.OnSidebar != nil {
-		left := float32(42)
-		if props.Platform == "darwin" {
-			left = woxcomponent.TitleBarChromeWidth(props.Platform, true, true)
-		}
-		sidebar := woxcomponent.SidebarToggle(woxcomponent.IconButtonProps{ID: "notes.toolbar.sidebar", Label: props.SidebarLabel, Width: 36, Height: 36, Radius: 7, HoverBackground: woxcomponent.TitleBarAlpha(theme.ResultSubtitle, 25), FocusRingColor: theme.Cursor, OnTap: func() { props.OnHover(false, "", woxui.Rect{}); props.OnSidebar() }, OnHoverAt: func(inside bool, bounds woxui.Rect) { props.OnHover(inside, props.SidebarLabel, bounds) }}, woxcomponent.SidebarTitleIconSize, theme.ResultSubtitle, theme.PreviewText, props.SidebarOpen)
-		children = append(children, woxwidget.StackChild{Left: left, Child: woxwidget.Align{Width: 36, Height: NotesToolbarHeight, Vertical: .5, Child: sidebar}})
+		sidebar := woxcomponent.SidebarToggle(woxcomponent.IconButtonProps{ID: "notes.toolbar.sidebar", Label: props.SidebarLabel, Width: sidebarSize, Height: sidebarSize, Radius: 7, HoverBackground: woxcomponent.TitleBarAlpha(theme.ResultSubtitle, 25), FocusRingColor: theme.Cursor, OnTap: func() { props.OnHover(false, "", woxui.Rect{}); props.OnSidebar() }, OnHoverAt: func(inside bool, bounds woxui.Rect) { props.OnHover(inside, props.SidebarLabel, bounds) }}, woxcomponent.SidebarTitleIconSize, theme.ResultSubtitle, theme.PreviewText, props.SidebarOpen)
+		children = append(children, woxwidget.StackChild{Left: sidebarLeft, Child: woxwidget.Align{Width: sidebarSize, Height: NotesToolbarHeight, Vertical: .5, Child: sidebar}})
 	}
 	content := woxwidget.Stack{Width: width, Height: NotesToolbarHeight, Children: children}
 	return woxwidget.Container{Width: width, Height: NotesToolbarHeight, Child: content}

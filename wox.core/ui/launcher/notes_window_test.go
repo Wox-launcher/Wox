@@ -492,9 +492,7 @@ func TestNotesToolbarKeepsSearchAndAddsSidebar(t *testing.T) {
 	title := toolbar.Children[1]
 	alignment := title.Child.(woxwidget.Align)
 	wantLeft, wantRight, wantAlign := launcherview.NotesTitleSlot(runtime.GOOS, woxcomponent.TitleBarChromeWidth(runtime.GOOS, true, true))
-	if runtime.GOOS == "darwin" {
-		wantLeft += 32
-	} else {
+	if runtime.GOOS != "darwin" {
 		wantLeft += 44
 	}
 	if title.Left != wantLeft || title.Right != wantRight || alignment.Horizontal != wantAlign {

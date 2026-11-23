@@ -13,6 +13,9 @@ const TitleBarHeight = float32(40)
 // TitleBarControlWidth is the pointer target used by Windows and Linux caption buttons.
 const TitleBarControlWidth = float32(46)
 
+// MacTitleBarControlsInset reserves leading space for all three AppKit caption buttons in logical points.
+const MacTitleBarControlsInset = float32(78)
+
 // TitleBarWindowsIconSize matches the 12-in-40 ratio of native Windows caption glyphs.
 const TitleBarWindowsIconSize = float32(12)
 

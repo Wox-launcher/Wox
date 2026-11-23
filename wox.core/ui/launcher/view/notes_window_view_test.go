@@ -22,6 +22,35 @@ func TestNotesWindowPaintsThemeBackground(t *testing.T) {
 	}
 }
 
+func TestNotesToolbarMacSidebarClearsNativeCaptionButtons(t *testing.T) {
+	const width = 460
+	props := NotesToolbarProps{
+		Width: width, Platform: "darwin", Label: "Notes", SidebarLabel: "Toggle sidebar",
+		PinLabel: "Pin", FormatLabel: "Format", NewLabel: "New", MoreLabel: "More", OnSidebar: func() {},
+	}
+	host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget { return NotesToolbar(props) })
+	host.AttachServices(actionSearchHostServices{})
+	defer host.Dispose()
+	for _, scale := range []float32{1, 1.5, 2} {
+		host.Frame(&woxui.DisplayList{}, woxui.FrameInfo{
+			Size:      woxui.Size{Width: width, Height: NotesToolbarHeight},
+			PixelSize: woxui.PixelSize{Width: int(width * scale), Height: int(NotesToolbarHeight * scale)},
+			Scale:     scale,
+		})
+		var sidebarBounds woxui.Rect
+		for _, node := range host.Snapshot().Tree.Nodes {
+			if node.AutomationID == "notes.toolbar.sidebar" {
+				sidebarBounds = node.Bounds
+				break
+			}
+		}
+		// AppKit centers the green control at x=69 points, with its right edge around x=76.
+		if sidebarBounds.X <= 76 || sidebarBounds.Width == 0 {
+			t.Fatalf("scale %v: sidebar bounds %+v overlap the native caption controls", scale, sidebarBounds)
+		}
+	}
+}
+
 func TestNotesFormatBarKeepsStatsCenteredAcrossModes(t *testing.T) {
 	var positions [2]woxui.Rect
 	for i, markdown := range []bool{false, true} {

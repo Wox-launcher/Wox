@@ -47,7 +47,7 @@ type ChatWindowTitleBarProps struct {
 func ChatWindowTitleBar(props ChatWindowTitleBarProps) woxwidget.Widget {
 	left := float32(0)
 	if props.Platform == "darwin" {
-		left = 78 // Reserve the native traffic-light cluster in logical units.
+		left = woxcomponent.MacTitleBarControlsInset
 	} else {
 		left = 40
 	}
