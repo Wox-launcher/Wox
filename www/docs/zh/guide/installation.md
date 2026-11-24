@@ -2,6 +2,36 @@
 
 优先选择你平时管理桌面应用的方式。包管理器更适合后续升级；Release 可执行文件更适合需要便携目录的场景。Wox 默认使用稳定版更新通道。
 
+## 使用脚本安装 {#install-script}
+
+### Windows x64
+
+在 PowerShell 中运行。
+
+```powershell
+irm https://raw.githubusercontent.com/Wox-launcher/Wox/master/scripts/install/windows.ps1 | iex
+```
+
+安装完成后，从开始菜单打开 Wox。可执行文件位于 `%LOCALAPPDATA%\Programs\Wox`。
+
+### macOS 12 或更高版本
+
+```bash
+curl -q -fsSL --proto-redir '=https' https://raw.githubusercontent.com/Wox-launcher/Wox/master/scripts/install/macos.sh | bash
+```
+
+安装完成后，从 `~/Applications` 打开 `Wox.app`。
+
+### Linux x64
+
+```bash
+curl -q -fsSL --proto-redir '=https' https://raw.githubusercontent.com/Wox-launcher/Wox/master/scripts/install/linux.sh | bash
+```
+
+安装完成后，从应用菜单打开 Wox。脚本会在安装前检查 Wox 所需的系统库。若提示缺库，可以试用同一版本的 AppImage。脚本使用 `$XDG_DATA_HOME`，默认为 `~/.local/share`。
+
+通过脚本安装后，在 Wox 中输入 `update` 即可检查并安装更新。
+
 ## 包管理器
 
 | 平台 | 方式 | 命令 |
@@ -84,6 +114,7 @@ chmod +x ./wox-linux-amd64.AppImage
 
 ### Windows
 
+- 如果通过脚本安装，请删除 `%LOCALAPPDATA%\Programs\Wox\wox.exe` 和当前用户开始菜单中的 Wox 快捷方式。重新安装前请移除空的 `Wox` 目录。
 - Winget：`winget uninstall -e --id Wox.Wox`
 - Scoop：`scoop uninstall wox`
 - 手动安装：删除下载的可执行文件
@@ -91,12 +122,14 @@ chmod +x ./wox-linux-amd64.AppImage
 
 ### macOS
 
+- 如果通过脚本安装，请移除 `~/Applications/Wox.app`。
 - Homebrew：`brew uninstall --cask wox`
 - 手动安装：从 `Applications` 删除 Wox
 - 清理本机数据：备份后删除 `~/.wox`
 
 ### Linux
 
+- 如果通过脚本安装，请从 `$XDG_DATA_HOME`（默认 `~/.local/share`）删除 `wox/wox`、`applications/io.github.WoxLauncher.Wox.desktop` 和 `icons/hicolor/256x256/apps/io.github.WoxLauncher.Wox.png`。重新安装前请移除空的 `wox` 目录。
 - AUR：用你的 AUR helper 或包管理器移除 `wox-bin`
 - Debian / Ubuntu：`sudo apt remove wox`
 - Fedora / RHEL：`sudo dnf remove wox`

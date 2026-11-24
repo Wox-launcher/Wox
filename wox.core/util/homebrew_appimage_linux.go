@@ -39,10 +39,12 @@ func detectHomebrewAppImage() homebrewAppImageInstall {
 	// missing from the desktop session's PATH.
 	defaultEntry, _ := defaultLinuxDesktopEntryPath()
 	desktopEntries := []string{os.Getenv("GIO_LAUNCHED_DESKTOP_FILE"), defaultEntry}
-	for _, dataHome := range []string{os.Getenv("XDG_DATA_HOME"), os.Getenv("HOMEBREW_XDG_DATA_HOME")} {
-		if filepath.IsAbs(dataHome) {
-			desktopEntries = append(desktopEntries, filepath.Join(dataHome, "applications", linuxDesktopFile))
-		}
+	if homeDir, err := os.UserHomeDir(); err == nil {
+		// Older Brew installs could put the entry in the standard directory even with XDG_DATA_HOME set.
+		desktopEntries = append(desktopEntries, filepath.Join(homeDir, ".local", "share", "applications", linuxDesktopFile))
+	}
+	if dataHome := os.Getenv("HOMEBREW_XDG_DATA_HOME"); filepath.IsAbs(dataHome) {
+		desktopEntries = append(desktopEntries, filepath.Join(dataHome, "applications", linuxDesktopFile))
 	}
 	for _, entry := range desktopEntries {
 		if install := homebrewInstallForDesktopEntry(entry, image); install.managed {

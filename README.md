@@ -31,14 +31,38 @@ https://github.com/user-attachments/assets/15ad1370-bbc0-4f96-8729-56fcc769c41c
 
 ## Install
 
+### Install with a script
+
+**Windows PowerShell**
+
+```powershell
+irm https://raw.githubusercontent.com/Wox-launcher/Wox/master/scripts/install/windows.ps1 | iex
+```
+
+**macOS**
+
+```bash
+curl -q -fsSL --proto-redir '=https' https://raw.githubusercontent.com/Wox-launcher/Wox/master/scripts/install/macos.sh | bash
+```
+
+**Linux x64**
+
+```bash
+curl -q -fsSL --proto-redir '=https' https://raw.githubusercontent.com/Wox-launcher/Wox/master/scripts/install/linux.sh | bash
+```
+
+See the [installation guide](https://www.woxlauncher.com/guide/installation.html#install-script) for requirements and uninstall steps. [View the scripts on GitHub](scripts/install).
+
+### Package managers and downloads
+
 | Platform | Method | Command or instructions |
 | --- | --- | --- |
-| macOS | Homebrew | `brew install --cask wox` |
+| MacOS | Homebrew | `brew install --cask wox` |
 | Windows | Winget | `winget install -e --id Wox.Wox` |
 | Windows | Scoop | `scoop install extras/wox` |
 | Windows | Chocolatey | `choco install wox` |
 | Arch Linux | AUR | `yay -S wox-bin` |
-| macOS / Linux / Windows | Manual | Download the latest stable package from [Releases](https://github.com/Wox-launcher/Wox/releases) and run it directly |
+| All | Manual | Download the latest stable package from [Releases](https://github.com/Wox-launcher/Wox/releases) and run it directly |
 
 ## Documentation
 

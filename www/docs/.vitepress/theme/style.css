@@ -163,7 +163,7 @@ html {
   margin-top: 24px;
 }
 
-.wox-home a.wox-button {
+.wox-home :is(a, button).wox-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -201,19 +201,19 @@ html {
   mask: url("/images/discord.svg") center / contain no-repeat;
 }
 
-.wox-home a.wox-button:hover {
+.wox-home :is(a, button).wox-button:hover {
   border-color: var(--vp-c-text-2);
   background: var(--wox-home-panel-soft);
 }
 
-.wox-home a.wox-button-primary {
+.wox-home :is(a, button).wox-button-primary {
   border-color: var(--wox-home-accent);
   background: var(--wox-home-accent);
   color: var(--vp-c-bg);
   padding-inline: 26px;
 }
 
-.wox-home a.wox-button-primary:hover {
+.wox-home :is(a, button).wox-button-primary:hover {
   background: var(--vp-c-brand-2);
 }
 
@@ -442,7 +442,7 @@ html {
     gap: 8px;
   }
 
-  .wox-home a.wox-button {
+  .wox-home :is(a, button).wox-button {
     padding-inline: 14px;
   }
 
@@ -466,7 +466,7 @@ html {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .wox-home a.wox-button {
+  .wox-home :is(a, button).wox-button {
     transition: none;
   }
 }

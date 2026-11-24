@@ -42,8 +42,12 @@ jobs:
 
       - name: Prepare release files
         run: |
+          set -euo pipefail
           mkdir -p release-files
           find artifacts -type f -exec cp {} release-files/ \;
+          cp assets/linux/wox.desktop release-files/io.github.WoxLauncher.Wox.desktop
+          cp assets/app.png release-files/io.github.WoxLauncher.Wox.png
+          (cd release-files && sha256sum --text * > SHA256SUMS.tmp && mv SHA256SUMS.tmp SHA256SUMS)
           ls -la release-files/
 
       - name: Extract version from tag
@@ -108,6 +112,8 @@ jobs:
           tag: ${{ github.ref_name }}
           name: "Wox ${{ github.ref_name }}"
           body: ${{ steps.changelog.outputs.CHANGELOG }}
+          artifactErrorsFailBuild: true
+          immutableCreate: true
           draft: false
           prerelease: ${{ contains(steps.version.outputs.VERSION, '-') }}
           token: ${{ secrets.GITHUB_TOKEN }}

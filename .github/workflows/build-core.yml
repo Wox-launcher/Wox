@@ -111,6 +111,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - name: Check install scripts
+        run: |
+          bash -n scripts/install/macos.sh
+          bash scripts/install/test-linux.sh
       - name: Install system dependencies (Linux)
         run: |
           sudo apt-get update

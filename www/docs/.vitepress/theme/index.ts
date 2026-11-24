@@ -6,6 +6,7 @@ import SystemPluginCarousel from "./components/SystemPluginCarousel.vue";
 import ThemeShowcase from "./components/ThemeShowcase.vue";
 import ThemeGallery from "./components/ThemeGallery.vue";
 import HomeHeroNote from "./components/HomeHeroNote.vue";
+import HomeInstall from "./components/HomeInstall.vue";
 import HomeQuotes from "./components/HomeQuotes.vue";
 import ReleaseStamp from "./components/ReleaseStamp.vue";
 import WoxCreatePluginQuery from "./components/WoxCreatePluginQuery.vue";
@@ -22,6 +23,7 @@ export default {
     app.component("ThemeShowcase", ThemeShowcase);
     app.component("ThemeGallery", ThemeGallery);
     app.component("HomeHeroNote", HomeHeroNote);
+    app.component("HomeInstall", HomeInstall);
     app.component("HomeQuotes", HomeQuotes);
     app.component("ReleaseStamp", ReleaseStamp);
     app.component("WoxCreatePluginQuery", WoxCreatePluginQuery);

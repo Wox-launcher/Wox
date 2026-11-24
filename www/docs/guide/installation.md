@@ -2,6 +2,36 @@
 
 Choose the installer that matches how you normally manage desktop apps. Package managers are easier to update; the release executable is useful when you want a portable copy. Wox uses the stable update channel by default.
 
+## Install with a script {#install-script}
+
+### Windows x64
+
+Run this in PowerShell.
+
+```powershell
+irm https://raw.githubusercontent.com/Wox-launcher/Wox/master/scripts/install/windows.ps1 | iex
+```
+
+Open Wox from the Start menu. The executable is in `%LOCALAPPDATA%\Programs\Wox`.
+
+### macOS 12 or later
+
+```bash
+curl -q -fsSL --proto-redir '=https' https://raw.githubusercontent.com/Wox-launcher/Wox/master/scripts/install/macos.sh | bash
+```
+
+Open `Wox.app` from `~/Applications`.
+
+### Linux x64
+
+```bash
+curl -q -fsSL --proto-redir '=https' https://raw.githubusercontent.com/Wox-launcher/Wox/master/scripts/install/linux.sh | bash
+```
+
+Open Wox from your application menu. The script checks for the shared libraries Wox needs before installing. If it reports missing libraries, try the AppImage from the same release. The script uses `$XDG_DATA_HOME`, or `~/.local/share` by default.
+
+To upgrade a script installation, open Wox and run `update`.
+
 ## Package Managers
 
 | Platform | Method | Command |
@@ -84,6 +114,7 @@ Remove the application first, then decide whether to keep user data. For a full 
 
 ### Windows
 
+- If you installed with the script, delete `%LOCALAPPDATA%\Programs\Wox\wox.exe` and the Wox shortcut from your Start menu. Remove the empty `Wox` directory to reinstall with the script.
 - Winget: `winget uninstall -e --id Wox.Wox`
 - Scoop: `scoop uninstall wox`
 - Manual install: delete the downloaded executable
@@ -91,12 +122,14 @@ Remove the application first, then decide whether to keep user data. For a full 
 
 ### macOS
 
+- If you installed with the script, remove `~/Applications/Wox.app`.
 - Homebrew: `brew uninstall --cask wox`
 - Manual install: remove Wox from `Applications`
 - Per-machine data cleanup: back up, then remove `~/.wox`
 
 ### Linux
 
+- If you installed with the script, remove `wox/wox`, `applications/io.github.WoxLauncher.Wox.desktop`, and `icons/hicolor/256x256/apps/io.github.WoxLauncher.Wox.png` from `$XDG_DATA_HOME` (default `~/.local/share`). Remove the empty `wox` directory to reinstall with the script.
 - AUR: remove `wox-bin` with your AUR helper or package manager
 - Debian / Ubuntu: `sudo apt remove wox`
 - Fedora / RHEL: `sudo dnf remove wox`

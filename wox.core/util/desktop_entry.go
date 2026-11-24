@@ -16,12 +16,24 @@ const (
 	linuxDesktopIconFile = LinuxDesktopAppID + ".png"
 )
 
-func defaultLinuxDesktopEntryPath() (string, error) {
+// linuxDataDirectory locates both installer-created and runtime-created desktop resources.
+func linuxDataDirectory() (string, error) {
+	if dataHome := os.Getenv("XDG_DATA_HOME"); filepath.IsAbs(dataHome) {
+		return dataHome, nil
+	}
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("failed to get user home directory: %w", err)
 	}
-	return filepath.Join(homeDir, ".local", "share", "applications", linuxDesktopFile), nil
+	return filepath.Join(homeDir, ".local", "share"), nil
+}
+
+func defaultLinuxDesktopEntryPath() (string, error) {
+	dataHome, err := linuxDataDirectory()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dataHome, "applications", linuxDesktopFile), nil
 }
 
 // LinuxAutostartDesktopEntryPath returns the per-user autostart entry path with
@@ -37,20 +49,20 @@ func LinuxAutostartDesktopEntryPath() (string, error) {
 // LinuxDesktopIconPath returns the per-user icon path referenced by Wox's
 // generated desktop entry.
 func LinuxDesktopIconPath() (string, error) {
-	homeDir, err := os.UserHomeDir()
+	iconThemePath, err := LinuxIconThemePath()
 	if err != nil {
-		return "", fmt.Errorf("failed to get user home directory: %w", err)
+		return "", err
 	}
-	return filepath.Join(homeDir, ".local", "share", "icons", "hicolor", "256x256", "apps", linuxDesktopIconFile), nil
+	return filepath.Join(iconThemePath, "256x256", "apps", linuxDesktopIconFile), nil
 }
 
 // LinuxIconThemePath returns the user icon theme root containing Wox's icon.
 func LinuxIconThemePath() (string, error) {
-	homeDir, err := os.UserHomeDir()
+	dataHome, err := linuxDataDirectory()
 	if err != nil {
-		return "", fmt.Errorf("failed to get user home directory: %w", err)
+		return "", err
 	}
-	return filepath.Join(homeDir, ".local", "share", "icons", "hicolor"), nil
+	return filepath.Join(dataHome, "icons", "hicolor"), nil
 }
 
 // BuildLinuxDesktopEntry builds Wox's Linux desktop entry using APPIMAGE when
@@ -133,11 +145,11 @@ func isEphemeralDebugExecutable(path string) bool {
 }
 
 func linuxMimeDirectory() (string, error) {
-	homeDir, err := os.UserHomeDir()
+	dataHome, err := linuxDataDirectory()
 	if err != nil {
-		return "", fmt.Errorf("failed to get user home directory: %w", err)
+		return "", err
 	}
-	return filepath.Join(homeDir, ".local", "share", "mime"), nil
+	return filepath.Join(dataHome, "mime"), nil
 }
 
 func linuxPluginPackageMimePath() (string, error) {

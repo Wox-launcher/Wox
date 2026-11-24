@@ -31,6 +31,7 @@ func TestInstallLinuxDesktopIconWritesEmbeddedPNG(t *testing.T) {
 		t.Skip("linux desktop icon")
 	}
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
 
 	InstallLinuxDesktopIcon()
 	iconPath, err := util.LinuxDesktopIconPath()
