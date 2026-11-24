@@ -1691,3 +1691,128 @@ func TestHostOverlayClearsWhenOwnerUnmounts(t *testing.T) {
 		t.Fatalf("base taps = %d, want 1 after overlay cleared from the hit-test tree", baseTaps)
 	}
 }
+
+func TestHostRestoresTextInputStateImmediatelyOnWindowFocus(t *testing.T) {
+	services := &fakeHostServices{}
+	host := NewHost(func(frame woxui.FrameInfo) Widget {
+		return EditableText{
+			Key:          "note",
+			AutomationID: "note",
+			Label:        "Note",
+			Autofocus:    true,
+			TextInput: func(bounds woxui.Rect) woxui.TextInputState {
+				return woxui.TextInputState{Enabled: true, CursorRect: bounds}
+			},
+			Child: Container{Width: 100, Height: 40},
+		}
+	})
+	host.AttachServices(services)
+	defer host.Dispose()
+
+	renderTestFrame(host)
+	if !services.textInput.Enabled {
+		t.Fatal("initial frame did not enable text input")
+	}
+
+	host.SetWindowFocused(false)
+	if services.textInput.Enabled {
+		t.Fatal("losing window focus did not disable text input")
+	}
+	renderTestFrame(host)
+	if services.textInput.Enabled {
+		t.Fatal("frames rendered while unfocused re-enabled text input")
+	}
+
+	host.SetWindowFocused(true)
+	if !services.textInput.Enabled {
+		t.Fatal("regaining window focus did not re-enable text input before the next frame")
+	}
+}
+
+type focusNodeReparentTestState struct {
+	focusNode  *FocusNode
+	attachment *FocusAttachment
+}
+
+func (s *focusNodeReparentTestState) InitState(ctx StateContext, _ any) {
+	s.attachment = ctx.BindFocusNode(s.focusNode, "editor")
+}
+
+func (s *focusNodeReparentTestState) DidUpdateWidget(StateContext, any, any) {}
+
+func (s *focusNodeReparentTestState) Build(_ StateContext, widget any) Widget {
+	return EditableText{
+		Key:          "editor",
+		AutomationID: "editor",
+		Label:        "Editor",
+		Autofocus:    true,
+		OnFocusChange: func(focused bool) {
+			s.focusNode.UpdateFocus(focused)
+		},
+		TextInput: func(bounds woxui.Rect) woxui.TextInputState {
+			if !s.focusNode.HasFocus() {
+				return woxui.TextInputState{}
+			}
+			return woxui.TextInputState{Enabled: true, CursorRect: bounds}
+		},
+		Child: Container{Width: 80, Height: 30},
+	}
+}
+
+func (s *focusNodeReparentTestState) Dispose() {
+	if s.attachment != nil {
+		s.attachment.Detach()
+		s.attachment = nil
+	}
+}
+
+func TestFocusNodeSurvivesSameFrameReparent(t *testing.T) {
+	focusNode := NewFocusNode()
+	wrapped := true
+	services := &fakeHostServices{}
+	host := NewHost(func(frame woxui.FrameInfo) Widget {
+		var child Widget = Stateful{
+			Key:    "editor-state",
+			Type:   (*focusNodeReparentTestState)(nil),
+			Widget: struct{}{},
+			CreateState: func() State {
+				return &focusNodeReparentTestState{focusNode: focusNode}
+			},
+		}
+		if wrapped {
+			child = Container{Width: 100, Height: 40, Child: child}
+		}
+		return Flex{
+			Axis: Vertical,
+			Children: []Widget{
+				child,
+				testButton("other", nil),
+			},
+		}
+	})
+	host.AttachServices(services)
+	defer host.Dispose()
+
+	renderTestFrame(host)
+	if !focusNode.HasFocus() || host.FocusedKey() != "editor" {
+		t.Fatalf("initial focus: hasFocus=%v focusedKey=%q, want true/editor", focusNode.HasFocus(), host.FocusedKey())
+	}
+
+	for _, nextWrapped := range []bool{false, true} {
+		wrapped = nextWrapped
+		renderTestFrame(host)
+		if !focusNode.HasFocus() || host.FocusedKey() != "editor" {
+			t.Fatalf("after reparent wrapped=%v: hasFocus=%v focusedKey=%q, want true/editor", wrapped, focusNode.HasFocus(), host.FocusedKey())
+		}
+		if !services.textInput.Enabled {
+			t.Fatalf("after reparent wrapped=%v: textInput.Enabled = false, want true", wrapped)
+		}
+	}
+
+	if !host.RequestFocus("other") {
+		t.Fatal("failed to move focus to other control")
+	}
+	if !focusNode.RequestFocus() || host.FocusedKey() != "editor" || !focusNode.HasFocus() {
+		t.Fatalf("RequestFocus after reparent failed: focusedKey=%q hasFocus=%v", host.FocusedKey(), focusNode.HasFocus())
+	}
+}

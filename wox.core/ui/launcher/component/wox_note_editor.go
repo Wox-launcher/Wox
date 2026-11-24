@@ -210,7 +210,7 @@ func WoxNoteEditor(props NoteEditorProps) woxwidget.Widget {
 		EdgeFade: props.EdgeFade,
 		Key:      "notes.editor.scroll", AutomationID: "notes.editor.scroll", Label: props.Label,
 		Width: props.Width, Height: props.Height, Content: content, KeepVisible: caretVisible,
-		Theme: props.Theme, ThumbColor: props.Theme.TextSecondary,
+		RetainState: true, Theme: props.Theme, ThumbColor: props.Theme.TextSecondary,
 	})
 }
 

@@ -102,3 +102,138 @@ func TestHandleBlurIgnoresResultFileDrag(t *testing.T) {
 		t.Fatal("launcher must stay visible while a result file drag is active")
 	}
 }
+
+func TestWindowsRestoreFromMinimizeReclaimsKeyboardFocus(t *testing.T) {
+	err := Run(func() error {
+		var committed string
+		window, err := Open(WindowOptions{
+			Title:     "Wox minimize restore focus test",
+			Size:      Size{Width: 320, Height: 240},
+			Role:      WindowRoleApplication,
+			Resizable: true,
+			OnTextInput: func(event TextInputEvent) {
+				if event.Kind == TextInputCommit {
+					committed += event.Text
+				}
+			},
+		})
+		if err != nil {
+			return err
+		}
+		defer window.Close()
+		if err := window.SetTextInputState(TextInputState{
+			Enabled:    true,
+			CursorRect: Rect{X: 20, Y: 20, Width: 2, Height: 18},
+		}); err != nil {
+			return err
+		}
+		if _, err := window.Show(); err != nil {
+			return err
+		}
+		if err := window.Minimize(); err != nil {
+			return err
+		}
+		if !win.IsIconic(window.native.hwnd) {
+			t.Fatal("window was not minimized")
+		}
+
+		// Taskbar restore dispatches WM_SYSCOMMAND SC_RESTORE without a client click.
+		win.SendMessage(window.native.hwnd, win.WM_SYSCOMMAND, 0xF120, 0)
+		if win.IsIconic(window.native.hwnd) {
+			t.Fatal("window stayed minimized after SC_RESTORE")
+		}
+		if got := win.GetFocus(); got != window.native.hwnd {
+			t.Fatalf("GetFocus() = %#x after restore, want %#x", got, window.native.hwnd)
+		}
+		win.SendMessage(window.native.hwnd, win.WM_CHAR, 'a', 0)
+		if committed != "a" {
+			t.Fatalf("committed text = %q after restore, want %q", committed, "a")
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestWindowsMinimizeSkipsIconicFramePaint(t *testing.T) {
+	err := Run(func() error {
+		var iconicFrameHeight float32
+		window, err := Open(WindowOptions{
+			Title:     "Wox minimize iconic paint test",
+			Size:      Size{Width: 320, Height: 240},
+			Role:      WindowRoleApplication,
+			Resizable: true,
+			OnFrame: func(_ *DisplayList, frame FrameInfo) {
+				if frame.Size.Height < 100 {
+					iconicFrameHeight = frame.Size.Height
+				}
+			},
+		})
+		if err != nil {
+			return err
+		}
+		defer window.Close()
+		if _, err := window.Show(); err != nil {
+			return err
+		}
+		if err := window.Minimize(); err != nil {
+			return err
+		}
+		win.RedrawWindow(window.native.hwnd, nil, 0, win.RDW_INVALIDATE|win.RDW_UPDATENOW)
+		if iconicFrameHeight != 0 {
+			t.Fatalf("minimized window rendered frame with iconic height %.1f", iconicFrameHeight)
+		}
+		win.SendMessage(window.native.hwnd, win.WM_SYSCOMMAND, 0xF120, 0)
+		if win.IsIconic(window.native.hwnd) {
+			t.Fatal("window stayed minimized after SC_RESTORE")
+		}
+		if iconicFrameHeight != 0 {
+			t.Fatalf("restore triggered iconic frame height %.1f", iconicFrameHeight)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestWindowsActivateWhileMinimizedDoesNotTakeFocus(t *testing.T) {
+	err := Run(func() error {
+		window, err := Open(WindowOptions{
+			Title:     "Wox minimized activate test",
+			Size:      Size{Width: 320, Height: 240},
+			Role:      WindowRoleApplication,
+			Resizable: true,
+		})
+		if err != nil {
+			return err
+		}
+		defer window.Close()
+		if _, err := window.Show(); err != nil {
+			return err
+		}
+		if err := window.Minimize(); err != nil {
+			return err
+		}
+		if !win.IsIconic(window.native.hwnd) {
+			t.Fatal("window was not minimized")
+		}
+		if window.native.focus.active {
+			t.Fatal("window stayed active after minimizing")
+		}
+
+		// HIWORD(wParam) != 0 indicates activation while minimized.
+		win.SendMessage(window.native.hwnd, win.WM_ACTIVATE, uintptr(win.WA_ACTIVE)|(1<<16), 0)
+		if got := win.GetFocus(); got == window.native.hwnd {
+			t.Fatalf("minimized window unexpectedly claimed GetFocus() = %#x", got)
+		}
+		if window.native.focus.active {
+			t.Fatal("minimized window must not mark itself active")
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}

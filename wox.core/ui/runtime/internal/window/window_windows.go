@@ -72,6 +72,7 @@ const (
 	windowsWSSizeBox         = uint32(0x00040000)
 	windowsWMSizing          = uint32(0x0214)
 	windowsWMNCActivate      = uint32(0x0086)
+	windowsSizeMinimized     = 1
 	windowsResizeGrip        = float32(10)
 )
 
@@ -1346,6 +1347,14 @@ func windowProcedure(hwnd win.HWND, message uint32, wParam, lParam uintptr) uint
 		window.handleFileDrop(win.HDROP(wParam))
 		return 0
 	case win.WM_SIZE:
+		if wParam == windowsSizeMinimized {
+			// Clear active state immediately on minimize even during the post-show blur guard
+			// so restoring later always emits a fresh OnFocus(Active: true) transition.
+			// Minimizing also reports Windows' tiny iconic bounds, so skip swap-chain resize
+			// and synchronous frame paint until the window restores.
+			window.setActive(false)
+			return 0
+		}
 		if err := window.applyCornerRadius(); err != nil {
 			window.setRunError(err)
 		}
@@ -1564,9 +1573,17 @@ func windowProcedure(hwnd win.HWND, message uint32, wParam, lParam uintptr) uint
 			return win.DefWindowProc(hwnd, message, 1, lParam)
 		}
 	case win.WM_ACTIVATE:
-		if win.LOWORD(uint32(wParam)) == win.WA_INACTIVE {
+		lo := win.LOWORD(uint32(wParam))
+		hi := win.HIWORD(uint32(wParam))
+		if lo == win.WA_INACTIVE {
 			window.handleBlur(win.HWND(lParam))
-		} else {
+		} else if hi == 0 {
+			// Returning 0 skips DefWindowProc's SetFocus(hwnd), so OS-driven activations
+			// such as taskbar restore or Alt+Tab would leave Win32 keyboard focus empty
+			// while the window is foreground and painting a live caret.
+			if !window.options.Nonactivating && !window.isWithinFocusDomain(win.GetFocus()) {
+				win.SetFocus(hwnd)
+			}
 			window.confirmActivation()
 		}
 		return 0
@@ -2465,7 +2482,7 @@ func (w *platformWindow) scheduleForegroundRestore(hwnd win.HWND) {
 
 // confirmActivation only accepts focus after Windows reports this focus domain as foreground.
 func (w *platformWindow) confirmActivation() {
-	if !w.focus.visible || !w.isWithinFocusDomain(win.GetForegroundWindow()) {
+	if !w.focus.visible || (w.hwnd != 0 && win.IsIconic(w.hwnd)) || !w.isWithinFocusDomain(win.GetForegroundWindow()) {
 		return
 	}
 	w.focus.activationConfirmed = true
@@ -2639,7 +2656,7 @@ func activateWindow(hwnd win.HWND) bool {
 
 // drawFrame rebuilds the minimal display list only when Windows requests a paint.
 func (w *platformWindow) drawFrame(hwnd win.HWND, paint win.RECT) {
-	if w.renderer == nil || w.renderer.handle == nil {
+	if w.renderer == nil || w.renderer.handle == nil || win.IsIconic(hwnd) {
 		return
 	}
 

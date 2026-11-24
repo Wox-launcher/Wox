@@ -4,28 +4,26 @@ import "sync"
 
 // FocusNode is a stable, window-scoped handle for requesting and observing widget focus.
 type FocusNode struct {
-	mu      sync.RWMutex
-	host    *Host
-	key     Key
-	focused bool
+	mu         sync.RWMutex
+	host       *Host
+	key        Key
+	focused    bool
+	attachment *FocusAttachment
 }
 
 // FocusAttachment owns one State-to-Host focus binding.
 type FocusAttachment struct {
 	node *FocusNode
-	host *Host
-	key  Key
 }
 
-// Detach removes this binding without disturbing a node that has since moved to another Host.
+// Detach removes only this specific binding so disposing a stale element cannot
+// clobber a newer element that already re-attached the same FocusNode.
 func (a *FocusAttachment) Detach() {
 	if a == nil || a.node == nil {
 		return
 	}
-	a.node.detach(a.host, a.key)
+	a.node.detach(a)
 	a.node = nil
-	a.host = nil
-	a.key = ""
 }
 
 // NewFocusNode creates an unattached focus handle.
@@ -33,23 +31,29 @@ func NewFocusNode() *FocusNode {
 	return &FocusNode{}
 }
 
-func (n *FocusNode) attach(host *Host, key Key) {
+func (n *FocusNode) attach(host *Host, key Key) *FocusAttachment {
 	if n == nil {
-		return
+		return nil
 	}
+	attachment := &FocusAttachment{node: n}
 	n.mu.Lock()
+	n.attachment = attachment
 	n.host = host
 	n.key = key
 	n.focused = host != nil && host.isFocusedKey(key)
 	n.mu.Unlock()
+	return attachment
 }
 
-func (n *FocusNode) detach(host *Host, key Key) {
-	if n == nil {
+func (n *FocusNode) detach(attachment *FocusAttachment) {
+	if n == nil || attachment == nil {
 		return
 	}
 	n.mu.Lock()
-	if n.host == host && n.key == key {
+	// Reparenting mounts the replacement state before sweeping the old element;
+	// ignoring stale attachments keeps the live binding and focus state intact.
+	if n.attachment == attachment {
+		n.attachment = nil
 		n.host = nil
 		n.key = ""
 		n.focused = false

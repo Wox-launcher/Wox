@@ -246,6 +246,10 @@ func (h *Host) SetWindowFocused(focused bool) {
 		if window != nil {
 			_ = window.SetTextInputState(woxui.TextInputState{})
 		}
+	} else {
+		// Re-enable native text input immediately on activation rather than waiting
+		// for lower-priority paint delivery after queued key or IME messages.
+		h.syncTextInput()
 	}
 	if window != nil {
 		_ = window.Invalidate()
@@ -1322,6 +1326,10 @@ func (h *Host) TextInput(event woxui.TextInputEvent) bool {
 
 func (h *Host) syncTextInput() {
 	if h.window == nil || h.focused == 0 {
+		return
+	}
+	if !h.WindowFocused() {
+		_ = h.window.SetTextInputState(woxui.TextInputState{})
 		return
 	}
 	current := h.nodes[h.focused]

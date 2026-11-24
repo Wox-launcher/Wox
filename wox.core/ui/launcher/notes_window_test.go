@@ -2453,3 +2453,66 @@ func (s *notesWindowTestServices) NotesTree(context.Context) (common.NotesTree, 
 func (s *notesWindowTestServices) NotesOrganize(context.Context, common.NotesTreeChange) (common.NotesTree, error) {
 	return common.NotesTree{}, nil
 }
+
+func TestNotesEditorRetainsFocusAndTextInputAcrossMinimizedFrame(t *testing.T) {
+	app := bindTestApp(&App{appearance: appearanceController{palette: defaultPalette()}})
+	controller := newNotesWindowController(&app.notes, common.NoteRecord{
+		ID: "note",
+		Document: common.NoteDocument{
+			Version: 1,
+			Blocks:  []common.NoteBlock{{ID: "p", Type: common.NoteBlockParagraph}},
+		},
+	})
+	t.Cleanup(func() {
+		if controller.saveTimer != nil {
+			controller.saveTimer.Stop()
+		}
+	})
+	theme := app.appearance.palette.componentTheme()
+	window := &woxui.Window{}
+	host := woxwidget.NewHost(func(frame woxui.FrameInfo) woxwidget.Widget {
+		editorHeight := max(float32(0), frame.Size.Height-launcherview.NotesToolbarHeight-launcherview.NotesFormatBarHeight)
+		return woxcomponent.WoxNoteEditor(woxcomponent.NoteEditorProps{
+			ID: "notes.editor", Document: controller.document, Width: frame.Size.Width, Height: editorHeight,
+			Padding: notesEditorPadding(), Style: controller.editorStyle(), LineHeight: notesEditorLineHeight, Zoom: 1,
+			TextColor: theme.PreviewText, Theme: theme.Controls, Window: window, Autofocus: true,
+			Controller: controller.editor, FocusNode: controller.editorFocus,
+			Focused:           controller.editorFocus.HasFocus(),
+			FocusedTableBlock: -1, FocusedImageBlock: -1, ActiveSegmentStart: controller.activeTextSegment.Start,
+			OnTextFocus: controller.focusNoteText, OnChanged: controller.onSegmentChanged, OnKey: controller.onKey,
+		})
+	})
+	services := &notesEditorHostServices{}
+	host.AttachServices(services)
+	t.Cleanup(host.Dispose)
+
+	normalFrame := woxui.FrameInfo{Size: woxui.Size{Width: 700, Height: 600}, PixelSize: woxui.PixelSize{Width: 1400, Height: 1200}, Scale: 2}
+	minimizedFrame := woxui.FrameInfo{Size: woxui.Size{Width: 156, Height: 24}, PixelSize: woxui.PixelSize{Width: 312, Height: 48}, Scale: 2}
+
+	for range 2 {
+		host.Frame(&woxui.DisplayList{}, normalFrame)
+	}
+	if !controller.editorFocus.HasFocus() || !services.textInput.Enabled {
+		t.Fatalf("initial frame: editorFocus=%v textInput=%v, want true/true", controller.editorFocus.HasFocus(), services.textInput.Enabled)
+	}
+
+	host.SetWindowFocused(false)
+	host.Frame(&woxui.DisplayList{}, minimizedFrame)
+	if services.textInput.Enabled {
+		t.Fatal("minimized unfocused frame must keep textInput disabled")
+	}
+
+	host.SetWindowFocused(true)
+	for range 2 {
+		host.Frame(&woxui.DisplayList{}, normalFrame)
+	}
+	if !controller.editorFocus.HasFocus() || !services.textInput.Enabled {
+		t.Fatalf("restored frame: editorFocus=%v textInput=%v, want true/true", controller.editorFocus.HasFocus(), services.textInput.Enabled)
+	}
+	if !host.TextInput(woxui.TextInputEvent{Kind: woxui.TextInputCommit, Text: "a"}) {
+		t.Fatal("restored editor did not handle text input commit")
+	}
+	if controller.editor.Text() != "a" {
+		t.Fatalf("editor text = %q, want %q", controller.editor.Text(), "a")
+	}
+}

@@ -76,9 +76,7 @@ func (c StateContext) BindFocusNode(node *FocusNode, key Key) *FocusAttachment {
 	if node == nil || !c.Mounted() || c.element.tree == nil {
 		return nil
 	}
-	host := c.element.tree.host
-	node.attach(host, key)
-	return &FocusAttachment{node: node, host: host, key: key}
+	return node.attach(c.element.tree.host, key)
 }
 
 // SetHostOverlay places a window-level overlay above the current Host build tree.

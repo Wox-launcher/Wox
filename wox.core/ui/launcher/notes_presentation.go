@@ -151,6 +151,7 @@ func (c *notesWindowController) buildMarkdownEditor(width, height float32, theme
 		EdgeFade: 24,
 		Key:      "notes.editor.scroll", AutomationID: "notes.editor.scroll", Label: c.owner.language.translate("i18n:notes_editor"),
 		Width: width, Height: height, KeepVisible: c.noteMarkdownCaretVisible(width, lineHeight, padding),
+		RetainState: true,
 		Content: woxcomponent.WoxTextField(woxcomponent.TextFieldProps{
 			ID: "notes.editor.markdown", Label: c.owner.language.translate("i18n:notes_editor"), Width: width, Height: fieldHeight,
 			Padding: padding, Transparent: true, DisableHover: true,
