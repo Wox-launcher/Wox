@@ -49,7 +49,8 @@ var AIFS = assetfs.New(rawAIFS)
 
 var embedThemes = []string{}
 
-func Extract(ctx context.Context) error {
+// Extract installs embedded resources, excluding other entries managed by a feature.
+func Extract(ctx context.Context, skipOther func(string) bool) error {
 	start := util.GetSystemTimestamp()
 
 	// hosts
@@ -61,21 +62,12 @@ func Extract(ctx context.Context) error {
 		}
 	}
 
-	extractHostErr := extractFiles(ctx, HostFS, hostDirectory, "hosts", true)
+	extractHostErr := extractFiles(HostFS, hostDirectory, "hosts", nil)
 	if extractHostErr != nil {
 		return extractHostErr
 	}
 
-	// others
-	othersDirectory := util.GetLocation().GetOthersDirectory()
-	if util.IsDirExists(othersDirectory) {
-		rmErr := os.RemoveAll(othersDirectory)
-		if rmErr != nil {
-			return rmErr
-		}
-	}
-	// Enable recursive extraction for nested directories such as others/woxmr.
-	othersErr := extractFiles(ctx, OthersFS, othersDirectory, "others", true)
+	othersErr := extractOtherFiles(util.GetLocation().GetOthersDirectory(), skipOther)
 	if othersErr != nil {
 		return othersErr
 	}
@@ -90,7 +82,7 @@ func Extract(ctx context.Context) error {
 			return err
 		}
 	}
-	aiErr := extractFiles(ctx, AIFS, filepath.Dir(util.GetLocation().GetAISkillsDirectory()), "ai", true)
+	aiErr := extractFiles(AIFS, filepath.Dir(util.GetLocation().GetAISkillsDirectory()), "ai", nil)
 	if aiErr != nil {
 		return aiErr
 	}
@@ -105,7 +97,30 @@ func Extract(ctx context.Context) error {
 	return nil
 }
 
-func extractFiles(ctx context.Context, fs assetfs.FS, extractDirectory string, filePath string, recursive bool) error {
+// extractOtherFiles leaves feature-managed entries available for their own cleanup.
+func extractOtherFiles(directory string, skip func(string) bool) error {
+	if skip == nil {
+		if err := os.RemoveAll(directory); err != nil {
+			return err
+		}
+	} else {
+		entries, err := os.ReadDir(directory)
+		if err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		for _, entry := range entries {
+			if !skip(entry.Name()) {
+				if err := os.RemoveAll(filepath.Join(directory, entry.Name())); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return extractFiles(OthersFS, directory, "others", skip)
+}
+
+// extractFiles mirrors one embedded tree and applies skip only to its immediate entries.
+func extractFiles(fs assetfs.FS, extractDirectory string, filePath string, skip func(string) bool) error {
 	dir, err := fs.ReadDir(filePath)
 	if err != nil {
 		return err
@@ -121,8 +136,11 @@ func extractFiles(ctx context.Context, fs assetfs.FS, extractDirectory string, f
 	}
 
 	for _, entry := range dir {
-		if entry.IsDir() && recursive {
-			extractErr := extractFiles(ctx, fs, extractDirectory, path.Join(filePath, entry.Name()), recursive)
+		if skip != nil && skip(entry.Name()) {
+			continue
+		}
+		if entry.IsDir() {
+			extractErr := extractFiles(fs, extractDirectory, path.Join(filePath, entry.Name()), nil)
 			if extractErr != nil {
 				return extractErr
 			}

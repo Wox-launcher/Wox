@@ -38,6 +38,7 @@ import (
 	"wox/util/overlay/imageoverlay"
 	"wox/util/permission"
 	"wox/util/selection"
+	"wox/util/windowhook"
 
 	golauncher "wox/ui/launcher"
 	woxui "wox/ui/runtime"
@@ -340,7 +341,12 @@ func run() {
 		util.GetLogger().Error(ctx, fmt.Sprintf("failed to write lock file: %s", writeErr.Error()))
 	}
 
-	extractErr := resource.Extract(ctx)
+	skipOther, hookErr := windowhook.PrepareRuntime(resource.OthersFS)
+	if hookErr != nil {
+		util.GetLogger().Error(ctx, fmt.Sprintf("failed to prepare window hook runtime: %s", hookErr.Error()))
+		return
+	}
+	extractErr := resource.Extract(ctx, skipOther)
 	if extractErr != nil {
 		util.GetLogger().Error(ctx, fmt.Sprintf("failed to extract embed file: %s", extractErr.Error()))
 		return
@@ -490,6 +496,11 @@ func run() {
 		coreServices.AttachView(nil)
 		embeddedGoUIApp = nil
 		return
+	}
+	if util.IsWindows() {
+		util.Go(ctx, "clean up window hook runtime", func() {
+			windowhook.CleanupRuntime(ctx)
+		})
 	}
 	woxui.SetProtocolURLHandler(func(deeplink string) {
 		ui.GetUIManager().ProcessDeeplink(util.NewTraceContext(), deeplink)

@@ -41,6 +41,13 @@ cache decompressed files. Directory entries report original sizes. Existing
 resource extraction still controls destination permissions. Mandatory application
 icons are loaded once; other resource consumers keep their existing error paths.
 
+Windows hook files are staged under `others/window_hook` for embedding. At
+startup, `util/windowhook` deploys them together under
+`runtime/window_hook/<content hash>`. General extraction leaves legacy hook
+directories for the hook runtime to retire after the UI is ready. A running Wox
+instance protects its bundle from retirement, and Windows file locks can defer
+deletion until a subsequent startup.
+
 `TestEmbeddedBytesMatchSources` compares every resource against its source file
 in either mode. The emoji catalog additionally has a full semantic fingerprint.
 `BenchmarkReadEmbeddedResources` measures bulk read overhead, not application

@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"sync"
 	"syscall"
@@ -20,16 +19,15 @@ import (
 
 // HelperDLLPath returns the hook DLL built for the given bitness.
 func HelperDLLPath(is32Bit bool) string {
-	name := "WoxWindowHook64.dll"
 	if is32Bit {
-		name = "WoxWindowHook32.dll"
+		return runtimeFilePath(hookDLL32)
 	}
-	return filepath.Join(util.GetLocation().GetOthersDirectory(), "window_hook", name)
+	return runtimeFilePath(hookDLL64)
 }
 
 // HelperPath returns the 32-bit helper that installs the hook in 32-bit targets.
 func HelperPath() string {
-	return filepath.Join(util.GetLocation().GetOthersDirectory(), "window_hook", "wox-window-hook-helper32.exe")
+	return runtimeFilePath(hookHelper32)
 }
 
 // helperAttachTimeout bounds the wait for the helper's first line. The attach itself
@@ -102,6 +100,9 @@ func RunDialogCommandViaHelper(ctx context.Context, command string, target uintp
 	defer cancel()
 
 	helper := HelperPath()
+	if helper == "" {
+		return false
+	}
 	cmd := exec.CommandContext(runCtx, helper,
 		fmt.Sprintf("-dll=%s", HelperDLLPath(true)),
 		fmt.Sprintf("-command=%s", command),
@@ -131,6 +132,9 @@ func AttachStickyViaHelper(target uintptr, pid int, overlayHWND uintptr) *Helper
 	}
 
 	helper := HelperPath()
+	if helper == "" {
+		return nil
+	}
 	dll := HelperDLLPath(true)
 	cmd := exec.Command(helper,
 		fmt.Sprintf("-dll=%s", dll),

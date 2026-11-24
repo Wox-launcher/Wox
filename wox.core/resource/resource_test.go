@@ -2,7 +2,6 @@ package resource
 
 import (
 	"bytes"
-	"context"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -150,7 +149,7 @@ func TestExtractedResourcesMatchSources(t *testing.T) {
 		{HostFS, "hosts"}, {OthersFS, "others"}, {AIFS, "ai"},
 	} {
 		destination := t.TempDir()
-		if err := extractFiles(context.Background(), group.source, destination, group.root, true); err != nil {
+		if err := extractFiles(group.source, destination, group.root, nil); err != nil {
 			t.Fatal(err)
 		}
 		err := fs.WalkDir(group.source, group.root, func(name string, entry fs.DirEntry, err error) error {
@@ -188,5 +187,28 @@ func TestExtractedResourcesMatchSources(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+	}
+}
+
+// TestExtractOtherFilesKeepsManagedEntries covers both on-disk cleanup and the
+// exclusion of the same entry from fresh extraction.
+func TestExtractOtherFilesKeepsManagedEntries(t *testing.T) {
+	destination := t.TempDir()
+	managed := filepath.Join(destination, "placeholder")
+	if err := os.WriteFile(managed, []byte("managed by feature"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	unmanaged := filepath.Join(destination, "obsolete")
+	if err := os.WriteFile(unmanaged, nil, 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := extractOtherFiles(destination, func(name string) bool { return name == "placeholder" }); err != nil {
+		t.Fatal(err)
+	}
+	if data, err := os.ReadFile(managed); err != nil || string(data) != "managed by feature" {
+		t.Fatalf("managed resource was replaced or removed: %q, %v", data, err)
+	}
+	if _, err := os.Stat(unmanaged); !os.IsNotExist(err) {
+		t.Fatalf("obsolete resource was not removed: %v", err)
 	}
 }

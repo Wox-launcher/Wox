@@ -16,6 +16,7 @@ import (
 	"wox/ui"
 	"wox/util"
 	"wox/util/selection"
+	"wox/util/windowhook"
 
 	// Import all system plugins to trigger their init() functions
 	// This ensures all system plugins are registered in plugin.AllSystemPlugin
@@ -347,7 +348,11 @@ func ensureServicesInitialized(t *testing.T) {
 		}
 
 		// Extract resources
-		err = resource.Extract(ctx)
+		skipOther, hookErr := windowhook.PrepareRuntime(resource.OthersFS)
+		if hookErr != nil {
+			t.Fatalf("Failed to prepare window hook runtime: %v", hookErr)
+		}
+		err = resource.Extract(ctx, skipOther)
 		if err != nil {
 			t.Fatalf("Failed to extract resources: %v", err)
 		}

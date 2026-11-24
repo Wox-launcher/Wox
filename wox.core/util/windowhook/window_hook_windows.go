@@ -49,9 +49,13 @@ func AttachSticky(windowID string, pid int, observerHWND uintptr) *StickyHook {
 		util.GetLogger().Error(context.Background(), fmt.Sprintf("sticky attach rejected input: windowId=%q pid=%d overlay=0x%X err=%v", windowID, pid, observerHWND, err))
 		return nil
 	}
-	dll, err := windows.LoadDLL(DLLPath())
+	path := DLLPath()
+	if path == "" {
+		return nil
+	}
+	dll, err := windows.LoadDLL(path)
 	if err != nil {
-		util.GetLogger().Error(context.Background(), fmt.Sprintf("sticky attach cannot load hook dll: path=%q err=%v", DLLPath(), err))
+		util.GetLogger().Error(context.Background(), fmt.Sprintf("sticky attach cannot load hook dll: path=%q err=%v", path, err))
 		return nil
 	}
 	attach, err := dll.FindProc("WoxWindowHookAttachSticky")
@@ -202,7 +206,11 @@ func runDialogCommand(ctx context.Context, windowID string, pid int, targetPath 
 	dialogCommandMu.Lock()
 	defer dialogCommandMu.Unlock()
 
-	dll, err := windows.LoadDLL(DLLPath())
+	path := DLLPath()
+	if path == "" {
+		return false
+	}
+	dll, err := windows.LoadDLL(path)
 	if err != nil {
 		util.GetLogger().Debug(ctx, fmt.Sprintf("Window hook load failed: %v", err))
 		return false
