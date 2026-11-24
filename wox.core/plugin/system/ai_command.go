@@ -258,6 +258,7 @@ func (c *Plugin) GetMetadata() plugin.Metadata {
 					// paste actions instead of accepting an empty QueryEnv.
 					"requireActiveWindowName": true,
 					"requireActiveWindowPid":  true,
+					"requireActiveWindowId":   true,
 					"requireActiveWindowIcon": true,
 				},
 			},
@@ -681,7 +682,7 @@ func (c *Plugin) buildAICommandActions(ctx context.Context, command commandSetti
 					// simulating paste so the overlay cannot sit above the destination
 					// while the replacement keystroke is delivered.
 					aiCommandCloseOverlay(overlayName)
-					if err := pasteTextToActiveWindow(ctx, c.api, query.Env.ActiveWindowTitle, query.Env.ActiveWindowPid, final.Answer); err != nil {
+					if err := pasteTextToActiveWindow(ctx, c.api, query.Env, final.Answer); err != nil {
 						c.notifyAICommandActionError(ctx, err)
 					}
 				})

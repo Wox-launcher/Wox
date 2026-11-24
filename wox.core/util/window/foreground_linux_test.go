@@ -85,14 +85,14 @@ func TestParseKWinForeground(t *testing.T) {
 		t.Fatal("expected malformed kwin payload to fail")
 	}
 
-	script, err := kwinForegroundScript("org.wox.WindowForeground.P1.N1", "/org/wox/WindowForeground", "org.wox.WindowForeground", "Report")
+	script, err := kwinForegroundScript("org.wox.WindowForeground.P1.N1", "/org/wox/WindowForeground", "org.wox.WindowForeground", "Report", "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(script, "workspace.activeWindow") || !strings.Contains(script, "org.wox.WindowForeground.P1.N1") {
 		t.Fatalf("script = %s", script)
 	}
-	if _, err := kwinForegroundScript(`bad"name`, "/org/wox/WindowForeground", "org.wox.WindowForeground", "Report"); err == nil {
+	if _, err := kwinForegroundScript(`bad"name`, "/org/wox/WindowForeground", "org.wox.WindowForeground", "Report", ""); err == nil {
 		t.Fatal("expected a quoted bus name to be rejected")
 	}
 }
@@ -545,16 +545,18 @@ var kwinCallDBusPattern = regexp.MustCompile(`callDBus\("([^"]+)", "([^"]+)", "(
 // fakeKWin answers the scripting calls our Plasma backend makes, then delivers
 // the payload the generated script would have sent with callDBus.
 type fakeKWin struct {
-	conn       *dbus.Conn
-	scriptID   int32
-	payload    string
-	failRun    bool
-	loads      syncInt
-	stopped    syncInt
-	mu         sync.Mutex
-	scriptFile string
-	pluginName string
-	unloaded   string
+	conn        *dbus.Conn
+	scriptID    int32
+	payload     string
+	reportFor   func(string) string
+	reportDelay time.Duration
+	failRun     bool
+	loads       syncInt
+	stopped     syncInt
+	mu          sync.Mutex
+	scriptFile  string
+	pluginName  string
+	unloaded    string
 }
 
 type syncInt struct {
@@ -634,6 +636,8 @@ func (k *fakeKWin) run() *dbus.Error {
 	fail := k.failRun
 	path := k.scriptFile
 	payload := k.payload
+	reportFor := k.reportFor
+	reportDelay := k.reportDelay
 	k.mu.Unlock()
 	if fail {
 		return dbus.MakeFailedError(errors.New("script failed"))
@@ -645,6 +649,15 @@ func (k *fakeKWin) run() *dbus.Error {
 	matches := kwinCallDBusPattern.FindStringSubmatch(string(body))
 	if matches == nil {
 		return dbus.MakeFailedError(errors.New("script missing callDBus"))
+	}
+	if reportFor != nil {
+		payload = reportFor(string(body))
+	}
+	if reportDelay > 0 {
+		time.AfterFunc(reportDelay, func() {
+			k.conn.Object(matches[1], dbus.ObjectPath(matches[2])).Call(matches[3]+"."+matches[4], 0, payload)
+		})
+		return nil
 	}
 	if err := k.conn.Object(matches[1], dbus.ObjectPath(matches[2])).Call(matches[3]+"."+matches[4], 0, payload).Err; err != nil {
 		return dbus.MakeFailedError(err)

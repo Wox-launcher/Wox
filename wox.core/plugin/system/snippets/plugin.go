@@ -133,7 +133,7 @@ func (p *Plugin) result(ctx context.Context, query plugin.Query, record Record, 
 		},
 	}
 	actions := []plugin.QueryResultAction{copyAction}
-	paste, err := system.GetPasteToActiveWindowAction(ctx, p.api, query.Env.ActiveWindowTitle, query.Env.ActiveWindowPid, query.Env.ActiveWindowIcon, func(context.Context) error {
+	paste, err := system.GetPasteToActiveWindowAction(ctx, p.api, query.Env, func(context.Context) error {
 		text, err := prepare()
 		if err != nil {
 			return err

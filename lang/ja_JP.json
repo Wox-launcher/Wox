@@ -2050,6 +2050,7 @@
   "plugin_indicator_activate_plugin": "%s プラグインを起動",
   "plugin_indicator_open_plugin_settings": "%s の設定を開く",
   "plugin_paste_to_window": "%s に貼り付け",
+  "plugin_paste_manually": "自動貼り付けに失敗しました。内容はクリップボードにあるので、手動で貼り付けてください。",
   "plugin_sys_empty_trash": "ゴミ箱を空にする",
   "plugin_sys_lock_computer": "PC をロック",
   "plugin_sys_woxview_sequence": "古いシーケンスをテスト",

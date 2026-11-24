@@ -2050,6 +2050,7 @@
   "plugin_indicator_activate_plugin": "Activar el complemento %s",
   "plugin_indicator_open_plugin_settings": "Abrir la configuración %s",
   "plugin_paste_to_window": "Pegar a %s",
+  "plugin_paste_manually": "No se pudo pegar automáticamente. El contenido está en el portapapeles. Pégalo manualmente.",
   "plugin_sys_empty_trash": "Papelera vacía",
   "plugin_sys_lock_computer": "Bloquear PC",
   "plugin_sys_woxview_sequence": "Secuencia rancio de ensayo",

@@ -1845,6 +1845,7 @@
   "plugin_indicator_activate_plugin": "Активировать плагин %s",
   "plugin_indicator_open_plugin_settings": "Открыть настройки %s",
   "plugin_paste_to_window": "Вставить в %s",
+  "plugin_paste_manually": "Автоматическая вставка не удалась. Содержимое находится в буфере обмена. Вставьте его вручную.",
   "plugin_sys_empty_trash": "Очистить корзину",
   "plugin_sys_lock_computer": "Заблокировать ПК",
   "plugin_sys_woxview_sequence": "Проверить устаревший номер",

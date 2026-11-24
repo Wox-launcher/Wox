@@ -218,6 +218,7 @@ func (c *ClipboardPlugin) GetMetadata() plugin.Metadata {
 				Params: map[string]any{
 					"requireActiveWindowName": true,
 					"requireActiveWindowPid":  true,
+					"requireActiveWindowId":   true,
 					"requireActiveWindowIcon": true,
 				},
 			},
@@ -1420,7 +1421,7 @@ func (c *ClipboardPlugin) convertFileRecord(ctx context.Context, record Clipboar
 	}
 
 	c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("active window info: name=%s, pid=%d", query.Env.ActiveWindowTitle, query.Env.ActiveWindowPid))
-	pasteToActiveWindowAction, pasteToActiveWindowErr := system.GetPasteToActiveWindowAction(ctx, c.api, query.Env.ActiveWindowTitle, query.Env.ActiveWindowPid, query.Env.ActiveWindowIcon, func(actionCtx context.Context) error {
+	pasteToActiveWindowAction, pasteToActiveWindowErr := system.GetPasteToActiveWindowAction(ctx, c.api, query.Env, func(actionCtx context.Context) error {
 		if err := clipboard.Write(&clipboard.FilePathData{FilePaths: append([]string(nil), filePaths...)}); err != nil {
 			return fmt.Errorf("failed to restore file clipboard record before paste: %w", err)
 		}
@@ -1632,7 +1633,7 @@ func (c *ClipboardPlugin) convertTextRecord(ctx context.Context, record Clipboar
 
 	// paste to active window
 	c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("active window info: name=%s, pid=%d", query.Env.ActiveWindowTitle, query.Env.ActiveWindowPid))
-	pasteToActiveWindowAction, pasteToActiveWindowErr := system.GetPasteToActiveWindowAction(ctx, c.api, query.Env.ActiveWindowTitle, query.Env.ActiveWindowPid, query.Env.ActiveWindowIcon, func(actionCtx context.Context) error {
+	pasteToActiveWindowAction, pasteToActiveWindowErr := system.GetPasteToActiveWindowAction(ctx, c.api, query.Env, func(actionCtx context.Context) error {
 		if err := clipboard.WriteText(record.Content); err != nil {
 			return fmt.Errorf("failed to copy text record before paste action: %w", err)
 		}
@@ -1933,7 +1934,7 @@ func (c *ClipboardPlugin) convertImageRecord(ctx context.Context, record Clipboa
 
 	primaryActionCode := c.primaryActionCode(ctx)
 	c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("active window info: name=%s, pid=%d", query.Env.ActiveWindowTitle, query.Env.ActiveWindowPid))
-	pasteToActiveWindowAction, pasteToActiveWindowErr := system.GetPasteToActiveWindowAction(ctx, c.api, query.Env.ActiveWindowTitle, query.Env.ActiveWindowPid, query.Env.ActiveWindowIcon, func(actionCtx context.Context) error {
+	pasteToActiveWindowAction, pasteToActiveWindowErr := system.GetPasteToActiveWindowAction(ctx, c.api, query.Env, func(actionCtx context.Context) error {
 		if err := c.restoreImageRecordToClipboard(actionCtx, record); err != nil {
 			c.api.Log(actionCtx, plugin.LogLevelError, err.Error())
 			return errors.New(c.api.GetTranslation(actionCtx, "plugin_clipboard_image_restore_failed"))

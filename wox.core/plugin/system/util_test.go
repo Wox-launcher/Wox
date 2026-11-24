@@ -4,20 +4,20 @@ import (
 	"context"
 	"strings"
 	"testing"
-	"wox/common"
 	"wox/i18n"
+	"wox/plugin"
 	"wox/util/window"
 )
 
 func TestGetPasteToActiveWindowActionRequiresWindowIdentity(t *testing.T) {
 	ctx := context.Background()
 
-	_, err := GetPasteToActiveWindowAction(ctx, nil, "", 0, common.WoxImage{}, nil)
+	_, err := GetPasteToActiveWindowAction(ctx, nil, plugin.QueryEnv{}, nil)
 	if err == nil {
 		t.Fatal("expected error when window name and pid are both empty")
 	}
 
-	action, err := GetPasteToActiveWindowAction(ctx, nil, "Visual Studio Code", 1234, common.WoxImage{}, nil)
+	action, err := GetPasteToActiveWindowAction(ctx, nil, plugin.QueryEnv{ActiveWindowTitle: "Visual Studio Code", ActiveWindowPid: 1234}, nil)
 	if err != nil {
 		t.Fatalf("named window: %v", err)
 	}
@@ -28,7 +28,7 @@ func TestGetPasteToActiveWindowActionRequiresWindowIdentity(t *testing.T) {
 		t.Fatalf("paste actions must not add search aliases: %v", action.SearchAliases)
 	}
 
-	action, err = GetPasteToActiveWindowAction(ctx, nil, "", 1, common.WoxImage{}, nil)
+	action, err = GetPasteToActiveWindowAction(ctx, nil, plugin.QueryEnv{ActiveWindowPid: 1}, nil)
 	if err != nil {
 		t.Fatalf("pid-only window should still create a paste action: %v", err)
 	}
@@ -51,7 +51,7 @@ func TestGetPasteToActiveWindowActionUsesAppNameForEveryTitle(t *testing.T) {
 		{title: "Visual Studio Code", want: "Visual Studio Code"},
 	}
 	for _, tc := range cases {
-		action, err := GetPasteToActiveWindowAction(context.Background(), nil, tc.title, 1234, common.WoxImage{}, nil)
+		action, err := GetPasteToActiveWindowAction(context.Background(), nil, plugin.QueryEnv{ActiveWindowTitle: tc.title, ActiveWindowPid: 1234}, nil)
 		if err != nil {
 			t.Fatalf("%q: %v", tc.title, err)
 		}

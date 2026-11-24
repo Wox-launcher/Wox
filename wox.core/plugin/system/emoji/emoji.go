@@ -191,6 +191,7 @@ func (e *EmojiPlugin) GetMetadata() plugin.Metadata {
 				Params: map[string]any{
 					"requireActiveWindowName": true,
 					"requireActiveWindowPid":  true,
+					"requireActiveWindowId":   true,
 					"requireActiveWindowIcon": true,
 				},
 			},
@@ -584,7 +585,7 @@ func (e *EmojiPlugin) buildEmojiActions(ctx context.Context, query plugin.Query,
 		},
 	}
 
-	pasteAction, pasteErr := system.GetPasteToActiveWindowAction(ctx, e.api, query.Env.ActiveWindowTitle, query.Env.ActiveWindowPid, query.Env.ActiveWindowIcon, func(actionCtx context.Context) error {
+	pasteAction, pasteErr := system.GetPasteToActiveWindowAction(ctx, e.api, query.Env, func(actionCtx context.Context) error {
 		if err := clipboard.WriteText(emoji); err != nil {
 			return fmt.Errorf("failed to copy emoji before paste: %w", err)
 		}

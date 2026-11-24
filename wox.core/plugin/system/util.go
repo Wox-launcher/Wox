@@ -138,7 +138,8 @@ func GetActiveWindowIcon(ctx context.Context) (common.WoxImage, error) {
 
 // GetPasteToActiveWindowAction builds a paste action for the captured foreground
 // window. A PID is enough when the window title has not been resolved yet.
-func GetPasteToActiveWindowAction(ctx context.Context, api plugin.API, windowName string, windowPid int, windowIcon common.WoxImage, actionCallback func(context.Context) error) (plugin.QueryResultAction, error) {
+func GetPasteToActiveWindowAction(ctx context.Context, api plugin.API, target plugin.QueryEnv, prepareClipboard func(context.Context) error) (plugin.QueryResultAction, error) {
+	windowName, windowPid := target.ActiveWindowTitle, target.ActiveWindowPid
 	if windowName == "" {
 		windowName = window.GetWindowNameByPid(windowPid)
 	}
@@ -152,19 +153,27 @@ func GetPasteToActiveWindowAction(ctx context.Context, api plugin.API, windowNam
 	}
 
 	action := plugin.QueryResultAction{
-		Name:      actionName,
-		Icon:      icons.Get(icons.ActionPaste),
-		IsDefault: true,
+		Name:                   actionName,
+		Icon:                   icons.Get(icons.ActionPaste),
+		IsDefault:              true,
+		PreventHideAfterAction: util.IsKDEWayland(),
 		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-			if actionCallback != nil {
-				if err := actionCallback(ctx); err != nil {
-					api.Log(ctx, plugin.LogLevelError, err.Error())
-					api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: err.Error()})
-					return
-				}
+			var err error
+			if prepareClipboard != nil {
+				err = prepareClipboard(ctx)
+			}
+			// KDE images are published by the focused launcher. Hide explicitly
+			// after publication so activation cannot race the usual async hide.
+			if util.IsKDEWayland() {
+				api.HideApp(ctx)
+			}
+			if err != nil {
+				api.Log(ctx, plugin.LogLevelError, err.Error())
+				api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: err.Error()})
+				return
 			}
 			util.Go(ctx, "paste to active window", func() {
-				if err := pasteToActiveWindow(ctx, api, windowPid); err != nil {
+				if err := pasteToActiveWindow(ctx, api, target); err != nil {
 					api.Log(ctx, plugin.LogLevelError, err.Error())
 					api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: err.Error()})
 				}
@@ -172,15 +181,15 @@ func GetPasteToActiveWindowAction(ctx context.Context, api plugin.API, windowNam
 		},
 	}
 
-	if !windowIcon.IsEmpty() {
-		action.TailIcon = windowIcon
+	if !target.ActiveWindowIcon.IsEmpty() {
+		action.TailIcon = target.ActiveWindowIcon
 	}
 
 	return action, nil
 }
 
-func pasteTextToActiveWindow(ctx context.Context, api plugin.API, windowName string, windowPid int, text string) error {
-	if windowName == "" && windowPid <= 0 {
+func pasteTextToActiveWindow(ctx context.Context, api plugin.API, target plugin.QueryEnv, text string) error {
+	if target.ActiveWindowTitle == "" && target.ActiveWindowPid <= 0 {
 		return fmt.Errorf("no active window")
 	}
 	if text == "" {
@@ -189,21 +198,18 @@ func pasteTextToActiveWindow(ctx context.Context, api plugin.API, windowName str
 	if err := clipboard.WriteText(text); err != nil {
 		return fmt.Errorf("write ai command answer to clipboard failed: %w", err)
 	}
-	return pasteToActiveWindow(ctx, api, windowPid)
+	return pasteToActiveWindow(ctx, api, target)
 }
 
-func pasteToActiveWindow(ctx context.Context, api plugin.API, windowPid int) error {
-	// Shared paste helper: AI command Run And Paste needs the same activation
-	// delay as the existing paste action, but it must prepare clipboard content
-	// only after the model has produced a final answer.
-	if windowPid > 0 {
-		if !window.ActivateWindowByPid(windowPid) {
-			api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("activate window failed, pid=%d", windowPid))
-		}
-		time.Sleep(time.Millisecond * 150)
-	} else {
-		time.Sleep(time.Millisecond * 150)
+// pasteToActiveWindow sends the clipboard contents after the caller has published them.
+func pasteToActiveWindow(ctx context.Context, api plugin.API, target plugin.QueryEnv) error {
+	if util.IsKDEWayland() {
+		return pasteToKDEWindow(ctx, api, target)
 	}
+	if pid := target.ActiveWindowPid; pid > 0 && !window.ActivateWindowByPid(pid) {
+		api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("activate window failed, pid=%d", pid))
+	}
+	time.Sleep(150 * time.Millisecond)
 	if err := keyboard.SimulatePaste(); err != nil {
 		return fmt.Errorf("simulate paste clipboard failed, err=%s", err.Error())
 	}

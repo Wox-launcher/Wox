@@ -16,6 +16,7 @@ import (
 // Windows/Darwin implementations that use Cmd+C/Cmd+V.
 const (
 	evKeyLeftCtrlCode  = 29
+	evKeyLeftShiftCode = 42
 	evKeyCodeC         = 46
 	evKeyCodeV         = 47
 	evKeyBackspaceCode = 14
@@ -28,15 +29,19 @@ const (
 // simulateCopy injects Ctrl+C via the uinput virtual keyboard to trigger
 // a system-level copy operation. This requires uinput write access.
 func simulateCopy() error {
-	waitModifiersRelease()
-	return simulateCtrlKeyCombo(evKeyCodeC, "copy")
+	return simulateCtrlKeyCombo(evKeyCodeC, "copy", false, nil)
 }
 
 // simulatePaste injects Ctrl+V via the uinput virtual keyboard to trigger
 // a system-level paste operation. This requires uinput write access.
 func simulatePaste() error {
-	waitModifiersRelease()
-	return simulateCtrlKeyCombo(evKeyCodeV, "paste")
+	return simulateCtrlKeyCombo(evKeyCodeV, "paste", false, nil)
+}
+
+// SimulatePasteAfterFocus prepares uinput and waits for physical modifiers
+// before verifying focus, so neither can delay a confirmed paste.
+func SimulatePasteAfterFocus(shift bool, focus func() error) error {
+	return simulateCtrlKeyCombo(evKeyCodeV, "paste", shift, focus)
 }
 
 // simulateBackspace injects a Backspace key press+release via the uinput
@@ -79,39 +84,51 @@ func waitModifiersRelease() {
 	}
 }
 
-// simulateCtrlKeyCombo injects a Ctrl+key press+release sequence via uinput.
-// The sequence is: Ctrl down → key down → syn → key up → syn → Ctrl up → syn.
-func simulateCtrlKeyCombo(keyCode int, label string) error {
+var uinputCtrlComboMu sync.Mutex
+
+// simulateCtrlKeyCombo keeps concurrent copy and paste chords from interleaving.
+func simulateCtrlKeyCombo(keyCode uint16, label string, shift bool, beforeSend func() error) error {
+	waitModifiersRelease()
 	fd, err := ensureUinputDevice()
 	if err != nil {
 		return err
 	}
 
-	// Ctrl down
-	if err := writeUinputEvent(fd, evKeyEventType, uint16(evKeyLeftCtrlCode), int32(evKeyDownValue)); err != nil {
-		return fmt.Errorf("%s: ctrl press failed: %w", label, err)
-	}
-	// key down
-	if err := writeUinputEvent(fd, evKeyEventType, uint16(keyCode), int32(evKeyDownValue)); err != nil {
-		return fmt.Errorf("%s: key press failed: %w", label, err)
-	}
-	// sync (flush the press events)
-	if err := writeUinputEvent(fd, evSynTypeCode, evSynReportCode, 0); err != nil {
-		return fmt.Errorf("%s: syn after press failed: %w", label, err)
-	}
-	// key up
-	if err := writeUinputEvent(fd, evKeyEventType, uint16(keyCode), int32(evKeyUpValue)); err != nil {
-		return fmt.Errorf("%s: key release failed: %w", label, err)
-	}
-	// Ctrl up
-	if err := writeUinputEvent(fd, evKeyEventType, uint16(evKeyLeftCtrlCode), int32(evKeyUpValue)); err != nil {
-		return fmt.Errorf("%s: ctrl release failed: %w", label, err)
-	}
-	// sync (flush the release events)
-	if err := writeUinputEvent(fd, evSynTypeCode, evSynReportCode, 0); err != nil {
-		return fmt.Errorf("%s: syn after release failed: %w", label, err)
+	uinputCtrlComboMu.Lock()
+	defer uinputCtrlComboMu.Unlock()
+	if err := writeCtrlKeyCombo(fd, keyCode, shift, beforeSend); err != nil {
+		return fmt.Errorf("%s: %w", label, err)
 	}
 	return nil
+}
+
+// writeCtrlKeyCombo puts modifiers before the key and releases them in reverse order.
+func writeCtrlKeyCombo(fd int, keyCode uint16, shift bool, beforeSend func() error) error {
+	if beforeSend != nil {
+		if err := beforeSend(); err != nil {
+			return err
+		}
+	}
+
+	keys := []uint16{evKeyLeftCtrlCode}
+	if shift {
+		keys = append(keys, evKeyLeftShiftCode)
+	}
+	keys = append(keys, keyCode)
+	for _, key := range keys {
+		if err := writeUinputEvent(fd, evKeyEventType, key, evKeyDownValue); err != nil {
+			return fmt.Errorf("key %d press failed: %w", key, err)
+		}
+	}
+	if err := writeUinputEvent(fd, evSynTypeCode, evSynReportCode, 0); err != nil {
+		return fmt.Errorf("sync after press failed: %w", err)
+	}
+	for i := len(keys) - 1; i >= 0; i-- {
+		if err := writeUinputEvent(fd, evKeyEventType, keys[i], evKeyUpValue); err != nil {
+			return fmt.Errorf("key %d release failed: %w", keys[i], err)
+		}
+	}
+	return writeUinputEvent(fd, evSynTypeCode, evSynReportCode, 0)
 }
 
 // evdev LED ioctl: EVIOCGLED(len) = _IOC(_IOC_READ, 'E', 0x19, len)
@@ -416,12 +433,13 @@ func ensureUinputDevice() (int, error) {
 			return
 		}
 
-		// Enable all keys we need to inject: CapsLock, LeftCtrl, C, V
+		// Enable all keys that the virtual keyboard can inject.
 		// UI_SET_KEYBIT = _IOW('U', 101, int)
 		keybit := uintptr(0x40045565)
 		keysToEnable := []int{
 			58,                 // KEY_CAPSLOCK
 			evKeyLeftCtrlCode,  // KEY_LEFTCTRL
+			evKeyLeftShiftCode, // KEY_LEFTSHIFT
 			evKeyCodeC,         // KEY_C
 			evKeyCodeV,         // KEY_V
 			evKeyBackspaceCode, // KEY_BACKSPACE

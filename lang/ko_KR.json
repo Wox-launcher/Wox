@@ -2050,6 +2050,7 @@
   "plugin_indicator_activate_plugin": "%s 플러그인을 활성화합니다",
   "plugin_indicator_open_plugin_settings": "%s 설정을 엽니다",
   "plugin_paste_to_window": "%s에 붙여넣기",
+  "plugin_paste_manually": "자동 붙여넣기에 실패했습니다. 내용은 클립보드에 있으니 직접 붙여넣으세요.",
   "plugin_sys_empty_trash": "휴지통 비우기",
   "plugin_sys_lock_computer": "PC 잠금",
   "plugin_sys_woxview_sequence": "오래된 순서 검사",

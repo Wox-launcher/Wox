@@ -180,7 +180,7 @@ func (c *ClipboardPlugin) sequentialPasteActions(ctx context.Context, record Cli
 		},
 	}
 
-	pasteToActiveWindowAction, pasteToActiveWindowErr := system.GetPasteToActiveWindowAction(ctx, c.api, query.Env.ActiveWindowTitle, query.Env.ActiveWindowPid, query.Env.ActiveWindowIcon, func(actionCtx context.Context) error {
+	pasteToActiveWindowAction, pasteToActiveWindowErr := system.GetPasteToActiveWindowAction(ctx, c.api, query.Env, func(actionCtx context.Context) error {
 		if err := c.restoreRecordForSequentialPaste(actionCtx, record); err != nil {
 			return fmt.Errorf("failed to restore clipboard record before paste: %w", err)
 		}

@@ -2087,8 +2087,7 @@ func (m *Manager) RefreshActiveWindowSnapshotBlocking(ctx context.Context) {
 }
 
 func (m *Manager) refreshActiveWindowSnapshot(ctx context.Context, waitForDetails bool) {
-	activeWindowPid := window.GetActiveWindowPid()
-	activeWindowId := window.GetActiveWindowId()
+	activeWindowPid, activeWindowId, activeWindowName := window.GetActiveWindowIdentity(ctx)
 
 	if activeWindowPid <= 0 {
 		m.activeWindowSnapshotMu.Lock()
@@ -2102,10 +2101,6 @@ func (m *Manager) refreshActiveWindowSnapshot(ctx context.Context, waitForDetail
 		return
 	}
 
-	// Name is cheap on every platform (GetWindowText / NSWorkspace). Capture it
-	// with the PID so plugin actions such as "Paste to %s" do not wait for the
-	// async icon/dialog refresh, which can finish after the first clipboard query.
-	activeWindowName := window.GetActiveWindowName()
 	queryVariables := plugin.GetPluginManager().CaptureQueryVariables(ctx)
 
 	m.activeWindowSnapshotMu.Lock()

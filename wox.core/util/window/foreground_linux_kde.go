@@ -36,6 +36,7 @@ var (
 // desktopFileName is already the .desktop basename. resourceClass and
 // resourceName are the WM_CLASS pair used when that name is empty.
 type kwinForegroundPayload struct {
+	WindowID        string `json:"windowId"`
 	DesktopFileName string `json:"desktopFileName"`
 	ResourceClass   string `json:"resourceClass"`
 	ResourceName    string `json:"resourceName"`
@@ -56,10 +57,28 @@ func (r *kdeForegroundReport) Report(payload string) *dbus.Error {
 	return nil
 }
 
+// getKDEActiveWindowIdentity bypasses the clipboard watcher's cache, which may
+// still contain a different window from the same app when Wox is invoked.
+func getKDEActiveWindowIdentity(ctx context.Context) (pid int, id string, name string) {
+	ctx, cancel := context.WithTimeout(ctx, linuxForegroundTimeout)
+	defer cancel()
+	app, err := queryKDEForeground(ctx)
+	if err != nil {
+		return -1, "", ""
+	}
+	app = finishLinuxForeground(app)
+	return app.Pid, app.WindowID, app.Name
+}
+
 // queryKDEForeground reads the focused window from KWin.
 // The public KWin D-Bus API cannot name that window without an id or a click,
 // so a one-shot script reads workspace.activeWindow and answers over the session bus.
 func queryKDEForeground(ctx context.Context) (linuxForegroundApp, error) {
+	return queryKDEWindow(ctx, "")
+}
+
+// queryKDEWindow optionally changes focus before reporting KWin's active window.
+func queryKDEWindow(ctx context.Context, activation string) (linuxForegroundApp, error) {
 	if err := ctx.Err(); err != nil {
 		return linuxForegroundApp{}, err
 	}
@@ -68,10 +87,11 @@ func queryKDEForeground(ctx context.Context) (linuxForegroundApp, error) {
 	if err := ctx.Err(); err != nil {
 		return linuxForegroundApp{}, err
 	}
-	return readKDEForeground(ctx)
+	return readKDEWindow(ctx, activation)
 }
 
-func readKDEForeground(ctx context.Context) (linuxForegroundApp, error) {
+// readKDEWindow runs a one-shot script and tears down its temporary D-Bus endpoint.
+func readKDEWindow(ctx context.Context, activation string) (linuxForegroundApp, error) {
 	conn, err := dbus.ConnectSessionBus()
 	if err != nil {
 		return linuxForegroundApp{}, fmt.Errorf("kwin foreground bus: %w", err)
@@ -81,7 +101,7 @@ func readKDEForeground(ctx context.Context) (linuxForegroundApp, error) {
 	seq := kdeForegroundSeq.Add(1)
 	busName := fmt.Sprintf("org.wox.WindowForeground.P%d.N%d", os.Getpid(), seq)
 	pluginName := fmt.Sprintf("woxforeground%dn%d", os.Getpid(), seq)
-	script, err := kwinForegroundScript(busName, string(kdeForegroundPath), kdeForegroundIface, kdeForegroundMethod)
+	script, err := kwinForegroundScript(busName, string(kdeForegroundPath), kdeForegroundIface, kdeForegroundMethod, activation)
 	if err != nil {
 		return linuxForegroundApp{}, err
 	}
@@ -119,46 +139,20 @@ func readKDEForeground(ctx context.Context) (linuxForegroundApp, error) {
 	if scriptID < 0 {
 		return linuxForegroundApp{}, errors.New("kwin loadScript failed")
 	}
-	// Unload on every return, including timeout. waitKWinForeground returns after
-	// Script.run finishes, so this stop/unload does not cut off the callDBus reply.
+	// Stop and unload even when script execution or reporting times out.
 	defer unloadKWinForegroundScript(conn, scriptID, pluginName)
 
-	payload, err := waitKWinForeground(ctx, conn, scriptID, report.payload)
-	if err != nil {
-		return linuxForegroundApp{}, err
+	if err := conn.Object(kwinBusName, kwinScriptObjectPath(scriptID)).CallWithContext(ctx, kwinScriptIface+".run", 0).Err; err != nil {
+		return linuxForegroundApp{}, fmt.Errorf("kwin foreground script: %w", err)
 	}
-	return parseKWinForegroundPayload(payload)
-}
 
-// waitKWinForeground lets the script finish after the reply is sent.
-// Unloading while callDBus is still blocked drops the focused-window message.
-func waitKWinForeground(ctx context.Context, conn *dbus.Conn, scriptID int32, reports <-chan string) (string, error) {
-	runDone := make(chan error, 1)
-	go func() {
-		runDone <- conn.Object(kwinBusName, kwinScriptObjectPath(scriptID)).CallWithContext(ctx, kwinScriptIface+".run", 0).Err
-	}()
-
-	var payload string
+	// KWin's callDBus is asynchronous. The run reply can arrive before Report.
 	select {
-	case payload = <-reports:
-	case err := <-runDone:
-		select {
-		case payload = <-reports:
-		default:
-			if err != nil {
-				return "", fmt.Errorf("kwin foreground script: %w", err)
-			}
-			return "", errLinuxForegroundMissing
-		}
+	case payload := <-report.payload:
+		return parseKWinForegroundPayload(payload)
 	case <-ctx.Done():
-		return "", ctx.Err()
+		return linuxForegroundApp{}, ctx.Err()
 	}
-
-	select {
-	case <-runDone:
-	case <-ctx.Done():
-	}
-	return payload, nil
 }
 
 func unloadKWinForegroundScript(conn *dbus.Conn, scriptID int32, pluginName string) {
@@ -174,13 +168,13 @@ func kwinScriptObjectPath(scriptID int32) dbus.ObjectPath {
 
 // kwinForegroundScript builds a script that reports the focused window once.
 // The bus name is interpolated, so it has to be a plain D-Bus token.
-func kwinForegroundScript(busName, objectPath, iface, method string) (string, error) {
+func kwinForegroundScript(busName, objectPath, iface, method, activation string) (string, error) {
 	for _, token := range []string{busName, objectPath, iface, method} {
 		if !kwinDBusTokenOK(token) {
 			return "", fmt.Errorf("invalid kwin dbus token %q", token)
 		}
 	}
-	return fmt.Sprintf(kwinForegroundScriptTemplate, busName, objectPath, iface, method), nil
+	return fmt.Sprintf(kwinForegroundScriptTemplate, activation, busName, objectPath, iface, method), nil
 }
 
 func kwinDBusTokenOK(token string) bool {
@@ -198,8 +192,12 @@ func kwinDBusTokenOK(token string) bool {
 }
 
 const kwinForegroundScriptTemplate = `(function () {
-  var info = {desktopFileName: "", resourceClass: "", resourceName: "", caption: "", pid: 0};
+  var info = {windowId: "", desktopFileName: "", resourceClass: "", resourceName: "", caption: "", pid: 0};
+  function windowId(w) {
+    return w ? String(w.internalId || "").replace(/[{}]/g, "").toLowerCase() : "";
+  }
   try {
+    %s
     var w = workspace.activeWindow;
     if (w) {
       info.desktopFileName = String(w.desktopFileName || "");
@@ -207,6 +205,7 @@ const kwinForegroundScriptTemplate = `(function () {
       info.resourceName = String(w.resourceName || "");
       info.caption = String(w.caption || "");
       info.pid = Number(w.pid) || 0;
+      info.windowId = windowId(w);
     }
   } catch (err) {
   }
@@ -219,7 +218,7 @@ func parseKWinForegroundPayload(payload string) (linuxForegroundApp, error) {
 	if err := json.Unmarshal([]byte(payload), &info); err != nil {
 		return linuxForegroundApp{}, fmt.Errorf("kwin foreground: %w", err)
 	}
-	app := linuxForegroundApp{Pid: info.Pid, Title: info.Caption}
+	app := linuxForegroundApp{WindowID: info.WindowID, Pid: info.Pid, Title: info.Caption}
 	desktopID := normalizeLinuxAppID(info.DesktopFileName)
 	classID := normalizeLinuxAppID(info.ResourceClass)
 	nameID := normalizeLinuxAppID(info.ResourceName)
