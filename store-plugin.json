@@ -2238,7 +2238,7 @@
     "Id": "7a8cc425-3b7f-489c-8cac-1294cf61c19b",
     "Name": "JetBrains Projects",
     "Author": "tomsquest",
-    "Version": "1.0.0",
+    "Version": "1.1.0",
     "MinWoxVersion": "2.4.9",
     "Runtime": "python",
     "Description": "Search the recent projects of your JetBrains IDEs and open them",
@@ -2254,7 +2254,7 @@
       "Darwin"
     ],
     "DateCreated": "2026-11-06 20:21:06",
-    "DateUpdated": "2026-11-06 19:21:06"
+    "DateUpdated": "2026-11-23 21:03:43"
   },
   {
     "Id": "2bc0acfb-88c9-49d1-9acf-7d93ab315a53",
