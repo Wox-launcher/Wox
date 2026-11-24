@@ -33,7 +33,7 @@ func (a *AttentionPlugin) GetMetadata() plugin.Metadata {
 		Id:            plugin.AttentionPluginID,
 		Name:          "i18n:plugin_attention_plugin_name",
 		Author:        "Wox Launcher",
-		Website:       "https://github.com/Wox-launcher/Wox",
+		Website:       plugin.SystemPluginGuideBaseURL + "/guide/plugins/system/attention.html",
 		Version:       "1.0.0",
 		MinWoxVersion: "2.0.0",
 		Runtime:       "Go",
