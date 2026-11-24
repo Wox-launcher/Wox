@@ -17,11 +17,18 @@
     [[ -e "$1" || -L "$1" ]]
   }
 
+  already_installed() {
+    printf 'Wox is already installed (%s).\n' "$1" >&2
+    die "$update_hint"
+  }
+
   download_verified() {
     local asset=$1 expected actual
     expected=$(awk -v asset="$asset" '$2 == asset { print $1 }' "$work/SHA256SUMS")
     [[ "$expected" =~ ^[a-f0-9]{64}$ ]] || die "Missing or invalid SHA-256 checksum for $asset."
-    "${curl_https[@]}" --output "$work/$asset" "$release/$asset" || die "Could not download $asset."
+    printf 'Downloading %s...\n' "$asset"
+    "${curl_https[@]}" --no-silent --progress-bar --output "$work/$asset" "$release/$asset" ||
+      die "Could not download $asset."
     actual=$(sha256sum < "$work/$asset")
     [[ "${actual%% *}" == "$expected" ]] || die "SHA-256 mismatch for $asset."
   }
@@ -37,14 +44,20 @@
   install_dir="$data_home/wox"
   desktop_file="$data_home/applications/$desktop_name"
   icon_file="$data_home/icons/hicolor/256x256/apps/$icon_name"
-  existing="Wox is already installed. Use its existing installation method or update it from Wox."
-  if exists "$install_dir" || exists "$desktop_file" || exists "$icon_file" || command -v wox >/dev/null; then
-    die "$existing"
+  update_hint='Use its existing installation method or update it from Wox.'
+  for path in "$install_dir/wox" "$install_dir" "$desktop_file" "$icon_file"; do
+    if exists "$path"; then
+      already_installed "$path"
+    fi
+  done
+  if existing_path=$(type -P wox); then
+    already_installed "$existing_path"
   fi
   IFS=: read -r -a desktop_roots <<< "${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
   for root in "$HOME/.local/share" "${desktop_roots[@]}"; do
-    if [[ "$root" == /* ]] && exists "$root/applications/$desktop_name"; then
-      die "$existing"
+    path="$root/applications/$desktop_name"
+    if [[ "$root" == /* ]] && exists "$path"; then
+      already_installed "$path"
     fi
   done
 
@@ -102,13 +115,13 @@
     die "The install path contains characters that the application menu cannot use."
 
   mkdir -p -- "$data_home/applications" "${icon_file%/*}"
-  mkdir -- "$install_dir" || die "Could not create $install_dir. $existing"
+  mkdir -- "$install_dir" || die "Could not create $install_dir. $update_hint"
   install_created=1
   install -m 755 -- "$work/$binary" "$install_dir/wox"
 
   icon_staging=$(mktemp "${icon_file%/*}/.wox-install.XXXXXXXX")
   install -m 644 -- "$work/$icon_name" "$icon_staging"
-  ln -T -- "$icon_staging" "$icon_file" || die "Could not install the Wox icon. $existing"
+  ln -T -- "$icon_staging" "$icon_file" || die "Could not install the Wox icon at $icon_file. $update_hint"
 
   desktop_staging=$(mktemp "$data_home/applications/.wox-install.XXXXXXXX")
   while IFS= read -r line; do
@@ -119,6 +132,6 @@
     fi
   done < "$work/$desktop_name" > "$desktop_staging"
   chmod 644 -- "$desktop_staging"
-  ln -T -- "$desktop_staging" "$desktop_file" || die "Could not create the Wox application entry. $existing"
+  ln -T -- "$desktop_staging" "$desktop_file" || die "Could not create the Wox application entry at $desktop_file. $update_hint"
   printf 'Installed Wox %s. Open Wox from your application menu.\n' "$tag"
 )

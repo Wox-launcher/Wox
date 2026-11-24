@@ -70,7 +70,8 @@
       throw "Missing or invalid SHA-256 checksum for $asset."
     }
     $downloaded = Join-Path $work $asset
-    & curl.exe @curlOptions --output $downloaded "$release/$asset"
+    Write-Host "Downloading $asset..."
+    & curl.exe @curlOptions --no-silent --progress-bar --output $downloaded "$release/$asset"
     if ($LASTEXITCODE -ne 0) {
       throw "Could not download $asset."
     }

@@ -24,11 +24,15 @@ cat > "$work/bin/curl" <<'STUB'
 #!/usr/bin/env bash
 set -eu
 output=
+silent=0
+progress_bar=0
 while (( $# > 1 )); do
-  if [[ "$1" == --output ]]; then
-    output=$2
-    shift
-  fi
+  case "$1" in
+    --output) output=$2; shift ;;
+    --silent) silent=1 ;;
+    --no-silent) silent=0 ;;
+    --progress-bar) progress_bar=1 ;;
+  esac
   shift
 done
 case "$1" in
@@ -39,6 +43,7 @@ case "$1" in
     asset=${1##*/}
     cp "$WOX_TEST_RELEASE/$asset" "$output"
     if [[ "$asset" == wox-linux-amd64 ]]; then
+      [[ "$progress_bar" == 1 && "$silent" == 0 ]] || exit 22
       case "${WOX_TEST_DOWNLOAD:-}" in
         interrupted) exit 18 ;;
         corrupt) printf 'unexpected content' >> "$output" ;;
@@ -95,9 +100,18 @@ expect_failure() {
   grep -F "$message" "$work/output"
 }
 
-expect_failure 'already installed' bash "$installer"
+expect_failure "Wox is already installed ($XDG_DATA_HOME/wox/wox)." bash "$installer"
 cmp "$XDG_DATA_HOME/wox/wox" "$work/release/wox-linux-amd64"
 export XDG_DATA_HOME="$work/failed"
+cp "$work/release/wox-linux-amd64" "$work/bin/wox"
+chmod +x "$work/bin/wox"
+expect_failure "Wox is already installed ($work/bin/wox)." bash "$installer"
+rm -- "$work/bin/wox"
+system_entry="$XDG_DATA_DIRS/applications/io.github.WoxLauncher.Wox.desktop"
+mkdir -p -- "${system_entry%/*}"
+cp "$WOX_TEST_ASSETS/linux/wox.desktop" "$system_entry"
+expect_failure "Wox is already installed ($system_entry)." bash "$installer"
+rm -- "$system_entry"
 expect_failure 'requires Linux x64' env WOX_TEST_ARCH=aarch64 bash "$installer"
 expect_failure 'Could not download wox-linux-amd64' env WOX_TEST_DOWNLOAD=interrupted bash "$installer"
 expect_failure 'SHA-256 mismatch' env WOX_TEST_DOWNLOAD=corrupt bash "$installer"

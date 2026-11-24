@@ -11,9 +11,13 @@
   }
 
   check_existing() {
-    if [[ -e "$target" || -L "$target" || -e /Applications/Wox.app || -L /Applications/Wox.app ]]; then
-      die "Wox is already installed. Use its existing installation method or update it from Wox."
-    fi
+    local path
+    for path in "$target" /Applications/Wox.app; do
+      if [[ -e "$path" || -L "$path" ]]; then
+        printf 'Wox is already installed (%s).\n' "$path" >&2
+        die 'Use its existing installation method or update it from Wox.'
+      fi
+    done
   }
 
   [[ "$(uname -s)" == Darwin ]] || die "This installer requires macOS."
@@ -64,7 +68,9 @@
   dmg="$work/$asset"
   expected=$(awk -v asset="$asset" '$2 == asset { print $1 }' "$work/SHA256SUMS")
   [[ "$expected" =~ ^[a-f0-9]{64}$ ]] || die "Missing or invalid SHA-256 checksum for $asset."
-  "${curl_https[@]}" --output "$dmg" "$release/$asset" || die "Could not download $asset."
+  printf 'Downloading %s...\n' "$asset"
+  "${curl_https[@]}" --no-silent --progress-bar --output "$dmg" "$release/$asset" ||
+    die "Could not download $asset."
   actual=$(shasum -a 256 < "$dmg")
   [[ "${actual%% *}" == "$expected" ]] || die "SHA-256 mismatch for $asset."
   spctl --assess --type install "$dmg" || die "macOS could not verify the Wox disk image."
