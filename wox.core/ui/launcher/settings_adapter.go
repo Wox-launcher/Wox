@@ -1,6 +1,7 @@
 package launcher
 
 import (
+	"fmt"
 	"log"
 	"runtime"
 	"strings"
@@ -303,9 +304,13 @@ func (a *App) settingsSearchResultTypeLabel(kind settingsSearchResultKind) strin
 func (a *App) buildSettingsPage(snapshot settingsSnapshot, items []settingItem, width, height, imageScale float32) woxwidget.Widget {
 	contentWidth := launcherview.SettingsPageContentWidth(width)
 	children := make([]woxwidget.Widget, 0, len(items)+9)
+	description := a.settingsPageDescription(snapshot.tab)
+	if command := snapshot.general.Data.ManagedUpdateCommand; snapshot.tab == "updates" && command != "" {
+		description = fmt.Sprintf(a.language.translate("i18n:plugin_update_homebrew_instructions"), command)
+	}
 	children = append(children, a.buildSettingsPageHeader(
 		a.activeSettingsNavLabel(snapshot),
-		a.settingsPageDescription(snapshot.tab),
+		description,
 		contentWidth,
 		snapshot.palette,
 	))

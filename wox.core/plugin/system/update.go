@@ -70,6 +70,10 @@ func (p *UpdatePlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 }
 
 func (p *UpdatePlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResponse {
+	if command := updater.ManagedUpdateCommand(); command != "" {
+		return p.managedUpdateResult(command)
+	}
+
 	info := updater.GetUpdateInfo()
 	autoUpdateEnabled := true
 	releaseChannel := string(setting.ReleaseChannelStable)
@@ -96,6 +100,29 @@ func (p *UpdatePlugin) Query(ctx context.Context, query plugin.Query) plugin.Que
 	}
 
 	return plugin.NewQueryResponse([]plugin.QueryResult{result})
+}
+
+// managedUpdateResult offers the package-manager command in place of in-app update actions.
+func (p *UpdatePlugin) managedUpdateResult(command string) plugin.QueryResponse {
+	return plugin.NewQueryResponse([]plugin.QueryResult{{
+		Title:    "i18n:plugin_update_homebrew_managed",
+		SubTitle: command,
+		Icon:     updateIcon,
+		Actions: []plugin.QueryResultAction{{
+			Name:                   "i18n:plugin_update_action_copy_command",
+			Icon:                   icons.Get(icons.ActionCopy),
+			IsDefault:              true,
+			PreventHideAfterAction: true,
+			Action: func(ctx context.Context, _ plugin.ActionContext) {
+				if err := clipboard.WriteText(command); err != nil {
+					util.GetLogger().Error(ctx, "failed to copy update command: "+err.Error())
+					p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: "i18n:ui_toolbar_copy_failed"})
+					return
+				}
+				p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: "i18n:toolbar_copied"})
+			},
+		}},
+	}})
 }
 
 func (p *UpdatePlugin) buildPreviewData(info updater.UpdateInfo, autoUpdateEnabled bool, releaseChannel string) string {

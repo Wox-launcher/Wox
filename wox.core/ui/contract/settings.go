@@ -186,6 +186,7 @@ type GeneralSettings struct {
 	IsEvdevReadAvailable               bool
 	EnableAutoBackup                   bool
 	EnableAutoUpdate                   bool
+	ManagedUpdateCommand               string
 	ReleaseChannel                     setting.ReleaseChannel
 	EnableAnonymousUsageStats          bool
 	EnablePrivacyMode                  bool

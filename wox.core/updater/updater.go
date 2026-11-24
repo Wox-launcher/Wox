@@ -232,6 +232,10 @@ func removeBackupFile(path string) error {
 
 // StartAutoUpdateChecker starts a background task that periodically checks for updates
 func StartAutoUpdateChecker(ctx context.Context) {
+	if ManagedUpdateCommand() != "" {
+		util.GetLogger().Info(ctx, "Wox updates are managed by Homebrew")
+		return
+	}
 	util.Go(ctx, "auto-update-checker", func() {
 		newCtx := util.NewTraceContext()
 		CheckForUpdatesWithCallback(newCtx, nil)
@@ -246,6 +250,12 @@ func CheckForUpdates(ctx context.Context) {
 }
 
 func CheckForUpdatesWithCallback(ctx context.Context, callback UpdateInfoCallback) {
+	if ManagedUpdateCommand() != "" {
+		if callback != nil {
+			callback(GetUpdateInfo())
+		}
+		return
+	}
 	if network.IsOffline() {
 		if callback != nil {
 			callback(UpdateInfo{Status: UpdateStatusError, UpdateError: network.ErrOffline})
@@ -470,7 +480,7 @@ func getUpdateChannelVersions(ctx context.Context, fetchManifest versionManifest
 
 // GetUpdateChannelVersions returns the latest manifest version for each update channel.
 func GetUpdateChannelVersions(ctx context.Context) []UpdateChannelVersion {
-	if network.IsOffline() {
+	if ManagedUpdateCommand() != "" || network.IsOffline() {
 		return nil
 	}
 	return getUpdateChannelVersions(ctx, getLatestVersion)
@@ -493,7 +503,19 @@ func getLatestVersion(ctx context.Context, releaseChannel setting.ReleaseChannel
 }
 
 func GetUpdateInfo() UpdateInfo {
+	if ManagedUpdateCommand() != "" {
+		return UpdateInfo{CurrentVersion: CURRENT_VERSION, Status: UpdateStatusNone}
+	}
 	return currentUpdateInfo
+}
+
+// ManagedUpdateCommand returns the package-manager command when Wox cannot
+// apply its own updates.
+func ManagedUpdateCommand() string {
+	if util.IsHomebrewAppImage() {
+		return "brew upgrade --cask wox"
+	}
+	return ""
 }
 
 func downloadUpdate(ctx context.Context, callback UpdateInfoCallback) {
@@ -589,6 +611,9 @@ func downloadUpdate(ctx context.Context, callback UpdateInfoCallback) {
 // ApplyUpdate applies the downloaded update
 // This should be called when the user confirms they want to update
 func ApplyUpdate(ctx context.Context, progress ApplyUpdateProgressCallback) error {
+	if command := ManagedUpdateCommand(); command != "" {
+		return fmt.Errorf("run %s to update Wox", command)
+	}
 	util.GetLogger().Info(ctx, "start applying update")
 
 	if currentUpdateInfo.Status != UpdateStatusReady || currentUpdateInfo.DownloadedPath == "" {

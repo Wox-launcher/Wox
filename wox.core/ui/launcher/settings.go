@@ -78,6 +78,7 @@ type settingsData struct {
 	ShowDisplay                        setting.ShowDisplayTarget
 	EnableAutoBackup                   bool
 	EnableAutoUpdate                   bool
+	ManagedUpdateCommand               string
 	ReleaseChannel                     string
 	EnableAnonymousUsageStats          bool
 	EnablePrivacyMode                  bool
@@ -686,6 +687,7 @@ func settingsDataFromContract(loaded contract.GeneralSettings) (settingsData, er
 		ShowDisplay:                        loaded.ShowDisplay,
 		EnableAutoBackup:                   loaded.EnableAutoBackup,
 		EnableAutoUpdate:                   loaded.EnableAutoUpdate,
+		ManagedUpdateCommand:               loaded.ManagedUpdateCommand,
 		ReleaseChannel:                     string(loaded.ReleaseChannel),
 		EnableAnonymousUsageStats:          loaded.EnableAnonymousUsageStats,
 		EnablePrivacyMode:                  loaded.EnablePrivacyMode,
@@ -1630,6 +1632,9 @@ func settingItems(tab string, data settingsData) []settingItem {
 			{key: "ShowPerformanceTailUiReceived", title: "UI received timing", description: "Show time until the Go UI received the result", value: boolValue(data.ShowPerformanceTailUIReceived), choices: boolChoices, disabled: performanceDisabled},
 		}
 	case "updates":
+		if data.ManagedUpdateCommand != "" {
+			return nil
+		}
 		return []settingItem{
 			{key: "EnableAutoUpdate", title: "Enable auto update", description: "Download updates in the background and wait for confirmation before installing", value: boolValue(data.EnableAutoUpdate), choices: boolChoices},
 			{key: "ReleaseChannel", title: "Update channel", description: "Choose whether Wox checks the stable update channel or the beta update channel", value: data.ReleaseChannel, choices: []settingChoice{{"stable", "Stable channel"}, {"beta", "Beta channel"}}},

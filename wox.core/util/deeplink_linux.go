@@ -23,8 +23,13 @@ func EnsureDeepLinkProtocolHandler(ctx context.Context) bool {
 		return IsFileExists(desktopFilePath)
 	}
 
-	if err := WriteLinuxDesktopEntry(desktopFilePath, true, false); err != nil {
-		GetLogger().Error(ctx, fmt.Sprintf("failed to write Linux desktop entry: %s", err.Error()))
+	if homebrewAppImage().desktopEntry == "" {
+		if err := WriteLinuxDesktopEntry(desktopFilePath, true, false); err != nil {
+			GetLogger().Error(ctx, fmt.Sprintf("failed to write Linux desktop entry: %s", err.Error()))
+			return false
+		}
+	} else if !IsFileExists(desktopFilePath) {
+		// Brew owns the entry from installation through uninstall.
 		return false
 	}
 

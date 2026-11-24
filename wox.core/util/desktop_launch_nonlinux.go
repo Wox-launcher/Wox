@@ -19,3 +19,7 @@ func IsLinuxWaylandSession() bool {
 func IsLinuxLaunchedFromStableDesktopEntry() bool {
 	return false
 }
+
+func IsHomebrewAppImage() bool {
+	return false
+}

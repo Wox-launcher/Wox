@@ -167,6 +167,14 @@ func translateDoctorCheckText(ctx context.Context, text string) string {
 }
 
 func checkWoxVersion(ctx context.Context) DoctorCheckResult {
+	if command := updater.ManagedUpdateCommand(); command != "" {
+		return DoctorCheckResult{
+			Name:        "i18n:plugin_doctor_version",
+			Type:        DoctorCheckUpdate,
+			Passed:      true,
+			Description: fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_update_homebrew_instructions"), command),
+		}
+	}
 	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
 	if woxSetting != nil && !woxSetting.EnableAutoUpdate.Get() {
 		return DoctorCheckResult{

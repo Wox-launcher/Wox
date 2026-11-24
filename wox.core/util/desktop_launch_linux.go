@@ -19,6 +19,15 @@ const (
 	linuxDesktopLaunchConfirmedEnv   = "WOX_LINUX_DESKTOP_ENTRY_LAUNCH_CONFIRMED"
 )
 
+// LinuxDesktopEntryPath returns the desktop entry used for Wox's stable
+// application identity, including a Homebrew-configured applications folder.
+func LinuxDesktopEntryPath() (string, error) {
+	if path := homebrewAppImage().desktopEntry; path != "" {
+		return path, nil
+	}
+	return defaultLinuxDesktopEntryPath()
+}
+
 // ShouldRelaunchLinuxFromDesktopEntry reports whether this process should hand
 // off startup to the stable desktop entry before full initialization.
 func ShouldRelaunchLinuxFromDesktopEntry(args []string) bool {

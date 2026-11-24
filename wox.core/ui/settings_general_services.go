@@ -19,6 +19,7 @@ import (
 	"wox/telemetry"
 	"wox/ui/contract"
 	woxui "wox/ui/runtime"
+	"wox/updater"
 	"wox/util"
 	"wox/util/font"
 	"wox/util/keyboard"
@@ -81,6 +82,7 @@ func (s *CoreServices) GeneralSettings(ctx context.Context, sessionID string) (c
 		IsEvdevReadAvailable:               keyboard.IsEvdevReadAvailable(),
 		EnableAutoBackup:                   woxSetting.EnableAutoBackup.Get(),
 		EnableAutoUpdate:                   woxSetting.EnableAutoUpdate.Get(),
+		ManagedUpdateCommand:               updater.ManagedUpdateCommand(),
 		ReleaseChannel:                     woxSetting.ReleaseChannel.Get(),
 		EnableAnonymousUsageStats:          woxSetting.EnableAnonymousUsageStats.Get(),
 		EnablePrivacyMode:                  privacy.IsEnabled(),

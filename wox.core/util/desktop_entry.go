@@ -16,9 +16,7 @@ const (
 	linuxDesktopIconFile = LinuxDesktopAppID + ".png"
 )
 
-// LinuxDesktopEntryPath returns the per-user desktop entry path used as Wox's
-// stable Linux application identity.
-func LinuxDesktopEntryPath() (string, error) {
+func defaultLinuxDesktopEntryPath() (string, error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("failed to get user home directory: %w", err)
