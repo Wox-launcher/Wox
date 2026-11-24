@@ -6,12 +6,11 @@ work=$(mktemp -d)
 trap 'rm -rf -- "$work"' EXIT
 mkdir "$work/bin" "$work/release" "$work/home"
 export HOME="$work/home" XDG_DATA_DIRS="$work/system" WOX_TEST_RELEASE="$work/release"
+export WOX_TEST_ASSETS="$root/assets"
 export PATH="$work/bin:/usr/bin:/bin"
 
-cp "$root/assets/linux/wox.desktop" "$work/release/io.github.WoxLauncher.Wox.desktop"
-cp "$root/assets/app.png" "$work/release/io.github.WoxLauncher.Wox.png"
 printf '#!/bin/sh\nprintf "launched" > "$XDG_DATA_HOME/launched"\n' > "$work/release/wox-linux-amd64"
-(cd "$work/release" && sha256sum --text wox-linux-amd64 *.desktop *.png > SHA256SUMS)
+(cd "$work/release" && sha256sum --text wox-linux-amd64 > SHA256SUMS)
 
 cat > "$work/bin/uname" <<'STUB'
 #!/usr/bin/env bash
@@ -46,6 +45,13 @@ case "$1" in
       esac
     fi
     ;;
+  https://raw.githubusercontent.com/Wox-launcher/Wox/master/assets/linux/wox.desktop)
+    cp "$WOX_TEST_ASSETS/linux/wox.desktop" "$output"
+    ;;
+  https://raw.githubusercontent.com/Wox-launcher/Wox/master/assets/app.png)
+    [[ "${WOX_TEST_DOWNLOAD:-}" != icon-unavailable ]] || exit 22
+    cp "$WOX_TEST_ASSETS/app.png" "$output"
+    ;;
   *) exit 22 ;;
 esac
 STUB
@@ -68,7 +74,7 @@ fi
 test ! -e "$XDG_DATA_HOME"
 bash < "$installer"
 test -x "$XDG_DATA_HOME/wox/wox"
-cmp "$icon" "$work/release/io.github.WoxLauncher.Wox.png"
+cmp "$icon" "$WOX_TEST_ASSETS/app.png"
 grep -Fx "Exec=\"$XDG_DATA_HOME/wox/wox\" %U" "$desktop"
 if command -v gio >/dev/null; then
   gio launch "$desktop"
@@ -95,6 +101,7 @@ export XDG_DATA_HOME="$work/failed"
 expect_failure 'requires Linux x64' env WOX_TEST_ARCH=aarch64 bash "$installer"
 expect_failure 'Could not download wox-linux-amd64' env WOX_TEST_DOWNLOAD=interrupted bash "$installer"
 expect_failure 'SHA-256 mismatch' env WOX_TEST_DOWNLOAD=corrupt bash "$installer"
+expect_failure 'Could not download io.github.WoxLauncher.Wox.png' env WOX_TEST_DOWNLOAD=icon-unavailable bash "$installer"
 expect_failure 'libgtk-3.so.0 => not found' env WOX_TEST_LIBS=missing bash "$installer"
 grep -F 'wox-linux-amd64.AppImage' "$work/output"
 test ! -e "$XDG_DATA_HOME"

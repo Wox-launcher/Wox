@@ -45,8 +45,6 @@ jobs:
           set -euo pipefail
           mkdir -p release-files
           find artifacts -type f -exec cp {} release-files/ \;
-          cp assets/linux/wox.desktop release-files/io.github.WoxLauncher.Wox.desktop
-          cp assets/app.png release-files/io.github.WoxLauncher.Wox.png
           (cd release-files && sha256sum --text * > SHA256SUMS.tmp && mv SHA256SUMS.tmp SHA256SUMS)
           ls -la release-files/
 

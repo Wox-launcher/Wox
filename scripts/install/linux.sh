@@ -4,6 +4,7 @@
   set -euo pipefail
 
   readonly repo=https://github.com/Wox-launcher/Wox
+  readonly assets_url=https://raw.githubusercontent.com/Wox-launcher/Wox/master/assets
   readonly desktop_name=io.github.WoxLauncher.Wox.desktop
   readonly icon_name=io.github.WoxLauncher.Wox.png
 
@@ -87,8 +88,8 @@
     printf 'Wox cannot load its required system libraries:\n%s\n' "$dependencies" >&2
     die "Try the AppImage from $release/wox-linux-amd64.AppImage."
   fi
-  download_verified "$desktop_name"
-  download_verified "$icon_name"
+  "${curl_https[@]}" --output "$work/$desktop_name" "$assets_url/linux/wox.desktop" || die "Could not download $desktop_name."
+  "${curl_https[@]}" --output "$work/$icon_name" "$assets_url/app.png" || die "Could not download $icon_name."
 
   exec_path="$install_dir/wox"
   # The desktop file and its quoted Exec argument each apply a layer of escaping.
