@@ -25,12 +25,19 @@
   $installDirectory = Join-Path $localAppData 'Programs\Wox'
   $executable = Join-Path $installDirectory 'wox.exe'
   $shortcut = Join-Path $programs 'Wox.lnk'
-  $existing = 'Wox is already installed. Use its existing installation method or update it from Wox.'
-  if ((Test-Path -LiteralPath $installDirectory) -or
-      (Test-Path -LiteralPath $shortcut) -or
-      ($commonPrograms -and (Test-Path -LiteralPath (Join-Path $commonPrograms 'Wox.lnk'))) -or
-      (Get-Command wox.exe -CommandType Application -ErrorAction SilentlyContinue)) {
-    throw $existing
+  $knownPaths = @($installDirectory, $shortcut)
+  if ($commonPrograms) {
+    $knownPaths += (Join-Path $commonPrograms 'Wox.lnk')
+  }
+  $existingPath = $knownPaths | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+  if (-not $existingPath) {
+    $existingPath = Get-Command wox.exe -CommandType Application -ErrorAction SilentlyContinue |
+      Select-Object -First 1 -ExpandProperty Source
+  }
+  if ($existingPath) {
+    Write-Host "Wox is already installed ($existingPath)."
+    Write-Host 'Use its existing installation method or update it from Wox.'
+    return
   }
 
   $work = Join-Path ([IO.Path]::GetTempPath()) ('wox-install-' + [Guid]::NewGuid())
