@@ -38,12 +38,6 @@ func simulatePaste() error {
 	return simulateCtrlKeyCombo(evKeyCodeV, "paste", false, nil)
 }
 
-// SimulatePasteAfterFocus prepares uinput and waits for physical modifiers
-// before verifying focus, so neither can delay a confirmed paste.
-func SimulatePasteAfterFocus(shift bool, focus func() error) error {
-	return simulateCtrlKeyCombo(evKeyCodeV, "paste", shift, focus)
-}
-
 // simulateBackspace injects a Backspace key press+release via the uinput
 // virtual keyboard. On Linux/Wayland, when a CapsLock combo (e.g. CapsLock+A)
 // is triggered, the system also sees the combo key and types it into the
@@ -87,7 +81,7 @@ func waitModifiersRelease() {
 var uinputCtrlComboMu sync.Mutex
 
 // simulateCtrlKeyCombo keeps concurrent copy and paste chords from interleaving.
-func simulateCtrlKeyCombo(keyCode uint16, label string, shift bool, beforeSend func() error) error {
+func simulateCtrlKeyCombo(keyCode uint16, label string, shift bool, beforeSend func(int) error) error {
 	waitModifiersRelease()
 	fd, err := ensureUinputDevice()
 	if err != nil {
@@ -103,9 +97,9 @@ func simulateCtrlKeyCombo(keyCode uint16, label string, shift bool, beforeSend f
 }
 
 // writeCtrlKeyCombo puts modifiers before the key and releases them in reverse order.
-func writeCtrlKeyCombo(fd int, keyCode uint16, shift bool, beforeSend func() error) error {
+func writeCtrlKeyCombo(fd int, keyCode uint16, shift bool, beforeSend func(int) error) error {
 	if beforeSend != nil {
-		if err := beforeSend(); err != nil {
+		if err := beforeSend(fd); err != nil {
 			return err
 		}
 	}

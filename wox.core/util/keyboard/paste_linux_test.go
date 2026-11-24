@@ -56,7 +56,7 @@ func TestLinuxPasteChord(t *testing.T) {
 func TestLinuxPasteSkipsInputWhenFocusFails(t *testing.T) {
 	focusErr := errors.New("wrong window")
 	// An invalid FD proves the focus error is returned before any write.
-	err := writeCtrlKeyCombo(-1, evKeyCodeV, true, func() error { return focusErr })
+	err := writeCtrlKeyCombo(-1, evKeyCodeV, true, func(int) error { return focusErr })
 	if !errors.Is(err, focusErr) {
 		t.Fatalf("expected focus error, got %v", err)
 	}

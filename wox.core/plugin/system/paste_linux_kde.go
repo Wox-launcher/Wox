@@ -17,7 +17,7 @@ import (
 // pasteToKDEWindow checks the captured target immediately before injecting the chord.
 func pasteToKDEWindow(ctx context.Context, api plugin.API, target plugin.QueryEnv) error {
 	shift := kdePasteUsesShift(window.GetProcessIdentity(target.ActiveWindowPid))
-	err := keyboard.SimulatePasteAfterFocus(shift, func() error {
+	err := keyboard.SimulateKDEPasteAfterFocus(ctx, shift, func() error {
 		if api.IsVisible(ctx) {
 			return errors.New("launcher is visible")
 		}
