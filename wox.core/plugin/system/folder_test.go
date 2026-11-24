@@ -9,6 +9,7 @@ import (
 
 	"wox/common"
 	"wox/plugin"
+	"wox/util"
 )
 
 func TestFolderActionsExposeStableIDs(t *testing.T) {
@@ -236,6 +237,7 @@ func TestFolderQueryListsParentDirectoryFirst(t *testing.T) {
 	if response.Results[1].Title != "notes.txt" {
 		t.Fatalf("child = %#v, want notes.txt", response.Results[1])
 	}
+	assertFolderRevealHotkey(t, response.Results[1].Actions)
 
 	filtered := folderPlugin.Query(t.Context(), plugin.Query{
 		Type:   plugin.QueryTypeInput,
@@ -415,6 +417,7 @@ func TestFolderQueryFindsFileAndFolderFavorites(t *testing.T) {
 		"delete_folder_favorite",
 		folderToggleHiddenFilesActionID,
 	})
+	assertFolderRevealHotkey(t, fileResult.Results[0].Actions)
 
 	folderResult := folderPlugin.Query(t.Context(), plugin.Query{Type: plugin.QueryTypeInput, Search: "source"})
 	if len(folderResult.Results) != 1 || folderResult.Results[0].Title != "source" || folderResult.Results[0].SubTitle != folderPath {
@@ -502,6 +505,24 @@ func assertFolderPreviewHidden(t *testing.T, result plugin.QueryResult, path str
 	preview := result.Preview
 	if preview.PreviewType != plugin.WoxPreviewTypeFile || preview.PreviewData != path || !preview.DefaultHidden {
 		t.Fatalf("preview = %#v, want hidden file preview for %q", preview, path)
+	}
+}
+
+// assertFolderRevealHotkey checks that the platform shortcut only opens the containing folder.
+func assertFolderRevealHotkey(t *testing.T, actions []plugin.QueryResultAction) {
+	t.Helper()
+	hotkey := util.PrimaryHotkey("enter")
+	found := false
+	for _, action := range actions {
+		if action.Hotkey == hotkey {
+			if found || action.Id != folderOpenContainingFolderActionID || action.IsDefault || action.Action == nil {
+				t.Fatalf("unexpected action for %s: %#v", hotkey, action)
+			}
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("missing %s shortcut for %s", hotkey, folderOpenContainingFolderActionID)
 	}
 }
 

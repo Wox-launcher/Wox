@@ -490,16 +490,7 @@ func (p *FolderPlugin) buildPathActions(path string, isDir bool, favoriteMatch *
 			actions = append(actions, p.buildAddFavoriteAction(filepath.Base(path), path))
 		}
 	} else {
-		actions = append(actions, plugin.QueryResultAction{
-			Id:   folderOpenContainingFolderActionID,
-			Name: "i18n:plugin_folder_open_containing_folder",
-			Icon: icons.Get(icons.ActionOpenContainingFolder),
-			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-				if err := shell.OpenFileInFolder(path); err != nil && p.api != nil {
-					p.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to open containing folder: path=%s err=%s", path, err.Error()))
-				}
-			},
-		})
+		actions = append(actions, p.buildOpenContainingFolderAction(path))
 		actions = append(actions, p.buildCopyPathAction(path), p.buildCopyNameAction("", path))
 		actions = append(actions, p.buildExecuteCommandAtLocationAction(path, false))
 	}
@@ -523,16 +514,7 @@ func (p *FolderPlugin) buildFavoriteActions(name string, path string, isDir bool
 		p.buildBrowseAction(path, isDir),
 	}
 	if !isDir {
-		actions = append(actions, plugin.QueryResultAction{
-			Id:   folderOpenContainingFolderActionID,
-			Name: "i18n:plugin_folder_open_containing_folder",
-			Icon: icons.Get(icons.ActionOpenContainingFolder),
-			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-				if err := shell.OpenFileInFolder(path); err != nil && p.api != nil {
-					p.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to open containing folder: path=%s err=%s", path, err.Error()))
-				}
-			},
-		})
+		actions = append(actions, p.buildOpenContainingFolderAction(path))
 	}
 	actions = append(actions,
 		p.buildCopyPathAction(path),
@@ -544,6 +526,21 @@ func (p *FolderPlugin) buildFavoriteActions(name string, path string, isDir bool
 
 	actions = append(actions, p.buildToggleHiddenFilesAction())
 	return actions
+}
+
+// buildOpenContainingFolderAction shares the file manager shortcut across path results and favorites.
+func (p *FolderPlugin) buildOpenContainingFolderAction(path string) plugin.QueryResultAction {
+	return plugin.QueryResultAction{
+		Id:     folderOpenContainingFolderActionID,
+		Name:   "i18n:plugin_folder_open_containing_folder",
+		Icon:   icons.Get(icons.ActionOpenContainingFolder),
+		Hotkey: util.PrimaryHotkey("enter"),
+		Action: func(ctx context.Context, _ plugin.ActionContext) {
+			if err := shell.OpenFileInFolder(path); err != nil && p.api != nil {
+				p.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to open containing folder: path=%s err=%s", path, err.Error()))
+			}
+		},
+	}
 }
 
 // buildBrowseAction shares directory navigation across path results and saved favorites.

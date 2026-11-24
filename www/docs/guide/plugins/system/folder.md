@@ -15,7 +15,7 @@ C:\Users
 %LOCALAPPDATA%
 ```
 
-Press `Enter` to open the folder. Press `Shift+Enter` to browse it inside Wox, then use the same shortcut to enter subfolders. On a file result, `Shift+Enter` browses its containing folder. The shortcut also works for favorites. The Action Panel provides these actions, opening the containing directory in the file manager, running a Shell command here, and toggling hidden files.
+Press `Enter` to open the folder. Press `Shift+Enter` to browse it inside Wox, then use the same shortcut to enter subfolders. When you select a file, including a favorite, `Shift+Enter` browses its containing folder in Wox and `Ctrl+Enter` (`Cmd+Enter` on macOS) opens it in the file manager. The Action Panel also lets you run a Shell command here and toggle hidden files.
 
 ## Favorites
 
