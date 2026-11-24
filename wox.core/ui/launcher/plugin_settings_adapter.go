@@ -704,11 +704,12 @@ func (c *pluginSettingsController) pluginStoreDetailProps(snapshot settingsSnaps
 	var externalIcon *woxui.Image
 	var websiteIcon *woxui.Image
 	if strings.TrimSpace(plugin.Website) != "" {
-		websiteLabel = c.language.translate("i18n:ui_plugin_website")
+		var iconName string
+		websiteLabel, iconName = c.pluginWebsiteLabelAndIcon(plugin)
 		websiteChipLabel = websiteLabel
 		onWebsite = c.openSelectedPluginWebsite
 		iconTint := snapshot.palette.Text
-		externalIcon = c.imageForTint(settingControlIconSource("external"), &iconTint, physicalImageSize(13, imageScale))
+		externalIcon = c.imageForTint(settingControlIconSource(iconName), &iconTint, physicalImageSize(13, imageScale))
 		websiteIcon = externalIcon
 		websiteURL, _ := url.Parse(strings.TrimSpace(plugin.Website))
 		if websiteURL != nil && (strings.EqualFold(websiteURL.Hostname(), "github.com") || strings.EqualFold(websiteURL.Hostname(), "gist.github.com") || strings.EqualFold(websiteURL.Hostname(), "www.github.com")) {
@@ -954,12 +955,20 @@ func (c *pluginSettingsController) pluginMetadataActions(snapshot settingsSnapsh
 	actions := make([]launcherview.PluginAction, 0, 1)
 	if strings.TrimSpace(plugin.Website) != "" {
 		iconTint := snapshot.palette.Text
+		label, iconName := c.pluginWebsiteLabelAndIcon(plugin)
 		actions = append(actions, launcherview.PluginAction{
-			ID: "plugin-website", Label: c.language.translate("i18n:ui_plugin_website"), Icon: c.imageForTint(settingControlIconSource("external"), &iconTint, physicalImageSize(14, imageScale)),
+			ID: "plugin-website", Label: label, Icon: c.imageForTint(settingControlIconSource(iconName), &iconTint, physicalImageSize(14, imageScale)),
 			Width: 88, Enabled: true, OnTap: c.openSelectedPluginWebsite,
 		})
 	}
 	return actions
+}
+
+func (c *pluginSettingsController) pluginWebsiteLabelAndIcon(plugin pluginSettingsPlugin) (label, iconName string) {
+	if _, ok := plugin.guidePath(); ok {
+		return c.language.translate("i18n:ui_about_docs"), "documentation"
+	}
+	return c.language.translate("i18n:ui_plugin_website"), "external"
 }
 
 func pluginOperationButtonLabel(plugins pluginSettingsSnapshot, kind, pluginID, idle string) string {

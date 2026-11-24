@@ -1457,23 +1457,60 @@ func TestOpenPluginAIModelChoiceUsesCachedCatalogAndEmptyState(t *testing.T) {
 	}
 }
 
-func TestPluginWebsiteButtonsCoverGitHubGistAndOtherSites(t *testing.T) {
+func TestPluginWebsiteButtonsCoverSystemGuidesAndOtherSites(t *testing.T) {
 	a := newApp(false, nil, woxui.NewWindowManager(), newAppInstanceRegistry(), nil, true, "", launcherWindowID)
 	defer a.cancel()
-	a.language.translations = map[string]string{"ui_plugin_website": "Website"}
-	for _, test := range []struct{ website, label string }{
-		{"https://github.com/example/plugin", "GitHub"},
-		{"https://gist.github.com/example/123", "GitHub"},
-		{"https://example.com/plugin", "Website"},
-		{"https://example.com/github.com", "Website"},
-		{"", ""},
+	a.language.translations = map[string]string{"ui_plugin_website": "Website", "ui_about_docs": "Docs"}
+	const guide = "https://www.woxlauncher.com/guide/plugins/system/application.html"
+	for _, test := range []struct {
+		website, chipLabel, actionLabel string
+		isSystem                        bool
+	}{
+		{guide, "Docs", "Docs", true},
+		{guide, "Website", "Website", false},
+		{"https://github.com/Wox-launcher/Wox", "GitHub", "Website", true},
+		{"https://github.com/example/plugin", "GitHub", "Website", false},
+		{"https://gist.github.com/example/123", "GitHub", "Website", false},
+		{"https://example.com/plugin", "Website", "Website", false},
+		{"https://example.com/github.com", "Website", "Website", false},
+		{"", "", "", false},
 	} {
-		props := a.pluginSettings.pluginStoreDetailProps(settingsSnapshot{}, pluginSettingsPlugin{Website: test.website}, 600, 1)
-		if props.WebsiteChipLabel != test.label {
-			t.Fatalf("website %q label = %q, want %q", test.website, props.WebsiteChipLabel, test.label)
+		item := pluginSettingsPlugin{Website: test.website, IsSystem: test.isSystem}
+		props := a.pluginSettings.pluginStoreDetailProps(settingsSnapshot{}, item, 600, 1)
+		if props.WebsiteChipLabel != test.chipLabel {
+			t.Fatalf("website %q (system: %v) label = %q, want %q", test.website, test.isSystem, props.WebsiteChipLabel, test.chipLabel)
 		}
 		if (props.OnWebsite != nil) != (test.website != "") {
 			t.Fatalf("website %q has incorrect button availability", test.website)
+		}
+		actions := a.pluginSettings.pluginMetadataActions(settingsSnapshot{}, item, 1)
+		if test.actionLabel == "" {
+			if len(actions) != 0 {
+				t.Fatalf("website %q has unexpected metadata actions: %v", test.website, actions)
+			}
+		} else if len(actions) != 1 || actions[0].Label != test.actionLabel || actions[0].OnTap == nil {
+			t.Fatalf("website %q (system: %v) metadata actions = %v, want %q", test.website, test.isSystem, actions, test.actionLabel)
+		}
+	}
+}
+
+func TestSystemPluginGuideFollowsWoxLanguage(t *testing.T) {
+	const english = "https://www.woxlauncher.com/guide/plugins/system/application.html"
+	const chinese = "https://www.woxlauncher.com/zh/guide/plugins/system/application.html"
+	const github = "https://github.com/Wox-launcher/Wox"
+	for _, test := range []struct {
+		website, language, want string
+		isSystem                bool
+	}{
+		{english, "en_US", english, true},
+		{english, "zh_CN", chinese, true},
+		{english, "ja_JP", english, true},
+		{english, "zh_CN", english, false},
+		{github, "zh_CN", github, true},
+	} {
+		item := pluginSettingsPlugin{Website: test.website, IsSystem: test.isSystem}
+		if got := item.websiteURL(test.language); got != test.want {
+			t.Errorf("website %q (system: %v) in %s = %q, want %q", test.website, test.isSystem, test.language, got, test.want)
 		}
 	}
 }

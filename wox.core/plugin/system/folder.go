@@ -75,7 +75,7 @@ func (p *FolderPlugin) GetMetadata() plugin.Metadata {
 		Id:            PluginID,
 		Name:          "i18n:plugin_folder_plugin_name",
 		Author:        "Wox Launcher",
-		Website:       "https://github.com/Wox-launcher/Wox",
+		Website:       plugin.SystemPluginGuideBaseURL + "/guide/plugins/system/folder.html",
 		Version:       "1.0.0",
 		MinWoxVersion: "2.0.0",
 		Runtime:       "Go",

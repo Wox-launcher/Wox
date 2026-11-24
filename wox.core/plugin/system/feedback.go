@@ -40,7 +40,7 @@ func (p *FeedbackPlugin) GetMetadata() plugin.Metadata {
 		Id:            common.FeedbackPluginID,
 		Name:          "i18n:plugin_feedback_plugin_name",
 		Author:        "Wox Launcher",
-		Website:       "https://github.com/Wox-launcher/Wox",
+		Website:       plugin.SystemPluginGuideBaseURL + "/guide/plugins/system/feedback.html",
 		Version:       "1.0.0",
 		MinWoxVersion: "2.0.0",
 		Runtime:       "Go",

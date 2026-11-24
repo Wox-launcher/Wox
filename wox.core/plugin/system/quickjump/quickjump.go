@@ -103,6 +103,7 @@ func (c *QuickJumpPlugin) GetMetadata() plugin.Metadata {
 		Id:            common.QuickJumpPluginID,
 		Name:          "i18n:plugin_quickjump_plugin_name",
 		Author:        "Wox Launcher",
+		Website:       plugin.SystemPluginGuideBaseURL + "/guide/plugins/system/explorer.html",
 		Version:       "1.0.0",
 		MinWoxVersion: "2.0.0",
 		Runtime:       "Go",

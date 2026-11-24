@@ -45,6 +45,7 @@ func (p *Plugin) GetMetadata() plugin.Metadata {
 		Id:            common.NotesPluginID,
 		Name:          "i18n:plugin_notes_plugin_name",
 		Author:        "Wox Launcher",
+		Website:       plugin.SystemPluginGuideBaseURL + "/features/notes.html",
 		Version:       "1.0.0",
 		MinWoxVersion: "2.0.0",
 		Runtime:       "Go",

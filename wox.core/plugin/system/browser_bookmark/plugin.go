@@ -59,7 +59,7 @@ func (c *BrowserBookmarkPlugin) GetMetadata() plugin.Metadata {
 		Id:            common.BrowserBookmarkPluginID,
 		Name:          "i18n:plugin_browser_bookmark_plugin_name",
 		Author:        "Wox Launcher",
-		Website:       "https://github.com/Wox-launcher/Wox",
+		Website:       plugin.SystemPluginGuideBaseURL + "/guide/plugins/system/browser-bookmark.html",
 		Version:       "1.0.0",
 		MinWoxVersion: "2.0.0",
 		Runtime:       "Go",

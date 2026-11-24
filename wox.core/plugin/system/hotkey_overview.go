@@ -28,7 +28,7 @@ func (p *HotkeyOverviewPlugin) GetMetadata() plugin.Metadata {
 		Id:            common.HotkeyOverviewPluginID,
 		Name:          "i18n:plugin_hotkey_overview_plugin_name",
 		Author:        "Wox Launcher",
-		Website:       "https://github.com/Wox-launcher/Wox",
+		Website:       plugin.SystemPluginGuideBaseURL + "/guide/plugins/system/hotkey-overview.html",
 		Version:       "1.0.0",
 		MinWoxVersion: "2.0.0",
 		Runtime:       "Go",

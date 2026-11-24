@@ -66,6 +66,9 @@ const (
 	MetadataFeatureGridLayout MetadataFeatureName = "gridLayout"
 )
 
+// SystemPluginGuideBaseURL is the origin for built-in plugin documentation.
+const SystemPluginGuideBaseURL = "https://www.woxlauncher.com"
+
 // Metadata parsed from plugin.json, see `Plugin.json.md` for more detail
 // All properties are immutable after initialization
 type Metadata struct {

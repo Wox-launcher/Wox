@@ -40,7 +40,8 @@ func (p *Plugin) GetMetadata() plugin.Metadata {
 	return plugin.Metadata{
 		Id: pluginID, Name: "i18n:plugin_snippets_plugin_name", Description: "i18n:plugin_snippets_plugin_description",
 		Author: "Wox Launcher", Version: "1.0.0", MinWoxVersion: "2.0.0", Runtime: "Go",
-		Icon: icons.Get(icons.PluginSnippets).String(), TriggerKeywords: []string{"snip"},
+		Website: plugin.SystemPluginGuideBaseURL + "/guide/plugins/system/snippets.html",
+		Icon:    icons.Get(icons.PluginSnippets).String(), TriggerKeywords: []string{"snip"},
 		SupportedOS: []string{"Windows", "Macos", "Linux"},
 		SettingDefinitions: definition.PluginSettingDefinitions{
 			{Type: definition.PluginSettingDefinitionTypeCheckBox, Value: &definition.PluginSettingValueCheckBox{

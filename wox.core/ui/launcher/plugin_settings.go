@@ -566,6 +566,21 @@ func (c *pluginSettingsController) runPluginOperation(kind string) {
 	})
 }
 
+// guidePath identifies the canonical English guide URL declared by a system plugin.
+func (p pluginSettingsPlugin) guidePath() (string, bool) {
+	if !p.IsSystem {
+		return "", false
+	}
+	return strings.CutPrefix(strings.TrimSpace(p.Website), plugin.SystemPluginGuideBaseURL+"/")
+}
+
+func (p pluginSettingsPlugin) websiteURL(lang string) string {
+	if path, ok := p.guidePath(); ok && isChineseLangCode(lang) {
+		return plugin.SystemPluginGuideBaseURL + "/zh/" + path
+	}
+	return strings.TrimSpace(p.Website)
+}
+
 // openSelectedPluginWebsite keeps browser dispatch behind the portable Window capability.
 func (c *pluginSettingsController) openSelectedPluginWebsite() {
 	plugins := c.Plugins()
@@ -573,7 +588,7 @@ func (c *pluginSettingsController) openSelectedPluginWebsite() {
 	if selected < 0 || selected >= len(plugins) {
 		return
 	}
-	target := strings.TrimSpace(plugins[selected].Website)
+	target := plugins[selected].websiteURL(c.language.activeCode())
 	if target == "" {
 		return
 	}

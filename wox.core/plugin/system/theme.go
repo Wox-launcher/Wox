@@ -32,7 +32,7 @@ func (c *ThemePlugin) GetMetadata() plugin.Metadata {
 		Id:            common.ThemePluginID,
 		Name:          "i18n:plugin_theme_plugin_name",
 		Author:        "Wox Launcher",
-		Website:       "https://github.com/Wox-launcher/Wox",
+		Website:       plugin.SystemPluginGuideBaseURL + "/guide/plugins/system/theme.html",
 		Version:       "1.0.0",
 		MinWoxVersion: "2.0.0",
 		Runtime:       "Go",

@@ -112,7 +112,7 @@ func (r *WebSearchPlugin) GetMetadata() plugin.Metadata {
 		Id:            common.WebSearchPluginID,
 		Name:          "i18n:plugin_websearch_plugin_name",
 		Author:        "Wox Launcher",
-		Website:       "https://github.com/Wox-launcher/Wox",
+		Website:       plugin.SystemPluginGuideBaseURL + "/guide/plugins/system/websearch.html",
 		Version:       "1.0.0",
 		MinWoxVersion: "2.0.0",
 		Runtime:       "Go",

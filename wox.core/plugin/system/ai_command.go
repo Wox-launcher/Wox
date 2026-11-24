@@ -132,7 +132,7 @@ func (c *Plugin) GetMetadata() plugin.Metadata {
 		Id:            common.AICommandPluginID,
 		Name:          "i18n:plugin_ai_command_plugin_name",
 		Author:        "Wox Launcher",
-		Website:       "https://github.com/Wox-launcher/Wox",
+		Website:       plugin.SystemPluginGuideBaseURL + "/guide/ai/commands.html",
 		Version:       "1.0.0",
 		MinWoxVersion: "2.0.0",
 		Runtime:       "Go",

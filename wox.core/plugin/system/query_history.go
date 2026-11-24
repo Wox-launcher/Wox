@@ -25,7 +25,7 @@ func (i *QueryHistoryPlugin) GetMetadata() plugin.Metadata {
 		Id:            common.QueryHistoryPluginID,
 		Name:          "i18n:plugin_query_history_plugin_name",
 		Author:        "Wox Launcher",
-		Website:       "https://github.com/Wox-launcher/Wox",
+		Website:       plugin.SystemPluginGuideBaseURL + "/guide/plugins/system/query-history.html",
 		Version:       "1.0.0",
 		MinWoxVersion: "2.0.0",
 		Runtime:       "Go",
