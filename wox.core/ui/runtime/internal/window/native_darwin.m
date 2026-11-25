@@ -4,6 +4,7 @@
 #import "floating_material_darwin.h"
 #import "native_darwin_platform.h"
 
+#import <Carbon/Carbon.h>
 #import <Cocoa/Cocoa.h>
 #import <CoreText/CoreText.h>
 #import <CoreVideo/CoreVideo.h>
@@ -136,6 +137,9 @@ struct WoxDarwinWindow {
   bool application_window;
   bool topmost;
   bool nonactivating;
+  bool focus_without_activation;
+  CGFloat title_bar_height;
+  uint8_t title_bar_controls;
   bool native_dialog_active;
   bool input_enabled;
   uint8_t pointer_cursor;
@@ -481,9 +485,6 @@ static void apply_window_chrome(WoxDarwinWindow *window) {
 
 @interface WoxNativeWindow : NSWindow
 @property(nonatomic, assign) BOOL woxNonactivating;
-@property(nonatomic, assign) WoxDarwinWindow *woxOwner;
-@property(nonatomic, assign) CGFloat woxTitleBarHeight;
-@property(nonatomic, assign) uint8_t woxTitleBarControls;
 @end
 
 @implementation WoxNativeWindow
@@ -494,23 +495,14 @@ static void apply_window_chrome(WoxDarwinWindow *window) {
 - (BOOL)canBecomeMainWindow {
   return !self.woxNonactivating;
 }
-
-// Keep the native green button on the host's existing maximize/restore path.
-- (void)woxMaximize:(id)sender {
-  (void)sender;
-  WoxDarwinWindow *owner = self.woxOwner;
-  if (owner != NULL && !owner->closed) {
-    woxGoDarwinMaximizeRequested(owner->context);
-  }
-}
 @end
 
 // Position AppKit-owned buttons in content points, retaining their system size,
 // title-bar hierarchy, hover tracking, accessibility, and OS-specific material.
 static void update_title_bar_controls(WoxDarwinWindow *window) {
   if (window == NULL || window->closed || window->window == nil || window->screenshot_window) return;
-  WoxNativeWindow *native = (WoxNativeWindow *)window->window;
-  uint8_t controls = native.woxTitleBarControls;
+  NSWindow *native = window->window;
+  uint8_t controls = window->title_bar_controls;
   NSWindowButton types[] = {NSWindowCloseButton, NSWindowMiniaturizeButton, NSWindowZoomButton};
   for (int index = 0; index < 3; index++) {
     NSButton *button = [native standardWindowButton:types[index]];
@@ -526,7 +518,7 @@ static void update_title_bar_controls(WoxDarwinWindow *window) {
     if (!visible || button.superview == nil) continue;
     if (index == 2) {
       button.enabled = (controls & WOX_TITLE_BAR_MAXIMIZE) != 0;
-      button.target = native;
+      button.target = window->delegate;
       button.action = @selector(woxMaximize:);
     }
   }
@@ -538,7 +530,7 @@ static void update_title_bar_controls(WoxDarwinWindow *window) {
     if (button.hidden || button.superview == nil) continue;
     NSView *content = native.contentView;
     // AppKit points are logical units; backingScaleFactor belongs only to rendering.
-    CGFloat center_y = content.isFlipped ? native.woxTitleBarHeight / 2.0 : NSHeight(content.bounds) - native.woxTitleBarHeight / 2.0;
+    CGFloat center_y = content.isFlipped ? window->title_bar_height / 2.0 : NSHeight(content.bounds) - window->title_bar_height / 2.0;
     int slot = index == 2 && (controls & WOX_TITLE_BAR_MINIMIZE) == 0 ? 1 : index;
     NSPoint center = [button.superview convertPoint:NSMakePoint(23.0 + 23.0 * slot, center_y) fromView:content];
     [button setFrameOrigin:NSMakePoint(center.x - NSWidth(button.frame) / 2.0, center.y - NSHeight(button.frame) / 2.0)];
@@ -2471,6 +2463,14 @@ static uint8_t portable_pointer_button(NSEvent *event) {
 @end
 
 @implementation WoxWindowDelegate
+// Keep the native green button on the host's existing maximize/restore path.
+- (void)woxMaximize:(id)sender {
+  (void)sender;
+  if (_owner != NULL && !_owner->closed) {
+    woxGoDarwinMaximizeRequested(_owner->context);
+  }
+}
+
 // Finish AppKit's title-bar layout before positioning captions in the same resize
 // transaction. Render callbacks can run before that layout and cause visible jumps.
 - (void)windowDidResize:(NSNotification *)notification {
@@ -2550,7 +2550,7 @@ int32_t wox_darwin_run(uintptr_t context) {
   return 0;
 }
 
-WoxDarwinWindow *wox_darwin_window_create(const char *title, float width, float height, int32_t hide_on_blur, int32_t window_role, int32_t nonactivating, int32_t resizable, int32_t transparent, float aspect_ratio, uintptr_t context) {
+WoxDarwinWindow *wox_darwin_window_create(const char *title, float width, float height, int32_t hide_on_blur, int32_t window_role, int32_t nonactivating, int32_t focus_without_activation, int32_t resizable, int32_t transparent, float aspect_ratio, uintptr_t context) {
   if (![NSThread isMainThread] || width <= 0.0f || height <= 0.0f || context == 0) {
     return NULL;
   }
@@ -2561,6 +2561,7 @@ WoxDarwinWindow *wox_darwin_window_create(const char *title, float width, float 
     bool is_screenshot_window = window_role == 2;
     bool is_nonactivating = nonactivating != 0;
     bool is_overlay_style = is_screenshot_window || is_nonactivating;
+    bool is_focus_panel = focus_without_activation != 0 && !is_application_window && !is_overlay_style;
     // Transparent borderless windows make AppKit derive shadows from the
     // asynchronously presented IOSurface, which produces rectangular flashes
     // and streaks. A hidden full-size title bar keeps nonactivating overlays
@@ -2575,7 +2576,14 @@ WoxDarwinWindow *wox_darwin_window_create(const char *title, float width, float 
     if (resizable != 0) {
       style_mask |= NSWindowStyleMaskResizable;
     }
-    Class window_class = is_screenshot_window ? [WoxOverlayPanel class] : [WoxNativeWindow class];
+    Class window_class = [WoxNativeWindow class];
+    if (is_screenshot_window) {
+      window_class = [WoxOverlayPanel class];
+    } else if (is_focus_panel) {
+      // AppKit sets up nonactivating keyboard focus when the panel is created.
+      window_class = [NSPanel class];
+      style_mask |= NSWindowStyleMaskNonactivatingPanel;
+    }
     NSWindow *native_window = [[window_class alloc]
         initWithContentRect:frame
                   styleMask:style_mask
@@ -2584,6 +2592,8 @@ WoxDarwinWindow *wox_darwin_window_create(const char *title, float width, float 
     native_window.releasedWhenClosed = NO;
     if (is_screenshot_window) {
       ((WoxOverlayPanel *)native_window).woxNonactivating = is_nonactivating;
+    } else if (is_focus_panel) {
+      ((NSPanel *)native_window).hidesOnDeactivate = NO;
     } else {
       ((WoxNativeWindow *)native_window).woxNonactivating = is_nonactivating;
     }
@@ -2672,13 +2682,11 @@ WoxDarwinWindow *wox_darwin_window_create(const char *title, float width, float 
     window->web_view_signatures = [[NSMutableDictionary alloc] init];
     window->web_view_content_keys = [[NSMutableDictionary alloc] init];
     window->context = context;
-    if (!is_screenshot_window) {
-      ((WoxNativeWindow *)native_window).woxOwner = window;
-    }
     window->hide_on_blur = hide_on_blur != 0;
     window->screenshot_window = is_screenshot_window;
     window->transparent = transparent != 0;
     window->application_window = is_application_window;
+    window->focus_without_activation = is_focus_panel;
     if (is_screenshot_window || transparent) {
       // A visual-effect container would turn transparent pixels into a blur.
       native_window.contentView = view;
@@ -2710,24 +2718,34 @@ int32_t wox_darwin_window_set_title_bar_controls(WoxDarwinWindow *window, float 
       result = -1;
       return;
     }
-    WoxNativeWindow *native = (WoxNativeWindow *)window->window;
-    if (native.woxTitleBarControls == controls && native.woxTitleBarHeight == height) return;
+    NSWindow *native = window->window;
+    if (window->title_bar_controls == controls && window->title_bar_height == height) return;
     NSWindowStyleMask mask = native.styleMask;
     if ((controls & WOX_TITLE_BAR_CLOSE) != 0) mask |= NSWindowStyleMaskClosable;
     if ((controls & WOX_TITLE_BAR_MINIMIZE) != 0) mask |= NSWindowStyleMaskMiniaturizable;
     if (native.styleMask != mask) native.styleMask = mask;
-    native.woxTitleBarHeight = height;
-    native.woxTitleBarControls = controls;
+    window->title_bar_height = height;
+    window->title_bar_controls = controls;
     update_title_bar_controls(window);
   });
   return result;
 }
 
-// Nonactivating screenshot panels can own keyboard focus while another app remains active.
+// Nonactivating panels can own keyboard focus while another app remains frontmost.
 // Ordinary windows still need app activation to reject stale retained key-window state.
 int32_t wox_darwin_window_is_focused(WoxDarwinWindow *window) {
   return window != NULL && !window->closed && window->window.isVisible &&
-         !window->window.isMiniaturized && (NSApp.isActive || window->screenshot_window) && window->window.isKeyWindow;
+         !window->window.isMiniaturized && (NSApp.isActive || window->screenshot_window || window->focus_without_activation) && window->window.isKeyWindow;
+}
+
+static void focus_darwin_window(WoxDarwinWindow *window, bool activate_app) {
+  // A foreground password field can block app activation. A nonactivating
+  // panel can receive keyboard input through AppKit while Secure Input stays on.
+  if (activate_app && !(window->focus_without_activation && IsSecureEventInputEnabled())) {
+    [NSApp activateIgnoringOtherApps:YES];
+  }
+  [window->window makeKeyAndOrderFront:nil];
+  [window->window makeFirstResponder:window->view];
 }
 
 uint64_t wox_darwin_window_show(WoxDarwinWindow *window) {
@@ -2757,11 +2775,7 @@ uint64_t wox_darwin_window_show(WoxDarwinWindow *window) {
     if (window->nonactivating) {
       [window->window orderFrontRegardless];
     } else {
-      if (!window->screenshot_window) {
-        [NSApp activateIgnoringOtherApps:YES];
-      }
-      [window->window makeKeyAndOrderFront:nil];
-      [window->window makeFirstResponder:window->view];
+      focus_darwin_window(window, !window->screenshot_window);
     }
     // Ordering a fixed-size window front can restore AppKit's disabled zoom-button frame.
     // Reapply the shared centerline after that first native layout, even without a resize.
@@ -2792,7 +2806,9 @@ int32_t wox_darwin_window_hide(WoxDarwinWindow *window) {
       result = -1;
       return;
     }
-    BOOL was_wox_frontmost = [NSApp isActive] || [[NSWorkspace sharedWorkspace] frontmostApplication] == [NSRunningApplication currentApplication];
+    // AppKit may report a key panel as active even while another app is frontmost.
+    BOOL was_wox_frontmost = (!window->focus_without_activation && NSApp.isActive) ||
+                             NSWorkspace.sharedWorkspace.frontmostApplication == NSRunningApplication.currentApplication;
     emit_focus(window, false);
     if (!window->closed) {
       stop_darwin_display_link(window);
@@ -3214,9 +3230,7 @@ int32_t wox_darwin_window_pick_file(WoxDarwinWindow *window, int32_t directory, 
     }
 
     if (!window->closed && window->visible) {
-      [NSApp activateIgnoringOtherApps:YES];
-      [window->window makeKeyAndOrderFront:nil];
-      [window->window makeFirstResponder:window->view];
+      focus_darwin_window(window, true);
     }
   });
   return result;
@@ -4156,9 +4170,6 @@ int32_t wox_darwin_window_close(WoxDarwinWindow *window) {
 
     window->view->_owner = NULL;
     window->delegate->_owner = NULL;
-    if (!window->screenshot_window) {
-      ((WoxNativeWindow *)window->window).woxOwner = NULL;
-    }
     clear_active_web_view(window, true);
     [window->primary_mouse_down_event release];
     window->primary_mouse_down_event = nil;

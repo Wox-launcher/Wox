@@ -115,6 +115,9 @@ type WindowOptions struct {
 	// Nonactivating keeps tooltips and recording chrome visible without stealing
 	// focus. It is a focus policy only; native window materials still apply.
 	Nonactivating bool
+	// CanFocusWithoutActivation lets a macOS utility window take keyboard focus
+	// while Secure Input prevents app activation. Other platforms ignore it.
+	CanFocusWithoutActivation bool
 	// Transparent removes native backdrop materials so per-pixel alpha reaches the desktop.
 	Transparent bool
 	// PassThroughTransparent restricts native input to painted pixels on supported platforms.

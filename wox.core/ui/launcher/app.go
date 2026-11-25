@@ -686,7 +686,8 @@ func (a *App) start() error {
 
 	host := woxwidget.NewHost(a.buildLauncher)
 	launcher, _, err := a.windows.Open(a.windowID, woxui.WindowOptions{
-		Title: "Wox",
+		Title:                     "Wox",
+		CanFocusWithoutActivation: true,
 		// The idle launcher has no results yet, so this first size omits the about-menu-only toolbar.
 		Size: woxui.Size{Width: float32(a.show.WindowWidth), Height: a.appearance.densityMetrics.queryBoxHeight + a.appearance.palette.appPadding.Top + a.appearance.palette.appPadding.Bottom},
 		// Windows uses HWND_TOPMOST so the query window stays above other apps.

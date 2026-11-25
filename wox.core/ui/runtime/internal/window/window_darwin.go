@@ -4,7 +4,7 @@ package window
 
 /*
 #cgo CFLAGS: -fblocks -Wno-deprecated-declarations
-#cgo LDFLAGS: -framework Cocoa -framework QuartzCore -framework CoreText -framework CoreGraphics -framework CoreVideo -framework IOSurface -framework WebKit -framework Accelerate
+#cgo LDFLAGS: -framework Cocoa -framework Carbon -framework QuartzCore -framework CoreText -framework CoreGraphics -framework CoreVideo -framework IOSurface -framework WebKit -framework Accelerate
 #include <stdlib.h>
 #include "native_darwin.h"
 */
@@ -176,6 +176,10 @@ func openPlatformWindow(options WindowOptions) (*platformWindow, error) {
 	if options.Nonactivating {
 		nonactivating = 1
 	}
+	focusWithoutActivation := C.int32_t(0)
+	if options.CanFocusWithoutActivation {
+		focusWithoutActivation = 1
+	}
 	resizable := C.int32_t(0)
 	if options.Resizable {
 		resizable = 1
@@ -191,6 +195,7 @@ func openPlatformWindow(options WindowOptions) (*platformWindow, error) {
 		hideOnBlur,
 		C.int32_t(options.Role),
 		nonactivating,
+		focusWithoutActivation,
 		resizable,
 		transparent,
 		C.float(options.AspectRatio),
