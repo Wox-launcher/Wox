@@ -402,11 +402,8 @@ func TestFormTableRowDescriptionWrapsLongPlainText(t *testing.T) {
 	}).(woxwidget.Container)
 	right := row.Child.(woxwidget.Flex).Children[1].(woxwidget.Flex)
 	help := right.Children[1].(woxwidget.TextBlock)
-	if help.MaxLines < 2 {
-		t.Fatalf("description max lines = %d, want wrapping so the full tip stays visible", help.MaxLines)
-	}
-	if help.Height < float32(help.MaxLines)*18 {
-		t.Fatalf("description height = %.0f, want room for %d wrapped lines", help.Height, help.MaxLines)
+	if size := woxwidget.MeasureStateless(catalogTallFontServices{}, help, controlWidth); size.Height <= 18 {
+		t.Fatalf("description height = %.0f, want room for wrapped lines", size.Height)
 	}
 }
 
@@ -416,8 +413,8 @@ func TestFormTableRowDescriptionPreservesFlutterParagraphs(t *testing.T) {
 	row := FormTableRowField(FormTableRowFieldProps{Kind: "textbox", Description: description, Width: 500, Height: height, LabelWidth: 80, MaxLines: 1, Theme: woxcomponent.ControlTheme{}}).(woxwidget.Container)
 	right := row.Child.(woxwidget.Flex).Children[1].(woxwidget.Flex)
 	help := right.Children[1].(woxwidget.TextBlock)
-	if help.MaxLines != 3 || help.Height != 54 {
-		t.Fatalf("description lines = %d height %.0f", help.MaxLines, help.Height)
+	if size := woxwidget.MeasureStateless(actionSearchHostServices{}, help, 410); size.Height != 54 {
+		t.Fatalf("description height = %.0f, want 54 including the empty line", size.Height)
 	}
 }
 
@@ -465,8 +462,8 @@ func TestFormTableRowMarkdownDescriptionReservesWrappedHeight(t *testing.T) {
 	}).(woxwidget.Container)
 	right := row.Child.(woxwidget.Flex).Children[1].(woxwidget.Flex)
 	help := right.Children[1].(woxwidget.Container)
-	if help.Height < 54 {
-		t.Fatalf("markdown help height = %.0f, want room for wrapped chrome-extension tip", help.Height)
+	if help.Height != 0 {
+		t.Fatalf("markdown help has fixed height %.0f", help.Height)
 	}
 	markdown := help.Child.(woxwidget.Flex)
 	if markdown.Gap != formTableMarkdownDescriptionGap {
@@ -532,8 +529,8 @@ func TestFormTableRowGroupKeyboardActivation(t *testing.T) {
 func TestFormTableRowEditorUsesFlutterFieldGap(t *testing.T) {
 	editor := FormTableRowEditor(FormTableRowEditorProps{
 		Width: 500, Height: 320, Title: "Add",
-		Rows:          []woxwidget.Widget{woxwidget.Container{Height: 40}, woxwidget.Container{Height: 40}},
-		ContentHeight: 400, CancelLabel: "Cancel", SaveLabel: "Save", Theme: woxcomponent.ControlTheme{},
+		Rows:        []woxwidget.Widget{woxwidget.Container{Height: 40}, woxwidget.Container{Height: 40}},
+		CancelLabel: "Cancel", SaveLabel: "Save", Theme: woxcomponent.ControlTheme{},
 	}).(woxwidget.Flex)
 	body := editor.Children[1].(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
 	content := body.Content.(woxwidget.Flex)
@@ -720,6 +717,22 @@ func TestFormTableColumnTitleStaysRegular(t *testing.T) {
 	})
 	if settings.Style.Weight != woxui.FontWeightRegular {
 		t.Fatalf("settings table column title weight = %v, want regular", settings.Style.Weight)
+	}
+}
+
+func TestFormTableTextUsesMeasuredLineHeightAtLargeDensity(t *testing.T) {
+	props := FormTableFieldProps{Theme: woxcomponent.ControlTheme{DensityScale: 1.2}}
+	header := formTableHeaderLabel(props)
+	const label = "gh issues assigned"
+	plain := formTableDataCellContent(t, formTableDataCell(props, FormTableCell{Text: label}, 230))
+	withIcon := formTableDataCellContent(t, formTableDataCell(props, FormTableCell{Text: label, Icon: &woxui.Image{}}, 230)).(woxwidget.Flex)
+	services := catalogTallFontServices{}
+	for _, line := range []woxwidget.TextBlock{header, plain.(woxwidget.TextBlock), withIcon.Children[1].(woxwidget.TextBlock)} {
+		metrics, _ := services.MeasureText(line.Value, line.Style)
+		measured := woxwidget.MeasureStateless(services, line, 230)
+		if measured.Height < metrics.Size.Height || measured.Height > tableSurfaceHeaderHeight {
+			t.Errorf("%q height = %g, want a full %g-unit line within the table row", line.Value, measured.Height, metrics.Size.Height)
+		}
 	}
 }
 

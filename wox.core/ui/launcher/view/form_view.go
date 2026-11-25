@@ -784,7 +784,7 @@ func formFieldControlWithError(id, message string, control woxwidget.Widget, the
 		return control
 	}
 	errorText := woxwidget.TextBlock{
-		Value: message, LineHeight: 16,
+		Value: message, MinLineHeight: theme.Scaled(16),
 		Style: woxui.TextStyle{Size: theme.Scaled(woxcomponent.SettingsHelpFontSize)}, Color: theme.Error,
 	}
 	if id != "" {
@@ -805,7 +805,7 @@ func formFieldLayout(id, label, description string, width, height, labelWidth fl
 	rightChildren := []woxwidget.Widget{control}
 	if description != "" {
 		var descriptionWidget woxwidget.Widget = woxwidget.TextBlock{
-			Value: description, LineHeight: theme.Scaled(18),
+			Value: description, MinLineHeight: theme.Scaled(18),
 			Style: woxui.TextStyle{Size: theme.Scaled(11)}, Color: theme.TextSecondary,
 		}
 		if onOpenLink != nil {

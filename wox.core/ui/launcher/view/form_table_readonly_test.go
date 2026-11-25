@@ -125,7 +125,7 @@ func TestFormTableHeaderCellCentersLabel(t *testing.T) {
 		t.Fatalf("header row alignment = %v, want vertical center", content.CrossAxisAlignment)
 	}
 	label := content.Children[0].(woxwidget.TextBlock)
-	if label.Height != 18 || label.LineHeight != 18 || label.AlignmentY != 0.5 {
-		t.Fatalf("header label slot = height %v line height %v alignment %v, want an 18px optically centered slot", label.Height, label.LineHeight, label.AlignmentY)
+	if label.Height != 0 || label.LineHeight != 0 || label.MinLineHeight != 18 || label.AlignmentY != 0.5 {
+		t.Fatalf("header text = %+v, want a measured line with an 18-unit minimum", label)
 	}
 }

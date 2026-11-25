@@ -674,15 +674,9 @@ func (c *formTableController) buildFormTableRowEditor(snapshot *formTableEditorS
 	fieldWidth := max(float32(0), width-20)
 	controlWidth := max(float32(0), fieldWidth-labelWidth-10)
 	rows := make([]woxwidget.Widget, 0, len(rowForm.definitions))
-	contentHeight := float32(0)
-	var keepVisible *woxwidget.ScrollRange
+	var keepVisibleKey woxwidget.Key
 	for _, section := range c.formTableRowEditorSections(snapshot) {
 		if section.Group.Key != "" {
-			if len(rows) > 0 {
-				contentHeight += 10
-			}
-			headerHeight := launcherview.FormTableRowGroupHeaderHeight
-			contentHeight += headerHeight
 			groupKey := section.Group.Key
 			rows = append(rows, launcherview.FormTableRowGroupHeader(launcherview.FormTableRowGroupHeaderProps{
 				ID:    "form-table-row-group-" + groupKey,
@@ -698,23 +692,18 @@ func (c *formTableController) buildFormTableRowEditor(snapshot *formTableEditorS
 			index := field.Index
 			definition := field.Definition
 			fieldError := snapshot.fieldErrors[definition.Value.Key]
-			markdown := formTableRowFieldMarkdown(definition)
-			fieldHeight := launcherview.FormTableRowFieldHeightFor(definition.Type, c.language.translate(definition.Value.Tooltip), fieldError, definition.Value.MaxLines, markdown, controlWidth)
-			if len(rows) > 0 {
-				contentHeight += 10
-			}
+			// The scroll target is the entire row, distinct from the input's focus key.
+			key := woxwidget.Key(fmt.Sprintf("form-table-row-%d", index))
 			if rowForm.focused == index {
-				keepVisible = &woxwidget.ScrollRange{Start: contentHeight, End: contentHeight + fieldHeight}
+				keepVisibleKey = key
 			}
-			contentHeight += fieldHeight
-			rows = append(rows, c.buildFormTableRowField(*rowForm, callbacks, palette, index, definition, fieldWidth, labelWidth, fieldError))
+			rows = append(rows, woxwidget.Keyed{Key: key, Child: c.buildFormTableRowField(*rowForm, callbacks, palette, index, definition, fieldWidth, labelWidth, fieldError)})
 		}
 	}
 	if snapshot.definition.Value.Key == "AIProviders" {
 		label := c.language.translate("i18n:ui_ai_provider_test")
 		description := c.aiProviderTestDescription(snapshot)
 		fieldHeight := launcherview.FormTableRowFieldHeightFor("button", description, "", 1, false, controlWidth)
-		contentHeight += 10 + fieldHeight
 		disabled := false
 		if snapshot.providerTest != nil {
 			disabled = snapshot.providerTest.loading
@@ -726,10 +715,6 @@ func (c *formTableController) buildFormTableRowEditor(snapshot *formTableEditorS
 		}))
 	}
 	if snapshot.patternPreview != nil {
-		if len(rows) > 0 {
-			contentHeight += 10
-		}
-		contentHeight += launcherview.FormTablePatternPreviewHeight
 		previewApps := make([]launcherview.FormTablePatternPreviewApp, 0, len(snapshot.patternPreview.Apps))
 		for _, app := range snapshot.patternPreview.Apps {
 			previewApp := launcherview.FormTablePatternPreviewApp{Key: app.Key, Name: app.Name, Path: app.Path, Checked: app.Checked}
@@ -763,7 +748,7 @@ func (c *formTableController) buildFormTableRowEditor(snapshot *formTableEditorS
 	}
 	saveLabel := c.language.translate("i18n:ui_save")
 	props := launcherview.FormTableRowEditorProps{
-		Width: width, Height: height, Title: title, Rows: rows, ContentHeight: contentHeight, KeepVisible: keepVisible,
+		Width: width, Height: height, Title: title, Rows: rows, KeepVisibleKey: keepVisibleKey,
 		Status: snapshot.status, CancelLabel: c.language.translate("i18n:ui_cancel"), SaveLabel: saveLabel, Theme: palette,
 		OnCancel: c.cancelFormTableRowEdit, OnSave: c.saveFormTableRowEdit,
 	}

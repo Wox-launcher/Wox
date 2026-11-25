@@ -104,10 +104,9 @@ func (c *pluginSettingsController) pluginListEntries(snapshot settingsSnapshot, 
 		index := entry.index
 		plugin := entry.plugin
 		status := strings.TrimSpace(plugin.Version + "  " + plugin.Author)
+		sortMetric := ""
 		if plugins.PluginsStore {
-			if metric := plugins.PluginFilters.storeSort.MetricLabel(plugin.storeSortKey()); metric != "" {
-				status += "  " + metric
-			}
+			sortMetric = plugins.PluginFilters.storeSort.MetricLabel(plugin.storeSortKey())
 		}
 		if plugin.IsUpgradable {
 			status = c.language.translate("i18n:ui_update") + "  " + status
@@ -126,7 +125,7 @@ func (c *pluginSettingsController) pluginListEntries(snapshot settingsSnapshot, 
 		return append(entries, launcherview.PluginListEntry{
 			ID: plugin.ID,
 			Item: launcherview.PluginListItem{
-				ID: plugin.ID, Name: plugin.Name, Status: status, Badge: badge, ShowInstalledIcon: plugins.PluginsStore && plugin.IsInstalled,
+				ID: plugin.ID, Name: plugin.Name, Status: status, SortMetric: sortMetric, Badge: badge, ShowInstalledIcon: plugins.PluginsStore && plugin.IsInstalled,
 				FallbackColor: resultColors[itemIndex%len(resultColors)], Selected: index == plugins.PluginSelected,
 				Highlighted: snapshot.highlight == "plugin:"+plugin.ID, Disabled: plugin.IsDisable,
 				OnSelect: func() { c.selectPlugin(index) },

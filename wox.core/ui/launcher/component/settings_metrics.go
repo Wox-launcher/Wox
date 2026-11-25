@@ -14,14 +14,14 @@ const (
 	SettingsPageHorizontalInset = float32(40)
 	// SettingsPageFormMaxWidth caps the reading column on form-style Settings pages.
 	SettingsPageFormMaxWidth = float32(700)
-	SettingsRailMinWidth     = float32(220)
-	SettingsRailMaxWidth     = float32(220)
+	SettingsRailMinWidth     = float32(244)
+	SettingsRailMaxWidth     = float32(244)
 	// SettingsWindowWidth leaves room for the plugin list and detail panes.
-	SettingsWindowWidth  = float32(1100)
+	SettingsWindowWidth  = float32(1140)
 	SettingsWindowHeight = float32(760)
 	// Settings catalog lists share one column so plugin and theme pages stay aligned.
 	SettingsCatalogListMinWidth   = float32(220)
-	SettingsCatalogListMaxWidth   = float32(250)
+	SettingsCatalogListMaxWidth   = float32(260)
 	SettingsCatalogDividerGutter  = float32(21)
 	settingsCatalogListWidthRatio = float32(0.30)
 	SettingsNavItemHeight         = float32(40)

@@ -9,23 +9,29 @@ import (
 )
 
 func TestRuntimeStatusColumnsFitThreeCardsOnDefaultPage(t *testing.T) {
-	width := runtimeStatusThreeColumnMinWidth()
-	if width != 800 {
-		t.Fatalf("default runtime content width = %.0f, want 800", width)
-	}
+	windowWidth := woxcomponent.SettingsWindowWidth
+	width := SettingsPageContentWidth(windowWidth - woxcomponent.SettingsRailWidth(windowWidth))
 	if runtimeStatusColumns(width) != 3 {
 		t.Fatalf("default runtime columns = %d, want 3 so Node.js, Python, and Script share one row", runtimeStatusColumns(width))
 	}
 	statuses := []RuntimeStatus{{Runtime: "NODEJS"}, {Runtime: "PYTHON"}, {Runtime: "SCRIPT"}}
-	if got := runtimeStatusGridHeight(statuses, width); got != 168 {
+	grid := runtimeStatusGrid(RuntimeSettingsProps{Statuses: statuses}, width).(woxwidget.Grid)
+	if got := woxwidget.MeasureStateless(actionSearchHostServices{}, grid, width).Height; got != 168 {
 		t.Fatalf("default runtime grid height = %.0f, want one 168-high row", got)
 	}
-	grid := runtimeStatusGrid(RuntimeSettingsProps{Statuses: statuses}, width, 168).(woxwidget.Grid)
 	if grid.Columns != 3 || grid.CellWidth != (width-24)/3 {
 		t.Fatalf("default runtime grid = %d columns at %.0f, want 3 narrower cards", grid.Columns, grid.CellWidth)
 	}
 	if runtimeStatusColumns(width-1) != 2 {
 		t.Fatalf("runtime columns below the default page = %d, want 2", runtimeStatusColumns(width-1))
+	}
+}
+
+func TestRuntimeStatusCardsGrowWithMeasuredDetail(t *testing.T) {
+	props := RuntimeSettingsProps{Statuses: []RuntimeStatus{{DisplayName: "Python", Detail: "Not installed\nSelect an executable", PluginLabel: "2 plugins"}}, Theme: woxcomponent.ControlTheme{DensityScale: 1.2}}
+	grid := runtimeStatusGrid(props, 800)
+	if height := woxwidget.MeasureStateless(catalogTallFontServices{}, grid, 800).Height; height <= 168 {
+		t.Fatalf("runtime card height = %g, want room for two measured lines and the plugin count", height)
 	}
 }
 
@@ -58,9 +64,9 @@ func TestRuntimeLoadingDoesNotAddStatusText(t *testing.T) {
 
 func TestRuntimeStatusCardUsesRemainingHeaderWidth(t *testing.T) {
 	card := runtimeStatusCard(RuntimeSettingsProps{}, RuntimeStatus{DisplayName: "Python", Version: "3.13"}, 360, 168).(woxwidget.Container)
-	column := card.Child.(woxwidget.Flex)
+	column := card.Child.(woxwidget.Constrained).Child.(woxwidget.Flex)
 	header := column.Children[0].(woxwidget.Flex)
-	title := header.Children[1].(woxwidget.Expanded).Child.(woxwidget.Container).Child.(woxwidget.Flex)
+	title := header.Children[1].(woxwidget.Expanded).Child.(woxwidget.Constrained).Child.(woxwidget.Flex)
 	name := title.Children[0].(woxwidget.Flex).Children[0]
 	if _, ok := name.(woxwidget.Expanded); !ok {
 		t.Fatalf("runtime name slot = %T, want Expanded", name)
@@ -69,16 +75,16 @@ func TestRuntimeStatusCardUsesRemainingHeaderWidth(t *testing.T) {
 
 func TestRuntimeStatusPillCentersLabel(t *testing.T) {
 	card := runtimeStatusCard(RuntimeSettingsProps{}, RuntimeStatus{DisplayName: "Node.js", StatusLabel: "运行中"}, 360, 168).(woxwidget.Container)
-	column := card.Child.(woxwidget.Flex)
+	column := card.Child.(woxwidget.Constrained).Child.(woxwidget.Flex)
 	header := column.Children[0].(woxwidget.Flex)
-	title := header.Children[1].(woxwidget.Expanded).Child.(woxwidget.Container).Child.(woxwidget.Flex)
+	title := header.Children[1].(woxwidget.Expanded).Child.(woxwidget.Constrained).Child.(woxwidget.Flex)
 	pill := title.Children[1].(woxwidget.Flex).Children[0].(woxwidget.Container)
-	align := pill.Child.(woxwidget.Align)
+	label := pill.Child.(woxwidget.TextBlock)
 	if pill.Padding.Left != 8 || pill.Padding.Right != 8 {
 		t.Fatalf("status pill padding = %+v, want symmetric 8px insets", pill.Padding)
 	}
-	if align.Horizontal != 0.5 || align.Vertical != 0.5 || align.Width != pill.Width-16 {
-		t.Fatalf("status pill alignment = %#v, want centered in the pill", align)
+	if !label.Centered || label.AlignmentY != 0.5 || label.Height != 0 {
+		t.Fatalf("status pill label = %#v, want centered measured text", label)
 	}
 }
 
@@ -106,7 +112,7 @@ func TestRuntimeStatusCardOmitsRefreshWhenNotProvided(t *testing.T) {
 }
 
 func runtimeCardButtonIDs(card woxwidget.Container) []string {
-	column := card.Child.(woxwidget.Flex)
+	column := card.Child.(woxwidget.Constrained).Child.(woxwidget.Flex)
 	row := column.Children[len(column.Children)-1].(woxwidget.Container).Child.(woxwidget.Flex)
 	ids := make([]string, 0, len(row.Children))
 	for _, child := range row.Children {
@@ -121,9 +127,6 @@ func runtimeCardButtonIDs(card woxwidget.Container) []string {
 func TestRuntimeRunningHostOffersRestart(t *testing.T) {
 	calls := 0
 	status := RuntimeStatus{Runtime: "NODEJS", StatusCode: "running", RestartLabel: "Restart", OnRestart: func() { calls++ }}
-	if height := runtimeStatusGridHeight([]RuntimeStatus{status}, 800); height != 168 {
-		t.Fatalf("running host card height = %v, want compact running card", height)
-	}
 	for _, props := range []RuntimeSettingsProps{{}, {Editing: true}, {Saving: true}, {Restarting: true}, {Refreshing: true}} {
 		tooltip := ""
 		props.OnTooltip = func(inside bool, text string, _ woxui.Rect) {
@@ -134,9 +137,9 @@ func TestRuntimeRunningHostOffersRestart(t *testing.T) {
 			}
 		}
 		card := runtimeStatusCard(props, status, 360, 168).(woxwidget.Container)
-		column := card.Child.(woxwidget.Flex)
+		column := card.Child.(woxwidget.Constrained).Child.(woxwidget.Flex)
 		header := column.Children[0].(woxwidget.Flex)
-		title := header.Children[1].(woxwidget.Expanded).Child.(woxwidget.Container).Child.(woxwidget.Flex)
+		title := header.Children[1].(woxwidget.Expanded).Child.(woxwidget.Constrained).Child.(woxwidget.Flex)
 		row := title.Children[1].(woxwidget.Flex)
 		button := row.Children[1].(woxwidget.Stateful).Widget.(woxcomponent.IconButtonProps)
 		if button.ID != "runtime-restart-NODEJS" {

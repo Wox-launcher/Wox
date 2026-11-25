@@ -236,8 +236,8 @@ func CloudSettingsPage(props CloudSettingsPageProps) woxwidget.Widget {
 		appendChild(cloudConfigNotesCard(props.ConfigNotes, contentWidth, configHeight, props.Theme))
 	}
 	if props.Message != "" {
-		appendChild(woxwidget.Container{Width: contentWidth, Height: 34, Padding: woxwidget.Insets{Top: 9}, Child: woxwidget.TextBlock{
-			Value: props.Message, Width: contentWidth, Height: 22, MaxLines: 1, Style: woxui.TextStyle{Size: props.Theme.Scaled(10)}, Color: props.MessageColor,
+		appendChild(woxwidget.Container{Width: contentWidth, Padding: woxwidget.Insets{Top: 9, Bottom: 3}, Child: woxwidget.TextBlock{
+			Value: props.Message, Width: contentWidth, MaxLines: 1, MinLineHeight: props.Theme.Scaled(22), Style: woxui.TextStyle{Size: props.Theme.Scaled(10)}, Color: props.MessageColor,
 		}})
 	}
 
@@ -704,7 +704,7 @@ type CloudFormLinkProps struct {
 
 // CloudFormOverlay builds the cloud credential modal and its field rows.
 func CloudFormOverlay(props CloudFormOverlayProps) woxwidget.Widget {
-	innerWidth := props.PanelWidth - 48
+	innerWidth := max(0, props.PanelWidth-48)
 	rows := make([]woxwidget.Widget, 0, len(props.Fields))
 	rowsHeight := float32(0)
 	for index, field := range props.Fields {
@@ -751,31 +751,42 @@ func CloudFormOverlay(props CloudFormOverlayProps) woxwidget.Widget {
 		content = append(content, widget)
 		contentHeight += height
 	}
-	appendContent(woxwidget.Text{Value: props.Title, Style: woxui.TextStyle{Size: props.Theme.Scaled(16), Weight: woxui.FontWeightSemibold}, Color: props.Theme.Text}, 20, 0)
+	title := woxwidget.TextBlock{Value: props.Title, MaxLines: 1, MinLineHeight: props.Theme.Scaled(20),
+		Style: woxui.TextStyle{Size: props.Theme.Scaled(16), Weight: woxui.FontWeightSemibold}, Color: props.Theme.Text}
+	description := woxwidget.TextBlock{Value: props.Description, MaxLines: 2, MinLineHeight: props.Theme.Scaled(17),
+		Style: woxui.TextStyle{Size: props.Theme.Scaled(11)}, Color: props.Theme.TextSecondary}
+	feedback := description
+	feedback.Value, feedback.Color = props.Feedback, props.FeedbackColor
+	appendContent(title, 0, 0)
 	if props.Description != "" {
-		appendContent(woxwidget.TextBlock{Value: props.Description, Width: innerWidth, Height: 34, MaxLines: 2, Style: woxui.TextStyle{Size: props.Theme.Scaled(11)}, LineHeight: 17, Color: props.Theme.TextSecondary}, 34, 12)
+		appendContent(description, 0, 12)
 	}
 	appendContent(woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 12, Children: rows}, rowsHeight, 24)
 	if linkHeight > 0 {
 		appendContent(links, linkHeight, 10)
 	}
 	if props.Feedback != "" {
-		appendContent(woxwidget.TextBlock{Value: props.Feedback, Width: innerWidth, Height: 34, MaxLines: 2, Style: woxui.TextStyle{Size: props.Theme.Scaled(11)}, LineHeight: 17, Color: props.FeedbackColor}, 34, 10)
+		appendContent(feedback, 0, 10)
 	}
 
 	actions := settingsDialogActions(innerWidth, props.Theme,
 		settingsDialogAction{ID: "cloud-form-cancel", Label: props.CancelLabel, Disabled: props.Saving, OnTap: props.OnCancel},
 		settingsDialogAction{ID: "cloud-form-submit", Label: props.SubmitLabel, Disabled: !props.SubmitEnabled, OnTap: props.OnSubmit},
 	)
-	appendContent(actions, SettingsDialogActionsHeight, 12)
-
-	panelHeight := min(contentHeight+48, props.Height-56)
-	return woxcomponent.WoxDialog(woxcomponent.DialogProps{
-		ID: "cloud-form-dialog", Label: props.Title, Width: props.PanelWidth, Height: panelHeight, InitialFocus: "cloud-form-field-0",
-		OverlayWidth: props.Width, OverlayHeight: props.Height, BackdropID: "cloud-form-backdrop", BackdropColor: woxui.Color{R: 0, G: 0, B: 0, A: 112},
-		Radius: 20, Padding: woxwidget.Insets{Left: 24, Top: 24, Right: 24, Bottom: 24}, BorderColor: props.Theme.Border, BorderWidth: 1, Theme: props.Theme,
-		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: content},
-	})
+	return woxwidget.TextLayoutBuilder{Build: func(_ woxui.Size, measure woxwidget.TextMeasurer) woxwidget.Widget {
+		bodyHeight := contentHeight + woxwidget.MeasureStateless(measure, title, innerWidth).Height
+		if props.Description != "" {
+			bodyHeight += woxwidget.MeasureStateless(measure, description, innerWidth).Height
+		}
+		if props.Feedback != "" {
+			bodyHeight += woxwidget.MeasureStateless(measure, feedback, innerWidth).Height
+		}
+		return settingsScrollableDialog(woxcomponent.DialogProps{
+			ID: "cloud-form-dialog", Label: props.Title, Width: props.PanelWidth, InitialFocus: "cloud-form-field-0",
+			OverlayWidth: props.Width, OverlayHeight: props.Height, BackdropID: "cloud-form-backdrop", BackdropColor: woxui.Color{R: 0, G: 0, B: 0, A: 112},
+			Radius: 20, Padding: woxwidget.UniformInsets(24), BorderColor: props.Theme.Border, BorderWidth: 1, Theme: props.Theme,
+		}, woxwidget.Flex{Axis: woxwidget.Vertical, Children: content}, actions, bodyHeight, 0, props.Height)
+	}}
 }
 
 // cloudFormTextField renders Flutter's label-above-input account field.

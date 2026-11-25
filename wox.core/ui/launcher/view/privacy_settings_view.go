@@ -76,8 +76,8 @@ func PrivacySettingsView(props PrivacySettingsProps) woxwidget.Widget {
 	}
 	if props.Error != "" {
 		children = append(children, woxwidget.TextBlock{
-			Value: props.Error, Width: contentWidth, Height: 32, MaxLines: 2,
-			Style: woxui.TextStyle{Size: props.Theme.Scaled(11)}, LineHeight: 16, Color: props.Theme.Error,
+			Value: props.Error, Width: contentWidth, MaxLines: 2,
+			Style: woxui.TextStyle{Size: props.Theme.Scaled(11)}, MinLineHeight: props.Theme.Scaled(16), Color: props.Theme.Error,
 		})
 	}
 	return woxwidget.Container{
@@ -91,8 +91,8 @@ func privacySettingField(props PrivacySettingsProps, title, description string, 
 	width := SettingsPageContentWidth(props.Width)
 	if width < props.Theme.Scaled(600) {
 		return woxwidget.Container{Width: width, Padding: woxwidget.Insets{Bottom: props.Theme.Scaled(24)}, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 8, Children: []woxwidget.Widget{
-			woxwidget.TextBlock{Value: title, Width: width, Style: woxui.TextStyle{Size: props.Theme.Scaled(woxcomponent.SettingsLabelFontSize), Weight: woxui.FontWeightSemibold}, LineHeight: props.Theme.Scaled(18), Color: props.Theme.Text},
-			woxwidget.TextBlock{Value: description, Width: width, Style: woxui.TextStyle{Size: props.Theme.Scaled(woxcomponent.SettingsHelpFontSize)}, LineHeight: props.Theme.Scaled(16), Color: props.Theme.TextSecondary},
+			woxwidget.TextBlock{Value: title, Width: width, Style: woxui.TextStyle{Size: props.Theme.Scaled(woxcomponent.SettingsLabelFontSize), Weight: woxui.FontWeightSemibold}, MinLineHeight: props.Theme.Scaled(18), Color: props.Theme.Text},
+			woxwidget.TextBlock{Value: description, Width: width, Style: woxui.TextStyle{Size: props.Theme.Scaled(woxcomponent.SettingsHelpFontSize)}, MinLineHeight: props.Theme.Scaled(16), Color: props.Theme.TextSecondary},
 			woxwidget.Align{Width: width, Height: props.Theme.Scaled(32), Horizontal: 1, Vertical: 0.5, Child: control},
 		}}}
 	}
@@ -138,12 +138,12 @@ func PrivacySampleDialog(props PrivacySampleDialogProps) woxwidget.Widget {
 		}},
 		woxwidget.Container{Width: innerWidth, Height: sampleHeight, Radius: 8, Color: privacyColorAlpha(props.Theme.Text, 13), BorderColor: props.Theme.Border, BorderWidth: 1, Padding: woxwidget.UniformInsets(12), Child: woxwidget.TextBlock{
 			Value: props.Sample, Width: max(float32(0), innerWidth-24), Height: max(float32(0), sampleHeight-24),
-			Style: woxui.TextStyle{Size: props.Theme.Scaled(12)}, LineHeight: 18, Color: props.Theme.Text,
+			Style: woxui.TextStyle{Size: props.Theme.Scaled(12)}, MinLineHeight: props.Theme.Scaled(18), Color: props.Theme.Text,
 		}},
 	}
 	if props.Error != "" {
 		children = append(children, woxwidget.TextBlock{
-			Value: props.Error, Width: innerWidth, Height: 20, MaxLines: 1,
+			Value: props.Error, Width: innerWidth, MinLineHeight: props.Theme.Scaled(20), MaxLines: 1,
 			Style: woxui.TextStyle{Size: props.Theme.Scaled(11)}, Color: props.Theme.Error,
 		})
 	}

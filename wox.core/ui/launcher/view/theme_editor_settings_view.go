@@ -319,19 +319,33 @@ func (s *themeEditorSettingsState) Dispose()                                    
 // Build reserves a full-height inspector, falling back to stacked panes on narrow windows.
 func (s *themeEditorSettingsState) Build(ctx woxwidget.StateContext, input any) woxwidget.Widget {
 	props := input.(ThemeEditorSettingsProps)
+	if props.Error == "" {
+		return s.buildEditor(ctx, props, nil, 0)
+	}
+	errorWidth := props.Width
+	if props.Width >= 760 {
+		errorWidth -= 340 + 16
+	}
+	errorText := woxwidget.TextBlock{Value: props.Error, Width: errorWidth, MaxLines: 2, MinLineHeight: props.Theme.Scaled(20),
+		Style: woxui.TextStyle{Size: props.Theme.Scaled(12)}, Color: props.Theme.Error}
+	return woxwidget.TextLayoutBuilder{Build: func(_ woxui.Size, measure woxwidget.TextMeasurer) woxwidget.Widget {
+		height := woxwidget.MeasureStateless(measure, errorText, errorWidth).Height
+		return s.buildEditor(ctx, props, errorText, height)
+	}}
+}
+
+// buildEditor gives the preview and inspector the space left after the header and its feedback.
+func (s *themeEditorSettingsState) buildEditor(ctx woxwidget.StateContext, props ThemeEditorSettingsProps, errorText woxwidget.Widget, errorHeight float32) woxwidget.Widget {
 	headerHeight := float32(44)
 	header := woxwidget.Text{Value: props.Title, Style: woxui.TextStyle{Size: props.Theme.Scaled(22), Weight: woxui.FontWeightSemibold}, Color: props.Theme.Text}
-	bodyHeight := max(float32(0), props.Height-headerHeight)
-	if props.Error != "" {
-		bodyHeight = max(float32(0), bodyHeight-40)
-	}
+	bodyHeight := max(float32(0), props.Height-headerHeight-errorHeight)
 	var body woxwidget.Widget
 	if props.Width >= 760 {
 		inspectorWidth := float32(340)
 		previewWidth := max(float32(0), props.Width-inspectorWidth-16)
 		left := []woxwidget.Widget{woxwidget.Container{Width: previewWidth, Height: headerHeight, Child: header}}
-		if props.Error != "" {
-			left = append(left, woxwidget.TextBlock{Value: props.Error, Width: previewWidth, Height: 40, MaxLines: 2, LineHeight: 20, Style: woxui.TextStyle{Size: props.Theme.Scaled(12)}, Color: props.Theme.Error})
+		if errorText != nil {
+			left = append(left, errorText)
 		}
 		left = append(left, themeEditorLivePreview(props, previewWidth, bodyHeight))
 		body = woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 16, Children: []woxwidget.Widget{
@@ -344,8 +358,8 @@ func (s *themeEditorSettingsState) Build(ctx woxwidget.StateContext, input any) 
 		}}
 	}
 	children := []woxwidget.Widget{woxwidget.Container{Width: props.Width, Height: headerHeight, Child: header}}
-	if props.Error != "" {
-		children = append(children, woxwidget.TextBlock{Value: props.Error, Width: props.Width, Height: 40, MaxLines: 2, LineHeight: 20, Style: woxui.TextStyle{Size: props.Theme.Scaled(12)}, Color: props.Theme.Error})
+	if errorText != nil {
+		children = append(children, errorText)
 	}
 	children = append(children, body)
 	if props.Width >= 760 {
@@ -417,7 +431,7 @@ func (s *themeEditorSettingsState) inspector(ctx woxwidget.StateContext, props T
 				rows = append(rows, woxwidget.Container{Width: contentWidth, Padding: woxwidget.Insets{Top: 12, Bottom: 4}, Child: woxwidget.Text{Value: token.Subgroup, Style: woxui.TextStyle{Size: props.Theme.Scaled(13), Weight: woxui.FontWeightSemibold}, Color: props.Theme.TextSecondary}})
 				previousSection = token.Subgroup
 				if strings.HasPrefix(token.Key, "AppBorder") && props.ShowChromeHelp {
-					rows = append(rows, woxwidget.TextBlock{Value: props.ChromeHelp, Width: contentWidth, LineHeight: 18, Style: woxui.TextStyle{Size: props.Theme.Scaled(12)}, Color: props.Theme.TextSecondary})
+					rows = append(rows, woxwidget.TextBlock{Value: props.ChromeHelp, Width: contentWidth, MinLineHeight: props.Theme.Scaled(18), Style: woxui.TextStyle{Size: props.Theme.Scaled(12)}, Color: props.Theme.TextSecondary})
 				}
 			}
 			rowProps := props
@@ -459,7 +473,7 @@ func (s *themeEditorSettingsState) inspector(ctx woxwidget.StateContext, props T
 		rows = append(rows, woxwidget.Container{Height: 1, Width: contentWidth, Color: props.Theme.Border})
 	}
 	if len(rows) == 0 {
-		rows = append(rows, woxwidget.TextBlock{Value: props.NoPropertiesLabel, Width: contentWidth, LineHeight: 20, Style: woxui.TextStyle{Size: props.Theme.Scaled(13)}, Color: props.Theme.TextSecondary})
+		rows = append(rows, woxwidget.TextBlock{Value: props.NoPropertiesLabel, Width: contentWidth, MinLineHeight: props.Theme.Scaled(20), Style: woxui.TextStyle{Size: props.Theme.Scaled(13)}, Color: props.Theme.TextSecondary})
 	}
 	viewportHeight := max(float32(0), height)
 	var scroll woxwidget.Widget = woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{Key: woxwidget.Key("theme-editor-properties-" + strconv.Itoa(s.scrollRevision)), Width: width, Height: viewportHeight, ContentWidth: width, Theme: props.Theme,
@@ -580,9 +594,9 @@ func themeEditorPropertyRow(props ThemeEditorSettingsProps, token ThemeEditorCol
 		}}))
 	}
 	controls = append(controls, reset)
-	children := []woxwidget.Widget{woxwidget.TextBlock{Value: label, Width: width, LineHeight: 18, Style: woxui.TextStyle{Size: props.Theme.Scaled(13)}, Color: props.Theme.Text}, woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 4, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: controls}}
+	children := []woxwidget.Widget{woxwidget.TextBlock{Value: label, Width: width, MinLineHeight: props.Theme.Scaled(18), Style: woxui.TextStyle{Size: props.Theme.Scaled(13)}, Color: props.Theme.Text}, woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 4, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: controls}}
 	if token.Error != "" {
-		children = append(children, woxwidget.TextBlock{Value: token.Error, Width: width, LineHeight: 18, Style: woxui.TextStyle{Size: props.Theme.Scaled(12)}, Color: props.Theme.Error})
+		children = append(children, woxwidget.TextBlock{Value: token.Error, Width: width, MinLineHeight: props.Theme.Scaled(18), Style: woxui.TextStyle{Size: props.Theme.Scaled(12)}, Color: props.Theme.Error})
 	}
 	return woxwidget.Container{Width: width, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 4, Children: children}}
 }

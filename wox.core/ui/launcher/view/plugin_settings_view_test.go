@@ -238,6 +238,33 @@ func TestPluginStoreInstalledIconUsesSelectionColor(t *testing.T) {
 	}
 }
 
+func TestPluginListPreservesStoreMetricAtLargeDensity(t *testing.T) {
+	item := PluginListItem{Status: "0.0.4  Wox-launcher", SortMetric: "↓ 2324"}
+	style := woxui.TextStyle{Size: 1.2 * woxcomponent.SettingsSecondaryFontSize}
+	metadata := pluginListMetadata(item, style, woxui.Color{A: 255}).(woxwidget.Flex)
+	status := metadata.Children[0].(woxwidget.Flexible)
+	status.Child = woxwidget.Keyed{Key: "status", Child: status.Child}
+	metadata.Children[0] = status
+	metadata.Children[1] = woxwidget.Keyed{Key: "metric", Child: metadata.Children[1]}
+
+	const width = 160
+	services := catalogTallFontServices{}
+	host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget { return metadata })
+	defer host.Dispose()
+	host.AttachServices(services)
+	host.Frame(&woxui.DisplayList{}, woxui.FrameInfo{Size: woxui.Size{Width: width, Height: 32}, PixelSize: woxui.PixelSize{Width: 400, Height: 80}, Scale: 2.5})
+	metric, metricFound := host.BoundsForKey("metric")
+	statusBounds, statusFound := host.BoundsForKey("status")
+	metricSize, _ := services.MeasureText(item.SortMetric, style)
+	statusSize, _ := services.MeasureText(item.Status, style)
+	if !metricFound || metric.Width < metricSize.Size.Width || metric.X+metric.Width > width+0.01 {
+		t.Fatalf("store metric bounds = %+v, want full width %g within %d", metric, metricSize.Size.Width, width)
+	}
+	if !statusFound || statusBounds.Width <= 0 || statusBounds.Width >= statusSize.Size.Width || statusBounds.X+statusBounds.Width > metric.X {
+		t.Fatalf("status bounds = %+v, want shortened status before metric %+v", statusBounds, metric)
+	}
+}
+
 func TestPluginListSearchHighlightKeepsSelectedFillAndAddsBorder(t *testing.T) {
 	selected := woxui.Color{R: 60, G: 80, B: 100, A: 255}
 	list := PluginList(PluginListProps{
@@ -394,7 +421,7 @@ func TestPluginDetailsShareDescriptionFirstLayout(t *testing.T) {
 			if intro.Children[0].(woxwidget.Flex).CrossAxisAlignment != woxwidget.CrossAxisCenter {
 				t.Fatal("description and tags must be vertically centered")
 			}
-			if intro.Children[0].(woxwidget.Flex).Children[0].(woxwidget.Expanded).Child.(woxwidget.LayoutBuilder).Build(woxui.Size{Width: 120}).(woxwidget.TextBlock).Value != description.Description {
+			if intro.Children[0].(woxwidget.Flex).Children[0].(woxwidget.Expanded).Child.(woxwidget.TextBlock).Value != description.Description {
 				t.Fatal("description must appear first without a group heading")
 			}
 			want := 8
@@ -476,7 +503,7 @@ func TestFormTableInlineTitleMatchesFormLabelWeight(t *testing.T) {
 		AddLabel: "Add", Theme: woxcomponent.ControlTheme{Text: woxui.Color{R: 240, G: 240, B: 240, A: 255}},
 	})
 	header := field.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Flex)
-	title := header.Children[0].(woxwidget.Expanded).Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Container).Child.(woxwidget.Text)
+	title := header.Children[0].(woxwidget.Expanded).Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Constrained).Child.(woxwidget.Text)
 	if title.Style.Size != 13 || title.Style.Weight != woxui.FontWeightRegular || title.Color.R != 240 {
 		t.Fatalf("inline table title = size %.0f weight %v color %#v, want the shared 13 regular form label", title.Style.Size, title.Style.Weight, title.Color)
 	}
@@ -488,7 +515,7 @@ func TestFormTableInlineTitleUsesHeaderWeight(t *testing.T) {
 		HeaderWeight: woxui.FontWeightSemibold, AddLabel: "Add", Theme: woxcomponent.ControlTheme{},
 	})
 	header := field.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Flex)
-	title := header.Children[0].(woxwidget.Expanded).Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Container).Child.(woxwidget.Text)
+	title := header.Children[0].(woxwidget.Expanded).Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Constrained).Child.(woxwidget.Text)
 	if title.Style.Size != 13 || title.Style.Weight != woxui.FontWeightSemibold {
 		t.Fatalf("settings table title = size %.0f weight %v, want 13 semibold", title.Style.Size, title.Style.Weight)
 	}
@@ -549,7 +576,7 @@ func TestFormTableInlineHeaderAlignsActionsWithTitleWhenDescriptionIsPresent(t *
 	}
 	left := header.Children[0].(woxwidget.Expanded).Child.(woxwidget.Container).Child.(woxwidget.Flex)
 	description := left.Children[1].(woxwidget.TextBlock)
-	if description.Height != 0 || description.MaxLines != 2 || description.LineHeight != 16 {
+	if description.Height != 0 || description.MaxLines != 2 || description.MinLineHeight != 16 {
 		t.Fatalf("description geometry = height %v, lines %d, line height %v; want intrinsic height up to two 16px lines", description.Height, description.MaxLines, description.LineHeight)
 	}
 	withoutDescription := FormTableFieldHeight(true, "", 1, 0)
@@ -591,7 +618,7 @@ func TestFormTableInlineHeaderForwardsDemoHover(t *testing.T) {
 	})
 
 	header := field.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Flex)
-	title := header.Children[0].(woxwidget.Expanded).Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Container).Child.(woxwidget.Flex)
+	title := header.Children[0].(woxwidget.Expanded).Child.(woxwidget.Container).Child.(woxwidget.Flex).Children[0].(woxwidget.Constrained).Child.(woxwidget.Flex)
 	trigger := title.Children[1].(woxwidget.Semantics)
 	if trigger.AutomationID != "settings-demo-query-hotkeys" {
 		t.Fatalf("demo automation ID = %q", trigger.AutomationID)
@@ -894,9 +921,6 @@ func TestFormTableTypographyMatchesSharedTokens(t *testing.T) {
 	if header.Style.Size != woxcomponent.TableHeaderFontSize || header.Style.Weight != woxui.FontWeightRegular || body.Style.Size != woxcomponent.TableBodyFontSize || empty.Style.Size != woxcomponent.TableEmptyFontSize {
 		t.Fatalf("table typography = size %v weight %v / %v / %v, want regular %v/%v/%v", header.Style.Size, header.Style.Weight, body.Style.Size, empty.Style.Size, woxcomponent.TableHeaderFontSize, woxcomponent.TableBodyFontSize, woxcomponent.TableEmptyFontSize)
 	}
-	if header.Height != 18 || header.LineHeight != 18 || header.AlignmentY != 0.5 {
-		t.Fatalf("table header slot = height %v line height %v alignment %v, want an 18px optically centered slot", header.Height, header.LineHeight, header.AlignmentY)
-	}
 	if headerCell.Padding.Top != 0 || headerAlign.Height != tableSurfaceHeaderHeight || headerAlign.Vertical != 0.5 {
 		t.Fatalf("table header alignment = padding %#v slot %#v, want a full-height centered slot", headerCell.Padding, headerAlign)
 	}
@@ -1003,6 +1027,30 @@ func TestPluginStoreDescriptionKeepsHostRuntimeChip(t *testing.T) {
 	}
 }
 
+func TestPluginStoreDescriptionFitsWrappedLinesAtLargeDensity(t *testing.T) {
+	const width = 90
+	const height = 100
+	theme := woxcomponent.ControlTheme{DensityScale: 1.2, Text: woxui.Color{A: 255}}
+	props := PluginStoreDetailProps{Description: "Show quotas. Stay ready."}
+	body := pluginStoreDescriptionContent(props, width, theme).(woxwidget.Flex)
+	intro := body.Children[0].(woxwidget.Flex)
+	text := intro.Children[0].(woxwidget.Expanded)
+	text.Child = woxwidget.Keyed{Key: "description", Child: text.Child}
+	intro.Children[0] = text
+
+	services := catalogTallFontServices{}
+	host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget { return intro })
+	defer host.Dispose()
+	host.AttachServices(services)
+	draw := &woxui.DisplayList{}
+	host.Frame(draw, woxui.FrameInfo{Size: woxui.Size{Width: width, Height: height}, PixelSize: woxui.PixelSize{Width: 225, Height: 250}, Scale: 2.5})
+	metrics, _ := services.MeasureText("Mg", woxui.TextStyle{Size: theme.Scaled(woxcomponent.SettingsPageDescriptionFontSize)})
+	bounds, found := host.BoundsForKey("description")
+	if !found || draw.TextDrawCount() < 2 || bounds.Height < float32(draw.TextDrawCount())*metrics.Size.Height {
+		t.Fatalf("description bounds = %+v for %d lines, want at least two full %g-unit line boxes", bounds, draw.TextDrawCount(), metrics.Size.Height)
+	}
+}
+
 func TestPluginStoreDescriptionUsesLoadingPlaceholderWithoutBlankPanel(t *testing.T) {
 	body := pluginStoreDescriptionContent(PluginStoreDetailProps{
 		Name: "Strava", Description: "Workouts", Author: "Wox-launcher", Version: "0.0.1", Runtime: "Python",
@@ -1012,7 +1060,7 @@ func TestPluginStoreDescriptionUsesLoadingPlaceholderWithoutBlankPanel(t *testin
 	if len(children) != 2 {
 		t.Fatalf("description children = %d, want description, metadata, and loading placeholder", len(children))
 	}
-	if description := children[0].(woxwidget.Flex).Children[0].(woxwidget.Expanded).Child.(woxwidget.LayoutBuilder).Build(woxui.Size{Width: 200}).(woxwidget.TextBlock); description.Value != "Workouts" || description.MaxLines != 0 {
+	if description := children[0].(woxwidget.Flex).Children[0].(woxwidget.Expanded).Child.(woxwidget.TextBlock); description.Value != "Workouts" || description.MaxLines != 0 {
 		t.Fatal("description must retain the plugin text without repeating its name or author")
 	}
 	if _, ok := children[1].(woxwidget.Align); !ok {

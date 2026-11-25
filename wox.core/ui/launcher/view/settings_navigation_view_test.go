@@ -60,7 +60,7 @@ func settingsRailItemLabel(item woxwidget.Widget) woxwidget.Text {
 		}
 	}
 	row := child.(woxwidget.Gesture).Child.(woxwidget.Container)
-	return row.Child.(woxwidget.Align).Child.(woxwidget.Flex).Children[1].(woxwidget.Expanded).Child.(woxwidget.Align).Child.(woxwidget.Text)
+	return row.Child.(woxwidget.Align).Child.(woxwidget.Flex).Children[1].(woxwidget.Expanded).Child.(woxwidget.Text)
 }
 
 func TestSettingsRailUsesRegularLabelWeight(t *testing.T) {
@@ -257,7 +257,7 @@ func TestSettingsSearchResultsShowFlutterLeadingIconLayout(t *testing.T) {
 	if leading.Width != 24 || leading.Height != 38 || image.Source != icon || image.Width != 24 || image.Height != 24 {
 		t.Fatalf("search result leading icon = %#v / %#v, want 24px Flutter icon slot", leading, image)
 	}
-	text := content.Children[1].(woxwidget.Expanded).Child.(woxwidget.Align).Child.(woxwidget.Flex)
+	text := content.Children[1].(woxwidget.Expanded).Child.(woxwidget.Flex)
 	if text.Axis != woxwidget.Vertical || len(text.Children) != 2 {
 		t.Fatalf("search result text column = %#v, want title and subtitle", text)
 	}

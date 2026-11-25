@@ -60,6 +60,7 @@ type PluginListItem struct {
 	ID                string
 	Name              string
 	Status            string
+	SortMetric        string
 	Badge             string
 	ShowInstalledIcon bool
 	Icon              *woxui.Image
@@ -281,6 +282,21 @@ func pluginListRowTextColors(item PluginListItem, theme woxcomponent.ControlThem
 	return theme.Text, theme.TextSecondary
 }
 
+// pluginListMetadata reserves the store statistic before fitting the version and author text.
+func pluginListMetadata(item PluginListItem, style woxui.TextStyle, color woxui.Color) woxwidget.Widget {
+	if item.SortMetric == "" {
+		return woxwidget.Text{Value: item.Status, Style: style, Color: color}
+	}
+	metric := woxwidget.Text{Value: item.SortMetric, Style: style, Color: color}
+	if item.Status == "" {
+		return metric
+	}
+	return woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
+		woxwidget.Flexible{Child: woxwidget.TextBlock{Value: item.Status, Style: style, Color: color, MaxLines: 1, HardEllipsis: true, ShrinkWrap: true}},
+		metric,
+	}}
+}
+
 // pluginListRow builds one catalog entry so LazyList can materialize only the visible slice.
 func pluginListRow(item PluginListItem, props PluginListProps, rowHeight float32) woxwidget.Widget {
 	background := woxui.Color{}
@@ -309,7 +325,7 @@ func pluginListRow(item PluginListItem, props PluginListProps, rowHeight float32
 		// Preserve horizontal clipping while letting both measured lines fit at larger interface sizes.
 		woxwidget.Expanded{Child: woxwidget.Clip{SizeToChild: true, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 3, Children: []woxwidget.Widget{
 			woxwidget.Text{Value: item.Name, Style: woxui.TextStyle{Size: props.Theme.Scaled(15)}, Color: titleColor},
-			woxwidget.Text{Value: item.Status, Style: woxui.TextStyle{Size: props.Theme.Scaled(12)}, Color: subtitleColor},
+			pluginListMetadata(item, woxui.TextStyle{Size: props.Theme.Scaled(woxcomponent.SettingsSecondaryFontSize)}, subtitleColor),
 		}}}},
 	}
 	if item.Badge != "" {
@@ -580,7 +596,7 @@ func pluginEditor(props PluginEditorProps, width, height float32, theme woxcompo
 }
 
 func pluginDetailCopy(text string, width float32, theme woxcomponent.ControlTheme) woxwidget.Widget {
-	return woxwidget.TextBlock{Value: text, Width: width, LineHeight: 18, Style: woxui.TextStyle{Size: theme.Scaled(woxcomponent.SettingsHelpFontSize)}, Color: theme.TextSecondary}
+	return woxwidget.TextBlock{Value: text, Width: width, MinLineHeight: theme.Scaled(18), Style: woxui.TextStyle{Size: theme.Scaled(woxcomponent.SettingsHelpFontSize)}, Color: theme.TextSecondary}
 }
 
 // pluginFormContent lets sections grow naturally inside the page's shared scroll surface.
@@ -645,8 +661,8 @@ func pluginMetadataRow(item PluginMetadataItem, width float32, theme woxcomponen
 	border.A /= 2
 	return woxwidget.Container{Width: width, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: []woxwidget.Widget{
 		woxwidget.Container{Width: width, Padding: woxwidget.Insets{Top: 16, Bottom: 16}, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 6, Children: []woxwidget.Widget{
-			woxwidget.TextBlock{Value: item.Title, Width: width, LineHeight: 20, Style: woxui.TextStyle{Size: theme.Scaled(13), Weight: woxui.FontWeightSemibold}, Color: theme.Text},
-			woxwidget.TextBlock{Value: item.Description, Width: width, LineHeight: 18, Style: woxui.TextStyle{Size: theme.Scaled(12)}, Color: theme.TextSecondary},
+			woxwidget.TextBlock{Value: item.Title, Width: width, MinLineHeight: theme.Scaled(20), Style: woxui.TextStyle{Size: theme.Scaled(13), Weight: woxui.FontWeightSemibold}, Color: theme.Text},
+			woxwidget.TextBlock{Value: item.Description, Width: width, MinLineHeight: theme.Scaled(18), Style: woxui.TextStyle{Size: theme.Scaled(12)}, Color: theme.TextSecondary},
 		}}},
 		woxwidget.Container{Width: width, Height: 1, Color: border},
 	}}}
@@ -671,9 +687,8 @@ func pluginStoreDescriptionContent(props PluginStoreDetailProps, width float32, 
 	}
 	metadata := woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: chips}
 	children := []woxwidget.Widget{woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 16, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
-		woxwidget.Expanded{Child: woxwidget.LayoutBuilder{Build: func(size woxui.Size) woxwidget.Widget {
-			return woxwidget.TextBlock{Value: props.Description, Width: size.Width, Style: woxui.TextStyle{Size: theme.Scaled(13)}, LineHeight: 18, Color: theme.Text}
-		}}}, metadata,
+		woxwidget.Expanded{Child: woxwidget.TextBlock{Value: props.Description, Style: woxui.TextStyle{Size: theme.Scaled(woxcomponent.SettingsPageDescriptionFontSize)}, MinLineHeight: theme.Scaled(18), Color: theme.Text}},
+		metadata,
 	}}}
 	if shot := pluginStoreScreenshot(props, width, theme); shot != nil {
 		children = append(children, shot)

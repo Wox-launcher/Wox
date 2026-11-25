@@ -110,7 +110,7 @@ func SettingsRail(props SettingsRailProps) woxwidget.Widget {
 					Background: &color, HoverBackground: &hoverBackground, Selected: item.Selected, OnTap: item.OnTap, Theme: props.Theme,
 					Padding: woxwidget.Insets{Left: leftPadding, Right: 10}, Child: woxwidget.Align{Height: woxcomponent.SettingsNavItemHeight, Vertical: 0.5, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
 						woxwidget.Align{Width: 22, Height: 24, Horizontal: 0.5, Vertical: 0.5, Child: icon},
-						woxwidget.Expanded{Child: woxwidget.Align{Height: 24, Vertical: 0.5, Child: woxwidget.Text{Value: item.Label, Style: labelStyle, Color: foreground}}},
+						woxwidget.Expanded{Child: woxwidget.Text{Value: item.Label, Style: labelStyle, Color: foreground}},
 					}}},
 				}))
 			}
@@ -228,7 +228,7 @@ func SettingsSearchResults(props SettingsSearchResultsProps) woxwidget.Widget {
 			if showIcons && result.Icon != nil {
 				content = woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
 					woxwidget.Align{Width: 24, Height: 38, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Image{Source: result.Icon, Width: 24, Height: 24}},
-					woxwidget.Expanded{Child: woxwidget.Align{Height: 38, Vertical: 0.5, Child: textColumn}},
+					woxwidget.Expanded{Child: textColumn},
 				}}
 			}
 			rows = append(rows, woxwidget.Gesture{ID: fmt.Sprintf("settings-search-result-%d", index), OnHover: func(inside bool) {

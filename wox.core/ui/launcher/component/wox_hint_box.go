@@ -33,7 +33,7 @@ func WoxHintBox(props HintBoxProps) woxwidget.Widget {
 		BorderColor: withAlpha(props.Accent, borderAlpha), BorderWidth: 1, Padding: woxwidget.UniformInsets(12),
 		Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 10, CrossAxisAlignment: woxwidget.CrossAxisStart, Children: []woxwidget.Widget{
 			icon,
-			woxwidget.Expanded{Child: woxwidget.TextBlock{Value: props.Text, MaxLines: maxLines, LineHeight: 18, Style: woxui.TextStyle{Size: 13}, Color: props.Theme.Text}},
+			woxwidget.Expanded{Child: woxwidget.TextBlock{Value: props.Text, MaxLines: maxLines, MinLineHeight: props.Theme.Scaled(18), Style: woxui.TextStyle{Size: props.Theme.Scaled(SettingsLabelFontSize)}, Color: props.Theme.Text}},
 		}},
 	}
 }

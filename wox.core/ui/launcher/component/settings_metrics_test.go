@@ -3,11 +3,11 @@ package component
 import "testing"
 
 func TestSettingsDefaultWindowFitsPluginDetails(t *testing.T) {
-	if SettingsWindowWidth != 1100 || SettingsWindowHeight != 760 {
-		t.Fatalf("settings window = %.0fx%.0f, want 1100x760", SettingsWindowWidth, SettingsWindowHeight)
+	if SettingsWindowWidth != 1140 || SettingsWindowHeight != 760 {
+		t.Fatalf("settings window = %.0fx%.0f, want 1140x760", SettingsWindowWidth, SettingsWindowHeight)
 	}
-	if SettingsRailMaxWidth != 220 || SettingsPageFormMaxWidth != 700 {
-		t.Fatalf("settings chrome = rail %.0f form %.0f, want 220/700", SettingsRailMaxWidth, SettingsPageFormMaxWidth)
+	if SettingsRailMaxWidth != 244 || SettingsPageFormMaxWidth != 700 {
+		t.Fatalf("settings chrome = rail %.0f form %.0f, want 244/700", SettingsRailMaxWidth, SettingsPageFormMaxWidth)
 	}
 	rail := SettingsRailWidth(SettingsWindowWidth)
 	page := SettingsWindowWidth - rail
@@ -20,11 +20,11 @@ func TestSettingsDefaultWindowFitsPluginDetails(t *testing.T) {
 }
 
 func TestSettingsCatalogListWidthMatchesPluginCatalog(t *testing.T) {
-	if SettingsCatalogListMinWidth != 220 || SettingsCatalogListMaxWidth != 250 || SettingsCatalogDividerGutter != 21 {
-		t.Fatalf("catalog column = min %.0f max %.0f gutter %.0f, want 220/250/21", SettingsCatalogListMinWidth, SettingsCatalogListMaxWidth, SettingsCatalogDividerGutter)
+	if SettingsCatalogListMinWidth != 220 || SettingsCatalogListMaxWidth != 260 || SettingsCatalogDividerGutter != 21 {
+		t.Fatalf("catalog column = min %.0f max %.0f gutter %.0f, want 220/260/21", SettingsCatalogListMinWidth, SettingsCatalogListMaxWidth, SettingsCatalogDividerGutter)
 	}
-	if got := SettingsCatalogListWidth(840); got != 250 {
-		t.Fatalf("default catalog list = %.0f, want the 250 plugin column", got)
+	if got := SettingsCatalogListWidth(900); got != 260 {
+		t.Fatalf("wide catalog list = %.0f, want the 260 maximum", got)
 	}
 	if got := SettingsCatalogListWidth(700); got != 220 {
 		t.Fatalf("narrow catalog list = %.0f, want the 220 minimum", got)

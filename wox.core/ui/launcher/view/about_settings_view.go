@@ -65,7 +65,9 @@ func AboutSettingsView(props AboutSettingsProps) woxwidget.Widget {
 	if props.Status != "" {
 		children = append(children,
 			woxwidget.Container{Height: 18},
-			woxwidget.Align{Width: contentWidth, Height: 18, Horizontal: 0.5, Child: woxwidget.Text{Value: props.Status, Style: woxui.TextStyle{Size: props.Theme.Scaled(12)}, Color: props.Theme.Error}},
+			woxwidget.Container{Width: contentWidth, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, MainAxisAlignment: woxwidget.MainAxisCenter, Children: []woxwidget.Widget{
+				woxwidget.Text{Value: props.Status, Style: woxui.TextStyle{Size: props.Theme.Scaled(12)}, Color: props.Theme.Error},
+			}}},
 		)
 	}
 	children = append(children, woxwidget.Container{Height: 40})

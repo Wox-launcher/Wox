@@ -16,7 +16,7 @@ type Widget interface {
 }
 
 // MeasureStateless returns the natural size of a widget tree that does not contain retained State.
-func MeasureStateless(window HostServices, widget Widget, width float32) woxui.Size {
+func MeasureStateless(window TextMeasurer, widget Widget, width float32) woxui.Size {
 	if widget == nil {
 		return woxui.Size{}
 	}
@@ -1240,8 +1240,11 @@ type TextBlock struct {
 	Width      float32
 	Height     float32
 	LineHeight float32
-	MaxLines   int
-	Centered   bool
+	// MinLineHeight lets the font's measured line height grow beyond this minimum.
+	// Leave Height unset for intrinsic height. LineHeight still specifies an exact slot.
+	MinLineHeight float32
+	MaxLines      int
+	Centered      bool
 	// AlignmentY optically places each measured line box inside the authored
 	// slot. 0 keeps the native top edge; 0.5 centers CJK metrics that are
 	// taller than the slot by clipping extra ascent and descent equally.
@@ -1367,10 +1370,20 @@ func (w TextBlock) layout(ctx context, available constraints) *node {
 	if w.Height > 0 {
 		heightLimit = available.constrainHeight(w.Height)
 	}
-	metrics, _ := ctx.window.MeasureText("Mg", w.Style)
 	lineHeight := w.LineHeight
+	measureLineHeight := lineHeight <= 0 && w.MinLineHeight > 0
 	if lineHeight <= 0 {
+		metrics, _ := ctx.window.MeasureText("Mg", w.Style)
 		lineHeight = max(metrics.Size.Height, w.Style.Size*1.35)
+		if measureLineHeight {
+			lineHeight = max(metrics.Size.Height, w.MinLineHeight)
+			// Measure the content too, since fallback fonts can be taller than the Latin sample.
+			for paragraph := range strings.FieldsFuncSeq(w.Value, func(r rune) bool { return r == '\n' || r == '\r' }) {
+				if measured, err := ctx.window.MeasureText(paragraph, w.Style); err == nil {
+					lineHeight = max(lineHeight, measured.Size.Height)
+				}
+			}
+		}
 	}
 	maxLines := w.MaxLines
 	// Scroll content is measured with unbounded height (MaxFloat32). Converting
@@ -1389,8 +1402,8 @@ func (w TextBlock) layout(ctx context, available constraints) *node {
 		return layoutTextBlock(ctx.window, w.Value, w.Style, width, maxLines, lineHeight)
 	}
 	textLayout := TextBlockLayout{}
-	// Precomputed layouts do not record truncation policy, so hard ellipsis must be laid out again.
-	if w.Layout != nil && !(w.HardEllipsis && maxLines == 1) {
+	// Precomputed layouts do not record hard ellipsis or the current font's measured line height.
+	if w.Layout != nil && !measureLineHeight && !(w.HardEllipsis && maxLines == 1) {
 		textLayout = *w.Layout
 		if textLayout.HasConstraintWidth && float32(math.Abs(float64(textLayout.ConstraintWidth-width))) > 0.5 {
 			if ctx.debug != nil && ctx.elements != nil {

@@ -118,6 +118,34 @@ func TestTextBlockAlignmentYCentersTallCJKLineInSlot(t *testing.T) {
 	}
 }
 
+func TestTextBlockMinimumLineHeightFitsFallbackFont(t *testing.T) {
+	style := woxui.TextStyle{Size: 13}
+	color := woxui.Color{A: 255}
+	block := TextBlock{Value: "English\r\n漢字g", Style: style, Color: color, MinLineHeight: 18, AlignmentY: 0.5}
+	root := block.layout(context{window: fallbackLineMeasurer{}}, constraints{width: 120, height: 60})
+	if root.bounds.Height != 48 {
+		t.Fatalf("text height = %g, want two 24-unit lines", root.bounds.Height)
+	}
+	actual := &woxui.DisplayList{}
+	root.draw(actual, 0, 0, false, false, false, nil)
+	expected := &woxui.DisplayList{}
+	expected.DrawText("English", woxui.Rect{Y: 4, Width: 120, Height: 16}, style, color)
+	expected.DrawText("漢字g", woxui.Rect{Y: 24, Width: 120, Height: 24}, style, color)
+	if err := actual.Compare(expected); err != nil {
+		t.Fatalf("measured lines should draw without clipping: %v", err)
+	}
+}
+
+type fallbackLineMeasurer struct{}
+
+func (fallbackLineMeasurer) MeasureText(text string, style woxui.TextStyle) (woxui.TextMetrics, error) {
+	height := float32(16)
+	if strings.Contains(text, "漢") {
+		height = 24
+	}
+	return (tallLineMeasurer{height: height}).MeasureText(text, style)
+}
+
 func TestTextBlockSkipsLinesThatStartPastTheBox(t *testing.T) {
 	style := woxui.TextStyle{Size: 10}
 	color := woxui.Color{A: 255}

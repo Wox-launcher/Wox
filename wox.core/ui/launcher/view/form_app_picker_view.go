@@ -9,7 +9,7 @@ import (
 	woxwidget "wox/ui/widget"
 )
 
-const formAppPickerRowHeight = float32(48)
+const formAppPickerMinRowHeight = float32(48)
 
 // FormAppCandidate is the display data required for one application picker row.
 type FormAppCandidate struct {
@@ -54,6 +54,7 @@ type formAppPickerState struct {
 	queryFocusNode   *woxwidget.FocusNode
 	scrollController *woxwidget.ScrollController
 	selectedIdentity string
+	keepVisibleKey   woxwidget.Key
 	hovered          int
 }
 
@@ -73,6 +74,7 @@ func (s *formAppPickerState) DidUpdateWidget(_ woxwidget.StateContext, oldWidget
 	props := newWidget.(FormAppPickerProps)
 	if !strings.EqualFold(strings.TrimSpace(oldProps.SelectedIdentity), strings.TrimSpace(props.SelectedIdentity)) {
 		s.selectedIdentity = normalizedFormAppIdentity(props.SelectedIdentity)
+		s.keepVisibleKey = ""
 		s.hovered = -1
 		s.scrollController.JumpTo(0)
 	}
@@ -96,6 +98,10 @@ type visibleFormAppCandidate struct {
 	originalIndex int
 }
 
+func (item visibleFormAppCandidate) rowKey() woxwidget.Key {
+	return woxwidget.Key(fmt.Sprintf("form-table-app-%d", item.originalIndex))
+}
+
 func filteredFormAppCandidates(candidates []FormAppCandidate, query string) []visibleFormAppCandidate {
 	query = strings.ToLower(strings.TrimSpace(query))
 	visible := make([]visibleFormAppCandidate, 0, len(candidates))
@@ -115,19 +121,10 @@ func buildFormAppPickerDialog(context woxwidget.StateContext, props FormAppPicke
 	panelWidth := min(float32(808), max(float32(0), props.OverlayWidth-64))
 	panelHeight := min(float32(640), max(float32(0), props.OverlayHeight-56))
 	innerWidth := max(float32(0), panelWidth-48)
-	innerHeight := max(float32(0), panelHeight-48)
-	const titleHeight = float32(36)
 	const searchHeight = woxcomponent.SettingsSearchHeight
-	const actionsHeight = SettingsDialogActionsHeight
-	errorHeight := float32(0)
-	if props.Error != "" {
-		errorHeight = 28
-	}
-	listHeight := max(float32(48), innerHeight-titleHeight-searchHeight-actionsHeight-errorHeight-12)
 
-	title := woxwidget.Container{Width: innerWidth, Height: titleHeight, Child: woxwidget.Text{
-		Value: props.Title, Style: woxui.TextStyle{Size: 16, Weight: woxui.FontWeightSemibold}, Color: props.Theme.Text,
-	}}
+	title := woxwidget.TextBlock{Value: props.Title, Width: innerWidth, MaxLines: 1, MinLineHeight: props.Theme.Scaled(36),
+		Style: woxui.TextStyle{Size: props.Theme.Scaled(16), Weight: woxui.FontWeightSemibold}, Color: props.Theme.Text}
 	search := woxcomponent.WoxTextField(woxcomponent.TextFieldProps{
 		ID: "form-table-app-search", Label: props.SearchPlaceholder, Hint: props.SearchPlaceholder, Width: innerWidth, Height: searchHeight, Radius: 4,
 		Padding: woxwidget.Insets{Left: 12, Top: 10, Right: 10, Bottom: 10}, Transparent: true,
@@ -137,17 +134,23 @@ func buildFormAppPickerDialog(context woxwidget.StateContext, props FormAppPicke
 		OnChanged: func(string) {
 			context.SetState(func() {
 				state.hovered = -1
+				state.keepVisibleKey = ""
 				state.scrollController.JumpTo(0)
 			})
 		},
 	})
 	content := []woxwidget.Widget{title, search}
 	if props.Error != "" {
-		content = append(content, woxwidget.Container{Width: innerWidth, Height: errorHeight, Padding: woxwidget.Insets{Top: 10}, Child: woxwidget.TextBlock{
-			Value: props.Error, Width: innerWidth, Height: 16, MaxLines: 1, Style: woxui.TextStyle{Size: 11}, Color: props.Theme.TextSecondary,
+		content = append(content, woxwidget.Container{Width: innerWidth, Padding: woxwidget.Insets{Top: 10}, Child: woxwidget.TextBlock{
+			Value: props.Error, Width: innerWidth, MaxLines: 2, MinLineHeight: props.Theme.Scaled(16), Style: woxui.TextStyle{Size: props.Theme.Scaled(11)}, Color: props.Theme.TextSecondary,
 		}})
 	}
-	content = append(content, woxwidget.Container{Width: innerWidth, Height: 12}, formAppPickerList(context, props, state, visible, innerWidth, listHeight))
+	content = append(content, woxwidget.Container{Width: innerWidth, Height: 12}, woxwidget.Expanded{Child: woxwidget.LayoutBuilder{Build: func(size woxui.Size) woxwidget.Widget {
+		if size.Height <= 0 {
+			return nil
+		}
+		return formAppPickerList(context, props, state, visible, innerWidth, size.Height)
+	}}})
 
 	confirm := func() { state.confirm(props) }
 	content = append(content, settingsDialogActions(innerWidth, props.Theme,
@@ -180,7 +183,7 @@ func formAppPickerList(context woxwidget.StateContext, props FormAppPickerProps,
 		}
 		body = woxcomponent.WoxScrollView(woxcomponent.ScrollViewProps{
 			Key: "form-table-app-scroll", Width: width, Height: height, Controller: state.scrollController,
-			Content: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}, Theme: props.Theme, ThumbColor: props.Theme.Text,
+			KeepVisibleKey: state.keepVisibleKey, Content: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}, Theme: props.Theme, ThumbColor: props.Theme.Text,
 		})
 	}
 	border := woxwidget.Container{Width: width, Height: height, Radius: 12, BorderColor: formAppPickerAlpha(props.Theme.Border, 230), BorderWidth: 1}
@@ -201,31 +204,29 @@ func formAppPickerRow(context woxwidget.StateContext, props FormAppPickerProps, 
 	} else if state.hovered == index {
 		background = formAppPickerAlpha(props.Theme.Accent, 15)
 	}
+	key := item.rowKey()
 	activate := func() {
 		context.SetState(func() {
 			state.selectedIdentity = normalizedFormAppIdentity(item.candidate.Identity)
-			state.scrollController.EnsureVisible(float32(index)*formAppPickerRowHeight, float32(index+1)*formAppPickerRowHeight)
+			state.keepVisibleKey = key
 		})
 	}
-	contentWidth := max(float32(0), width-24-48)
 	children := []woxwidget.Widget{
-		woxwidget.Align{Width: 48, Height: formAppPickerRowHeight, Vertical: 0.5, Child: formAppPickerRadio(selected, props.Theme)},
+		woxwidget.Align{Width: 48, Height: formAppPickerMinRowHeight, Vertical: 0.5, Child: formAppPickerRadio(selected, props.Theme)},
 	}
 	if item.candidate.Icon != nil {
-		children = append(children, woxwidget.Align{Width: 40, Height: formAppPickerRowHeight, Vertical: 0.5, Child: woxwidget.Image{Source: item.candidate.Icon, Width: 28, Height: 28, Fit: woxwidget.ImageFitContain}})
-		contentWidth -= 40
+		children = append(children, woxwidget.Align{Width: 40, Height: formAppPickerMinRowHeight, Vertical: 0.5, Child: woxwidget.Image{Source: item.candidate.Icon, Width: 28, Height: 28, Fit: woxwidget.ImageFitContain}})
 	}
 	weight := woxui.FontWeightRegular
 	if selected {
 		weight = woxui.FontWeightSemibold
 	}
-	children = append(children, woxwidget.Align{Width: contentWidth, Height: formAppPickerRowHeight, Vertical: 0.5, Child: woxwidget.Flex{
+	children = append(children, woxwidget.Expanded{Child: woxwidget.Container{Padding: woxwidget.Insets{Top: 4, Bottom: 4}, Child: woxwidget.Flex{
 		Axis: woxwidget.Vertical, Gap: 2, Children: []woxwidget.Widget{
-			woxwidget.TextBlock{Value: item.candidate.Name, Width: contentWidth, Height: 18, LineHeight: 18, MaxLines: 1, Style: woxui.TextStyle{Size: 13, Weight: weight}, Color: props.Theme.Text},
-			woxwidget.TextBlock{Value: item.candidate.Detail, Width: contentWidth, Height: 15, LineHeight: 15, MaxLines: 1, Style: woxui.TextStyle{Size: 11}, Color: props.Theme.TextSecondary},
+			woxwidget.TextBlock{Value: item.candidate.Name, MinLineHeight: props.Theme.Scaled(18), MaxLines: 1, Style: woxui.TextStyle{Size: props.Theme.Scaled(13), Weight: weight}, Color: props.Theme.Text},
+			woxwidget.TextBlock{Value: item.candidate.Detail, MinLineHeight: props.Theme.Scaled(15), MaxLines: 1, Style: woxui.TextStyle{Size: props.Theme.Scaled(11)}, Color: props.Theme.TextSecondary},
 		},
-	}})
-	key := woxwidget.Key(fmt.Sprintf("form-table-app-%d", item.originalIndex))
+	}}})
 	row := woxwidget.Gesture{ID: string(key), OnTap: activate, OnHover: func(inside bool) {
 		context.SetState(func() {
 			if inside {
@@ -234,7 +235,7 @@ func formAppPickerRow(context woxwidget.StateContext, props FormAppPickerProps, 
 				state.hovered = -1
 			}
 		})
-	}, Child: woxwidget.Container{Width: width, Height: formAppPickerRowHeight, Color: background, Padding: woxwidget.Insets{Left: 12, Right: 12}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Children: children}}}
+	}, Child: woxwidget.Container{Width: width, Color: background, Padding: woxwidget.Insets{Left: 12, Right: 12}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: children}}}
 	return woxwidget.Semantics{
 		Key: key, AutomationID: string(key), Role: woxui.AccessibilityRoleRadioButton, Label: item.candidate.Name,
 		Actions: []woxui.AccessibilityAction{woxui.AccessibilityActionActivate}, Selected: selected, Checked: selected,
@@ -308,7 +309,7 @@ func (s *formAppPickerState) handleKey(context woxwidget.StateContext, props For
 		context.SetState(func() {
 			s.selectedIdentity = normalizedFormAppIdentity(visible[next].candidate.Identity)
 			s.hovered = -1
-			s.scrollController.EnsureVisible(float32(next)*formAppPickerRowHeight, float32(next+1)*formAppPickerRowHeight)
+			s.keepVisibleKey = visible[next].rowKey()
 		})
 		return true
 	case woxui.KeyEnter:

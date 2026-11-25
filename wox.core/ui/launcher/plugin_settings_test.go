@@ -1558,16 +1558,16 @@ func TestStorePluginStatisticsFollowSortAndAppearInDetails(t *testing.T) {
 		order plugin.StorePluginSort
 		want  string
 	}{
-		{plugin.StorePluginSortDefault, "1.0  Author  ↓ 1234"},
-		{plugin.StorePluginSortStars, "1.0  Author  ★ 0"},
-		{plugin.StorePluginSortDownloads, "1.0  Author  ↓ 1234"},
-		{plugin.StorePluginSortUpdated, "1.0  Author  2026-01-02"},
-		{plugin.StorePluginSortName, "1.0  Author"},
+		{plugin.StorePluginSortDefault, "↓ 1234"},
+		{plugin.StorePluginSortStars, "★ 0"},
+		{plugin.StorePluginSortDownloads, "↓ 1234"},
+		{plugin.StorePluginSortUpdated, "2026-01-02"},
+		{plugin.StorePluginSortName, ""},
 	} {
 		snapshot := settingsSnapshot{plugins: pluginSettingsSnapshot{PluginsStore: true, PluginFilters: pluginFilterState{storeSort: test.order}}}
 		entries := app.pluginSettings.pluginListEntries(snapshot, []filteredPlugin{{plugin: item}}, 1)
-		if got := entries[0].Item.Status; got != test.want {
-			t.Errorf("sort %q status = %q, want %q", test.order, got, test.want)
+		if row := entries[0].Item; row.SortMetric != test.want || row.Status != "1.0  Author" {
+			t.Errorf("sort %q status = %q and metric = %q, want %q and %q", test.order, row.Status, row.SortMetric, "1.0  Author", test.want)
 		}
 	}
 

@@ -98,7 +98,7 @@ func modelManagerDropdown(props ModelManagerProps) woxwidget.Widget {
 	children := make([]woxwidget.Widget, 0, 3)
 	if showEngine {
 		engineChildren := []woxwidget.Widget{
-			woxwidget.Expanded{Child: woxwidget.TextBlock{Value: props.EngineLabel, Height: 34, MaxLines: 2, LineHeight: 16, Style: woxui.TextStyle{Size: props.Theme.Scaled(11)}, Color: props.Theme.TextSecondary}},
+			woxwidget.Expanded{Child: woxwidget.TextBlock{Value: props.EngineLabel, MaxLines: 2, MinLineHeight: props.Theme.Scaled(16), Style: woxui.TextStyle{Size: props.Theme.Scaled(11)}, Color: props.Theme.TextSecondary}},
 		}
 		if props.EngineEnabled {
 			engineChildren = append(engineChildren, woxcomponent.WoxButton(woxcomponent.ButtonProps{
@@ -252,13 +252,9 @@ func modelManagerDropdownDetail(option ModelManagerOption, titleChildren []woxwi
 		woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 6, Children: titleChildren},
 	}
 	if option.Languages != "" {
-		children = append(children, woxwidget.TextBlock{Value: option.Languages, Height: 16, MaxLines: 1, Style: woxui.TextStyle{Size: theme.Scaled(11)}, Color: theme.TextSecondary})
+		children = append(children, woxwidget.TextBlock{Value: option.Languages, MinLineHeight: theme.Scaled(16), MaxLines: 1, Style: woxui.TextStyle{Size: theme.Scaled(11)}, Color: theme.TextSecondary})
 	}
-	height := float32(18)
-	if option.Languages != "" {
-		height = 37
-	}
-	return woxwidget.Container{Height: height, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 3, Children: children}}
+	return woxwidget.Container{Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 3, Children: children}}
 }
 
 func modelManagerAlpha(color woxui.Color, alpha uint8) woxui.Color {

@@ -165,7 +165,7 @@ func dataSettingsError(props DataSettingsProps, width float32) woxwidget.Widget 
 		AutomationID: "data-settings-error", Role: woxui.AccessibilityRoleText, Label: message, Value: message,
 		LiveRegion: woxui.AccessibilityLiveRegionPolite,
 		Child: woxwidget.Container{Width: width, Padding: woxwidget.Insets{Top: 4, Bottom: 8}, Child: woxwidget.TextBlock{
-			Value: message, Width: width, MaxLines: 3, LineHeight: props.Theme.Scaled(16),
+			Value: message, Width: width, MaxLines: 3, MinLineHeight: props.Theme.Scaled(16),
 			Style: woxui.TextStyle{Size: props.Theme.Scaled(woxcomponent.SettingsHelpFontSize)}, Color: props.Theme.Error,
 		}},
 	}}

@@ -1,6 +1,7 @@
 package view
 
 import (
+	"fmt"
 	"testing"
 
 	woxcomponent "wox/ui/launcher/component"
@@ -43,22 +44,21 @@ func TestFormAppPickerMatchesFlutterDialogAndDefersCommit(t *testing.T) {
 	if footer.Height != SettingsDialogActionsHeight || footer.Padding.Top != SettingsDialogActionsHeight-settingsDialogActionHeight {
 		t.Fatalf("app picker footer = height %v padding %+v, want shared action height plus top spacing", footer.Height, footer.Padding)
 	}
-	list := children[3].(woxwidget.Stack)
+	list := children[3].(woxwidget.Expanded).Child.(woxwidget.LayoutBuilder).Build(woxui.Size{Width: 760, Height: 460}).(woxwidget.Stack)
 	scroll := list.Children[0].Child.(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
 	first := scroll.Content.(woxwidget.Flex).Children[0].(woxwidget.Semantics)
 	if first.Role != woxui.AccessibilityRoleRadioButton || first.Checked {
 		t.Fatal("empty initial selection should render unchecked radio rows")
 	}
 	row := first.Child.(woxwidget.Gesture).Child.(woxwidget.Container).Child.(woxwidget.Flex)
-	labelSlot := row.Children[len(row.Children)-1].(woxwidget.Align)
-	if labelSlot.Height != formAppPickerRowHeight || labelSlot.Vertical != 0.5 {
-		t.Fatalf("app label alignment = %#v, want a full-height centered slot", labelSlot)
+	if row.CrossAxisAlignment != woxwidget.CrossAxisCenter {
+		t.Fatal("app row contents should be vertically centered")
 	}
-	labels := labelSlot.Child.(woxwidget.Flex).Children
+	labels := row.Children[len(row.Children)-1].(woxwidget.Expanded).Child.(woxwidget.Container).Child.(woxwidget.Flex).Children
 	name := labels[0].(woxwidget.TextBlock)
 	detail := labels[1].(woxwidget.TextBlock)
-	if name.Value != "Finder" || detail.Value != "/System/Finder.app" || name.Height < name.LineHeight || detail.Height < detail.LineHeight {
-		t.Fatalf("app labels = %q %.0f/%.0f and %q %.0f/%.0f", name.Value, name.Height, name.LineHeight, detail.Value, detail.Height, detail.LineHeight)
+	if name.Value != "Finder" || detail.Value != "/System/Finder.app" || name.Height != 0 || detail.Height != 0 {
+		t.Fatalf("app labels = %+v and %+v, want natural text height", name, detail)
 	}
 	if confirmed != -2 {
 		t.Fatal("rendering or selecting a row must not commit before confirmation")
@@ -67,5 +67,44 @@ func TestFormAppPickerMatchesFlutterDialogAndDefersCommit(t *testing.T) {
 	state.confirm(props)
 	if confirmed != 1 {
 		t.Fatalf("confirmed index = %d, want Safari", confirmed)
+	}
+}
+
+func TestFormAppPickerRowGrowsWithMeasuredLabels(t *testing.T) {
+	props := FormAppPickerProps{Theme: woxcomponent.ControlTheme{DensityScale: 1.2}}
+	item := visibleFormAppCandidate{candidate: FormAppCandidate{Name: "Finder", Detail: "/System/Finder.app"}}
+	row := formAppPickerRow(woxwidget.StateContext{}, props, &formAppPickerState{}, item, 0, 500)
+	if height := woxwidget.MeasureStateless(catalogTallFontServices{}, row, 500).Height; height <= formAppPickerMinRowHeight {
+		t.Fatalf("app row height = %g, want the row to grow for larger font metrics", height)
+	}
+}
+
+func TestFormAppPickerKeyboardRevealsMeasuredRow(t *testing.T) {
+	confirmed := -1
+	props := FormAppPickerProps{OverlayWidth: 800, OverlayHeight: 500, Title: "Select app", SearchPlaceholder: "Search apps",
+		CancelLabel: "Cancel", ConfirmLabel: "OK", Theme: woxcomponent.ControlTheme{DensityScale: 1.2},
+		OnConfirm: func(index int) { confirmed = index }}
+	for index := range 20 {
+		name := fmt.Sprintf("Application %d", index)
+		props.Candidates = append(props.Candidates, FormAppCandidate{Name: name, Detail: name + " details", Identity: name})
+	}
+	host := woxwidget.NewHost(func(woxui.FrameInfo) woxwidget.Widget { return FormAppPickerView(props) })
+	defer host.Dispose()
+	host.AttachServices(catalogTallFontServices{})
+	frame := woxui.FrameInfo{Size: woxui.Size{Width: 800, Height: 500}, PixelSize: woxui.PixelSize{Width: 2000, Height: 1250}, Scale: 2.5}
+	host.Frame(&woxui.DisplayList{}, frame)
+	if !host.Key(woxui.KeyEvent{Key: woxui.KeyArrowUp, Down: true}) {
+		t.Fatal("app search did not handle keyboard selection")
+	}
+	// The first layout measures the row, and the next frame applies the scroll offset.
+	host.Frame(&woxui.DisplayList{}, frame)
+	host.Frame(&woxui.DisplayList{}, frame)
+	row, found := host.BoundsForKey("form-table-app-19")
+	footer, footerFound := host.BoundsForKey("form-table-app-confirm")
+	if !found || !footerFound || row.Y < 0 || row.Y+row.Height > footer.Y {
+		t.Fatalf("selected row %+v should scroll into view above the footer %+v", row, footer)
+	}
+	if !host.Key(woxui.KeyEvent{Key: woxui.KeyEnter, Down: true}) || confirmed != 19 {
+		t.Fatalf("confirmed app = %d, want the selected last app", confirmed)
 	}
 }

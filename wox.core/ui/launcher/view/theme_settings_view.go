@@ -196,7 +196,7 @@ func themeList(props ThemeSettingsProps, width, height float32) woxwidget.Widget
 			color = props.Theme.Error
 		}
 		list = woxwidget.Container{Width: width, Height: viewportHeight, Padding: woxwidget.Insets{Top: 18}, Child: woxwidget.TextBlock{
-			Value: props.Message, Width: width, Height: min(float32(80), viewportHeight), MaxLines: 3, Style: woxui.TextStyle{Size: props.Theme.Scaled(12)}, LineHeight: 18, Color: color,
+			Value: props.Message, Width: width, MaxLines: 3, Style: woxui.TextStyle{Size: props.Theme.Scaled(12)}, MinLineHeight: props.Theme.Scaled(18), Color: color,
 		}}
 	} else if len(items) == 0 {
 		list = themeEmptyState(props, width, viewportHeight)
@@ -426,13 +426,13 @@ func themeDetail(props ThemeSettingsProps, width, height float32) woxwidget.Widg
 	var details []woxwidget.Widget
 	if description != "" {
 		details = append(details, woxwidget.Container{Width: width, Padding: woxwidget.Insets{Left: 20, Right: 20, Bottom: 8}, Child: woxwidget.TextBlock{
-			Value: description, Width: innerWidth, LineHeight: 20,
+			Value: description, Width: innerWidth, MinLineHeight: props.Theme.Scaled(20),
 			Style: woxui.TextStyle{Size: props.Theme.Scaled(13)}, Color: props.Theme.TextSecondary,
 		}})
 	}
 	if theme.ImageTheme && props.ImageMemoryLabel != "" {
 		details = append(details, woxwidget.Container{Width: width, Padding: woxwidget.Insets{Left: 20, Right: 20, Bottom: 8}, Child: woxwidget.TextBlock{
-			Value: props.ImageMemoryLabel, Width: innerWidth, LineHeight: 20,
+			Value: props.ImageMemoryLabel, Width: innerWidth, MinLineHeight: props.Theme.Scaled(20),
 			Style: woxui.TextStyle{Size: props.Theme.Scaled(13)}, Color: props.Theme.Warning,
 		}})
 	}

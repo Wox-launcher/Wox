@@ -98,63 +98,34 @@ func buildRuntimeSettingsView(props RuntimeSettingsProps) woxwidget.Widget {
 			Value: props.Labels.StatusSection, Style: woxui.TextStyle{Size: props.Theme.Scaled(13), Weight: woxui.FontWeightSemibold}, Color: props.Theme.Text,
 		}},
 	}
-	messageHeight := float32(0)
 	if props.Error != "" {
-		messageHeight = 24
-		message := props.Error
-		color := props.Theme.Error
-		children = append(children, woxwidget.Container{Width: contentWidth, Height: messageHeight, Padding: woxwidget.Insets{Bottom: 6}, Child: woxwidget.Text{
-			Value: message, Style: woxui.TextStyle{Size: props.Theme.Scaled(11)}, Color: color,
+		children = append(children, woxwidget.Container{Width: contentWidth, Padding: woxwidget.Insets{Bottom: 6}, Child: woxwidget.TextBlock{
+			Value: props.Error, MaxLines: 1, MinLineHeight: props.Theme.Scaled(18), Style: woxui.TextStyle{Size: props.Theme.Scaled(11)}, Color: props.Theme.Error,
 		}})
 	}
-	statusHeight := runtimeStatusGridHeight(props.Statuses, contentWidth)
 	children = append(children,
-		runtimeStatusGrid(props, contentWidth, statusHeight),
+		runtimeStatusGrid(props, contentWidth),
 		woxwidget.Container{Width: contentWidth, Height: woxcomponent.SectionHeaderLead},
 		woxcomponent.WoxSectionHeader(woxcomponent.SectionHeaderProps{Label: props.Labels.ExecutableSection, Width: contentWidth, Theme: props.Theme}),
 	)
-	rowsTop := woxcomponent.PageHeaderHeight + 32 + messageHeight + statusHeight + woxcomponent.SectionHeaderLead + 43
 	if props.Labels.ExecutableHelp != "" {
-		children = append(children, woxwidget.Container{Width: contentWidth, Height: 44, Child: woxwidget.TextBlock{
-			Value: props.Labels.ExecutableHelp, Width: contentWidth, Height: 36, MaxLines: 2, LineHeight: 18,
+		children = append(children, woxwidget.Container{Width: contentWidth, Padding: woxwidget.Insets{Bottom: 8}, Child: woxwidget.TextBlock{
+			Value: props.Labels.ExecutableHelp, Width: contentWidth, MaxLines: 2, MinLineHeight: props.Theme.Scaled(18),
 			Style: woxui.TextStyle{Size: props.Theme.Scaled(woxcomponent.SettingsHelpFontSize)}, Color: props.Theme.TextSecondary,
 		}})
-		rowsTop += 44
 	}
-	for _, row := range props.Settings {
-		children = append(children, runtimeExecutableSettingRow(props, row, contentWidth, settingRowHeight))
+	var selectedKey woxwidget.Key
+	for index, row := range props.Settings {
+		key := woxwidget.Key(row.ID)
+		children = append(children, woxwidget.Keyed{Key: key, Child: runtimeExecutableSettingRow(props, row, contentWidth, settingRowHeight)})
+		if index == props.Selected {
+			selectedKey = key
+		}
 	}
 	children = append(children, woxwidget.Container{Width: contentWidth, Height: 16})
-	var keepVisible *woxwidget.ScrollRange
-	if props.Selected >= 0 && props.Selected < len(props.Settings) {
-		top := rowsTop + float32(props.Selected)*settingRowHeight
-		keepVisible = &woxwidget.ScrollRange{Start: top, End: top + settingRowHeight}
-	}
 	return SettingsPage(SettingsPageProps{Theme: props.Theme,
-		ID: "runtime-page-scroll", Width: props.Width, Height: props.Height, Children: children, KeepVisible: keepVisible,
+		ID: "runtime-page-scroll", Width: props.Width, Height: props.Height, Children: children, KeepVisibleKey: selectedKey,
 	})
-}
-
-// runtimeStatusGridHeight keeps every card in one responsive row aligned to the tallest status.
-func runtimeStatusGridHeight(statuses []RuntimeStatus, width float32) float32 {
-	if len(statuses) == 0 {
-		return 36
-	}
-	columns := runtimeStatusColumns(width)
-	height := float32(0)
-	for start := 0; start < len(statuses); start += columns {
-		rowHeight := float32(168)
-		for index := start; index < min(start+columns, len(statuses)); index++ {
-			if statuses[index].Actionable {
-				rowHeight = 224
-			}
-		}
-		height += rowHeight
-		if start+columns < len(statuses) {
-			height += 12
-		}
-	}
-	return height
 }
 
 // runtimeStatusThreeColumnMinWidth is the default Settings content width so
@@ -175,14 +146,14 @@ func runtimeStatusColumns(width float32) int {
 }
 
 // runtimeStatusGrid builds the full-width status summary or its empty state.
-func runtimeStatusGrid(props RuntimeSettingsProps, width, height float32) woxwidget.Widget {
+func runtimeStatusGrid(props RuntimeSettingsProps, width float32) woxwidget.Widget {
 	if len(props.Statuses) == 0 {
 		message := props.Labels.Empty
 		if props.Loading {
 			message = ""
 		}
-		return woxwidget.Container{Width: width, Height: height, Padding: woxwidget.Insets{Top: 8}, Child: woxwidget.Text{
-			Value: message, Style: woxui.TextStyle{Size: props.Theme.Scaled(12)}, Color: props.Theme.TextSecondary,
+		return woxwidget.Container{Width: width, Padding: woxwidget.Insets{Top: 8}, Child: woxwidget.TextBlock{
+			Value: message, MaxLines: 1, MinLineHeight: props.Theme.Scaled(28), Style: woxui.TextStyle{Size: props.Theme.Scaled(12)}, Color: props.Theme.TextSecondary,
 		}}
 	}
 	columns := runtimeStatusColumns(width)
@@ -201,8 +172,8 @@ func runtimeStatusGrid(props RuntimeSettingsProps, width, height float32) woxwid
 	}
 }
 
-// runtimeStatusCard preserves Flutter's reserved detail and plugin-count alignment.
-func runtimeStatusCard(props RuntimeSettingsProps, status RuntimeStatus, width, height float32) woxwidget.Widget {
+// runtimeStatusCard keeps compact cards aligned while longer text can grow the row.
+func runtimeStatusCard(props RuntimeSettingsProps, status RuntimeStatus, width, minHeight float32) woxwidget.Widget {
 	theme := props.Theme
 	statusColor := runtimeStatusColor(status.StatusCode, theme)
 	var icon woxwidget.Widget = woxwidget.Text{Value: status.Mark, Style: woxui.TextStyle{Size: props.Theme.Scaled(11), Weight: woxui.FontWeightSemibold}, Color: theme.Text}
@@ -212,10 +183,9 @@ func runtimeStatusCard(props RuntimeSettingsProps, status RuntimeStatus, width, 
 	pillWidth := runtimeLabelWidth(status.StatusLabel, 40, 150)
 	busy := props.Restarting || props.Refreshing || props.Editing || props.Saving
 	statusRow := woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 4, CrossAxisAlignment: woxwidget.CrossAxisCenter, Children: []woxwidget.Widget{
-		woxwidget.Container{Width: pillWidth, Height: 22, Radius: 11, Color: runtimeStatusBackground(status.StatusCode, theme), Padding: woxwidget.Insets{Left: 8, Right: 8}, Child: woxwidget.Align{
-			Width: max(float32(0), pillWidth-16), Height: 22, Horizontal: 0.5, Vertical: 0.5, Child: woxwidget.Text{
-				Value: status.StatusLabel, Style: woxui.TextStyle{Size: props.Theme.Scaled(woxcomponent.SettingsSecondaryFontSize), Weight: woxui.FontWeightSemibold}, Color: statusColor,
-			},
+		woxwidget.Container{Width: pillWidth, Radius: 11, Color: runtimeStatusBackground(status.StatusCode, theme), Padding: woxwidget.Insets{Left: 8, Right: 8}, Child: woxwidget.TextBlock{
+			Value: status.StatusLabel, MaxLines: 1, MinLineHeight: theme.Scaled(22), Centered: true, AlignmentY: 0.5,
+			Style: woxui.TextStyle{Size: theme.Scaled(woxcomponent.SettingsSecondaryFontSize), Weight: woxui.FontWeightSemibold}, Color: statusColor,
 		}},
 	}}
 	if status.OnRestart != nil {
@@ -240,10 +210,10 @@ func runtimeStatusCard(props RuntimeSettingsProps, status RuntimeStatus, width, 
 		woxwidget.Container{Width: 34, Height: 34, Radius: 8, Color: runtimeWithAlpha(theme.Text, 26), Child: woxwidget.Align{
 			Width: 34, Height: 34, Horizontal: 0.5, Vertical: 0.5, Child: icon,
 		}},
-		woxwidget.Expanded{Child: woxwidget.Container{Height: 56, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 4, Children: []woxwidget.Widget{
+		woxwidget.Expanded{Child: woxwidget.Constrained{MinHeight: 56, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 4, Children: []woxwidget.Widget{
 			woxwidget.Flex{Axis: woxwidget.Horizontal, Children: []woxwidget.Widget{
-				woxwidget.Expanded{Child: woxwidget.Container{Height: 20, Child: woxwidget.Text{Value: status.DisplayName, Style: woxui.TextStyle{Size: props.Theme.Scaled(15), Weight: woxui.FontWeightSemibold}, Color: theme.Text}}},
-				woxwidget.Container{Width: 62, Height: 20, Child: woxwidget.Text{Value: status.Version, Style: woxui.TextStyle{Size: props.Theme.Scaled(woxcomponent.SettingsSecondaryFontSize)}, Color: theme.TextSecondary}},
+				woxwidget.Expanded{Child: woxwidget.TextBlock{Value: status.DisplayName, MaxLines: 1, MinLineHeight: theme.Scaled(20), Style: woxui.TextStyle{Size: theme.Scaled(15), Weight: woxui.FontWeightSemibold}, Color: theme.Text}},
+				woxwidget.TextBlock{Value: status.Version, Width: 62, MaxLines: 1, MinLineHeight: theme.Scaled(20), Style: woxui.TextStyle{Size: theme.Scaled(woxcomponent.SettingsSecondaryFontSize)}, Color: theme.TextSecondary},
 			}},
 			statusRow,
 		}}}},
@@ -251,12 +221,12 @@ func runtimeStatusCard(props RuntimeSettingsProps, status RuntimeStatus, width, 
 	children := []woxwidget.Widget{
 		header,
 		woxwidget.Container{Height: 4},
-		woxwidget.Container{Height: 40, Padding: woxwidget.Insets{Left: 46}, Child: woxwidget.TextBlock{
-			Value: status.Detail, Height: 40, MaxLines: 2, Style: woxui.TextStyle{Size: props.Theme.Scaled(12)}, LineHeight: 17, Color: theme.TextSecondary,
-		}},
+		woxwidget.Container{Padding: woxwidget.Insets{Left: 46}, Child: woxwidget.Constrained{MinHeight: 40, Child: woxwidget.TextBlock{
+			Value: status.Detail, MaxLines: 2, Style: woxui.TextStyle{Size: theme.Scaled(12)}, MinLineHeight: theme.Scaled(17), Color: theme.TextSecondary,
+		}}},
 		woxwidget.Container{Height: 14},
-		woxwidget.Container{Height: 18, Padding: woxwidget.Insets{Left: 46}, Child: woxwidget.Text{
-			Value: status.PluginLabel, Style: woxui.TextStyle{Size: props.Theme.Scaled(13)}, Color: theme.TextSecondary,
+		woxwidget.Container{Padding: woxwidget.Insets{Left: 46}, Child: woxwidget.TextBlock{
+			Value: status.PluginLabel, MaxLines: 1, MinLineHeight: theme.Scaled(18), Style: woxui.TextStyle{Size: theme.Scaled(13)}, Color: theme.TextSecondary,
 		}},
 	}
 	if status.Actionable {
@@ -278,9 +248,10 @@ func runtimeStatusCard(props RuntimeSettingsProps, status RuntimeStatus, width, 
 			woxwidget.Container{Height: 38, Padding: woxwidget.Insets{Left: 46}, Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 8, Children: buttons}},
 		)
 	}
+	const padding = float32(14)
 	return woxcomponent.WoxPanel(woxcomponent.PanelProps{
-		Width: width, Height: height, Padding: woxwidget.UniformInsets(14), BorderColor: runtimeOutlineColor(theme), Theme: theme,
-		Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: children},
+		Width: width, Padding: woxwidget.UniformInsets(padding), BorderColor: runtimeOutlineColor(theme), Theme: theme,
+		Child: woxwidget.Constrained{MinHeight: max(0, minHeight-2*padding), Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: children}},
 	})
 }
 

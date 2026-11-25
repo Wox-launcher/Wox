@@ -26,43 +26,33 @@ type FormTableMCPJSONImportDialogProps struct {
 func FormTableMCPJSONImportDialog(props FormTableMCPJSONImportDialogProps) woxwidget.Widget {
 	panelWidth := min(float32(720), max(float32(0), props.Width-56))
 	innerWidth := max(float32(0), panelWidth-48)
-	statusHeight := float32(0)
-	if props.Error != "" {
-		statusHeight = 28
-	}
-	hintHeight := float32(20)
-	actionsHeight := SettingsDialogActionsHeight
-	childCount := 4
-	if statusHeight > 0 {
-		childCount++
-	}
-	contentHeight := 28 + hintHeight + props.FieldHeight + statusHeight + actionsHeight + float32(childCount-1)*12
-	panelHeight := max(float32(360), min(float32(640), contentHeight+48))
-	panelHeight = max(float32(0), min(panelHeight, props.Height-56))
-
-	title := woxwidget.Container{Width: innerWidth, Height: 28, Child: woxwidget.Text{
-		Value: props.Title, Style: woxui.TextStyle{Size: 18, Weight: woxui.FontWeightSemibold}, Color: props.Theme.Text,
-	}}
-	hintText := woxwidget.TextBlock{Value: props.Hint, Width: innerWidth, Height: hintHeight, MaxLines: 1, LineHeight: 20,
-		Style: woxui.TextStyle{Size: 13}, Color: props.Theme.TextSecondary}
-
+	title := woxwidget.TextBlock{Value: props.Title, MinLineHeight: props.Theme.Scaled(28), MaxLines: 1,
+		Style: woxui.TextStyle{Size: props.Theme.Scaled(18), Weight: woxui.FontWeightSemibold}, Color: props.Theme.Text}
+	hintText := woxwidget.TextBlock{Value: props.Hint, MinLineHeight: props.Theme.Scaled(20), MaxLines: 2,
+		Style: woxui.TextStyle{Size: props.Theme.Scaled(13)}, Color: props.Theme.TextSecondary}
+	errorText := woxwidget.TextBlock{Value: props.Error, MinLineHeight: props.Theme.Scaled(20), MaxLines: 2,
+		Style: woxui.TextStyle{Size: props.Theme.Scaled(13)}, Color: props.Theme.Error}
 	children := []woxwidget.Widget{title, hintText, props.Field}
-	if statusHeight > 0 {
-		children = append(children, woxwidget.TextBlock{Value: props.Error, Width: innerWidth, Height: 22, MaxLines: 2,
-			Style: woxui.TextStyle{Size: 13}, Color: props.Theme.Error})
+	if props.Error != "" {
+		children = append(children, errorText)
 	}
-	children = append(children, settingsDialogActions(innerWidth, props.Theme,
+	actions := settingsDialogActions(innerWidth, props.Theme,
 		settingsDialogAction{ID: "form-table-mcp-json-cancel", Label: props.CancelLabel, OnTap: props.OnCancel},
 		settingsDialogAction{ID: "form-table-mcp-json-confirm", Label: props.ImportLabel, OnTap: props.OnImport},
-	))
+	)
 
 	body := woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 12, Children: children}
-	border := formTableAlpha(props.Theme.TextSecondary, 104)
-	return woxcomponent.WoxDialog(woxcomponent.DialogProps{
-		ID: "form-table-mcp-json-dialog", Label: props.Title, Width: panelWidth, Height: panelHeight,
-		OverlayWidth: props.Width, OverlayHeight: props.Height, BackdropID: "form-table-mcp-json-backdrop", BackdropAlpha: 210,
-		Radius: 20, Padding: woxwidget.UniformInsets(24), BorderColor: border, BorderWidth: 1,
-		InitialFocus: woxwidget.Key("form-table-row-field-0"), OnEscape: props.OnCancel, Theme: props.Theme,
-		Child: body,
-	})
+	return woxwidget.TextLayoutBuilder{Build: func(_ woxui.Size, measure woxwidget.TextMeasurer) woxwidget.Widget {
+		bodyHeight := props.FieldHeight + float32(len(children)-1)*body.Gap
+		bodyHeight += woxwidget.MeasureStateless(measure, title, innerWidth).Height + woxwidget.MeasureStateless(measure, hintText, innerWidth).Height
+		if props.Error != "" {
+			bodyHeight += woxwidget.MeasureStateless(measure, errorText, innerWidth).Height
+		}
+		return settingsScrollableDialog(woxcomponent.DialogProps{
+			ID: "form-table-mcp-json-dialog", Label: props.Title, Width: panelWidth,
+			OverlayWidth: props.Width, OverlayHeight: props.Height, BackdropID: "form-table-mcp-json-backdrop", BackdropAlpha: 210,
+			Radius: 20, Padding: woxwidget.UniformInsets(24), BorderColor: formTableAlpha(props.Theme.TextSecondary, 104), BorderWidth: 1,
+			InitialFocus: "form-table-row-field-0", OnEscape: props.OnCancel, Theme: props.Theme,
+		}, body, actions, bodyHeight, 360, 640)
+	}}
 }

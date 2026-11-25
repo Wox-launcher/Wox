@@ -92,7 +92,7 @@ func UsageSettingsView(props UsageSettingsProps) woxwidget.Widget {
 	children := []woxwidget.Widget{header}
 	if props.Error != "" {
 		children = append(children, woxwidget.Container{Width: contentWidth, Height: 30, Padding: woxwidget.Insets{Top: 7}, Child: woxwidget.TextBlock{
-			Value: props.Error, Width: contentWidth, Height: 20, MaxLines: 1, Style: woxui.TextStyle{Size: props.Theme.Scaled(12)}, Color: props.Theme.Error,
+			Value: props.Error, Width: contentWidth, MinLineHeight: props.Theme.Scaled(20), MaxLines: 1, Style: woxui.TextStyle{Size: props.Theme.Scaled(12)}, Color: props.Theme.Error,
 		}})
 	}
 	children = append(children, kpiGrid, usageActivityPanel(props, contentWidth), rankings)
@@ -219,8 +219,8 @@ func usageKPICard(item UsageKPI, width float32, theme woxcomponent.ControlTheme)
 		Width: width, Height: usageKPIHeight, Padding: woxwidget.UniformInsets(14), BorderColor: usageOutlineColor(theme), Theme: theme,
 		Child: woxwidget.Flex{Axis: woxwidget.Horizontal, Gap: 12, Children: []woxwidget.Widget{
 			woxwidget.Container{Width: 46, Height: 46, Radius: 8, Color: iconBackground, Child: woxwidget.Align{Width: 46, Height: 46, Horizontal: 0.5, Vertical: 0.5, Child: icon}},
-			woxwidget.Expanded{Child: woxwidget.Container{Height: 50, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 6, Children: []woxwidget.Widget{
-				woxwidget.TextBlock{Value: item.Label, Height: 18, MaxLines: 1, Style: woxui.TextStyle{Size: theme.Scaled(12), Weight: woxui.FontWeightSemibold}, Color: theme.TextSecondary},
+			woxwidget.Expanded{Child: woxwidget.Container{Child: woxwidget.Flex{Axis: woxwidget.Vertical, Gap: 6, Children: []woxwidget.Widget{
+				woxwidget.TextBlock{Value: item.Label, MinLineHeight: theme.Scaled(18), MaxLines: 1, Style: woxui.TextStyle{Size: theme.Scaled(12), Weight: woxui.FontWeightSemibold}, Color: theme.TextSecondary},
 				woxwidget.Text{Value: fmt.Sprintf("%d", item.Value), Style: woxui.TextStyle{Size: theme.Scaled(22), Weight: woxui.FontWeightSemibold}, Color: theme.Text},
 			}}}},
 		}},
