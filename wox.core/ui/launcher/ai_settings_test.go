@@ -331,6 +331,7 @@ func TestAIProviderIconsDeclareWoxThemeIconColor(t *testing.T) {
 		{"groq", ai.NewGroqProvider(ctx, setting.AIProvider{Name: "groq"}).GetIcon()},
 		{"ollama", ai.NewOllamaProvider(ctx, setting.AIProvider{Name: "ollama"}).GetIcon()},
 		{"openrouter", ai.NewOpenRouterProvider(ctx, setting.AIProvider{Name: "openrouter"}).GetIcon()},
+		{"martllm", ai.NewMartLLMProvider(ctx, setting.AIProvider{Name: "martllm"}).GetIcon()},
 	}
 	for _, provider := range themeFollowers {
 		if !strings.Contains(provider.icon.ImageData, `fill="var(--wox-theme-icon-color)"`) {
