@@ -54,6 +54,45 @@ func TestLoadChromiumBookmarkFiles_IgnoresMissingAccountBookmarks(t *testing.T) 
 	assert.Equal(t, []string{"Local Only"}, bookmarkNames(bookmarks))
 }
 
+func TestLoadChromiumBookmarkFiles_PreservesTitlesInAdjacentFolders(t *testing.T) {
+	profileDir := t.TempDir()
+	content := `{
+		"roots": {
+			"bookmark_bar": {
+				"children": [
+					{"children": [], "name": "Wox", "type": "folder"},
+					{
+						"children": [
+							{
+								"name": "IP 质量检测",
+								"type": "url",
+								"url": "https://example.com/check?a=1\u0026b=2"
+							},
+							{
+								"name": "My \"IP\"",
+								"type": "url",
+								"url": "https://example.com/ip"
+							}
+						],
+						"name": "IP",
+						"type": "folder"
+					}
+				],
+				"name": "Bookmarks bar",
+				"type": "folder"
+			}
+		}
+	}`
+	require.NoError(t, os.WriteFile(filepath.Join(profileDir, "AccountBookmarks"), []byte(content), 0o600))
+
+	plugin := &BrowserBookmarkPlugin{api: &mockAPI{}}
+	bookmarks := plugin.loadChromiumBookmarkFiles(context.Background(), profileDir, string(os.PathSeparator), "Chrome")
+
+	require.Equal(t, []string{"IP 质量检测", `My "IP"`}, bookmarkNames(bookmarks))
+	assert.Equal(t, "https://example.com/check?a=1&b=2", bookmarks[0].Url)
+	assert.Equal(t, "https://example.com/ip", bookmarks[1].Url)
+}
+
 type chromiumBookmarkEntry struct {
 	Name string
 	URL  string

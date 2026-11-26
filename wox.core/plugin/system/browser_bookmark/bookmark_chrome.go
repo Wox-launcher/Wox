@@ -2,9 +2,12 @@ package browserbookmark
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"wox/plugin"
 	"wox/plugin/system"
@@ -20,6 +23,20 @@ var chromeBookmarkProfiles = []string{"Default", "Profile 1", "Profile 2", "Prof
 // Chrome 146+ with account bookmark sync stores the real bookmarks in AccountBookmarks and
 // leaves Bookmarks as an empty skeleton. EncryptedBookmarks is OS-encrypted and is not readable here.
 var chromiumBookmarkFileNames = []string{"Bookmarks", "AccountBookmarks"}
+
+type chromiumBookmarkNodeType string
+
+const (
+	chromiumBookmarkFolder chromiumBookmarkNodeType = "folder"
+	chromiumBookmarkURL    chromiumBookmarkNodeType = "url"
+)
+
+type chromiumBookmarkNode struct {
+	Type     chromiumBookmarkNodeType `json:"type"`
+	Name     string                   `json:"name"`
+	URL      string                   `json:"url"`
+	Children []chromiumBookmarkNode   `json:"children"`
+}
 
 func init() {
 	registerBrowserBookmarkLoader(browser.BrowserIDChrome, func(c *BrowserBookmarkPlugin, ctx context.Context) []Bookmark {
@@ -101,31 +118,35 @@ func (c *BrowserBookmarkPlugin) loadBookmarkFromFile(ctx context.Context, bookma
 		return []Bookmark{}
 	}
 
-	// Use a more robust regex pattern that works for both Chrome and Edge bookmark formats
-	var results []Bookmark
-	groups := util.FindRegexGroups(`(?ms)"name": "(?P<name>[^"]*)",.*?"type": "url",.*?"url": "(?P<url>[^"]*)"`, string(file))
-
-	for _, group := range groups {
-		if name, nameOk := group["name"]; nameOk {
-			if url, urlOk := group["url"]; urlOk {
-				// Do not block on network here; show cached favicon if exists
-				icon := browserBookmarkIcon
-				if cachedIcon, ok := system.GetWebsiteIconFromCacheOnly(ctx, url); ok {
-					icon = cachedIcon
-				}
-
-				// Regex captures share the complete bookmark JSON string unless copied.
-				// Keep only the small fields after this file has been parsed.
-				name = strings.Clone(name)
-				url = strings.Clone(url)
-				results = append(results, Bookmark{
-					Name: name,
-					Url:  url,
-					Icon: icon,
-				})
-			}
-		}
+	// Decode the tree so a folder name cannot be paired with a later bookmark's URL.
+	var tree struct {
+		Roots map[string]chromiumBookmarkNode `json:"roots"`
+	}
+	if err := json.Unmarshal(file, &tree); err != nil {
+		util.GetLogger().Error(ctx, fmt.Sprintf("error parsing %s bookmark file %s: %v", browserName, bookmarkLocation, err))
+		return nil
 	}
 
+	var results []Bookmark
+	for _, root := range slices.Sorted(maps.Keys(tree.Roots)) {
+		results = tree.Roots[root].appendBookmarks(ctx, results)
+	}
+	return results
+}
+
+// appendBookmarks collects URL nodes depth-first and reuses cached favicons.
+func (node chromiumBookmarkNode) appendBookmarks(ctx context.Context, results []Bookmark) []Bookmark {
+	switch node.Type {
+	case chromiumBookmarkFolder:
+		for _, child := range node.Children {
+			results = child.appendBookmarks(ctx, results)
+		}
+	case chromiumBookmarkURL:
+		icon := browserBookmarkIcon
+		if cachedIcon, ok := system.GetWebsiteIconFromCacheOnly(ctx, node.URL); ok {
+			icon = cachedIcon
+		}
+		results = append(results, Bookmark{Name: node.Name, Url: node.URL, Icon: icon})
+	}
 	return results
 }
