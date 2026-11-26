@@ -23,8 +23,7 @@ The plugin uses stricter matching than broad text search so bookmark results do 
 | Chrome | Reads common profiles such as `Default`, `Profile 1`, `Profile 2`, and `Profile 3`. |
 | Edge | Reads common profiles on Windows, macOS, and Linux. |
 | Firefox | Reads Firefox profile directories and `places.sqlite`. |
-
-Safari bookmarks are not currently indexed.
+| Safari | On macOS, indexes Favorites and bookmarks in folders. |
 
 On Linux, Firefox supports both `~/.mozilla/firefox` and `$XDG_CONFIG_HOME/mozilla/firefox` (`~/.config/mozilla/firefox` by default), plus Snap and Flatpak data directories. Chrome supports `$XDG_CONFIG_HOME/google-chrome` and Flatpak's `~/.var/app/com.google.Chrome/config/google-chrome`. Browsers with data in these locations can be indexed even when their executable is absent from the host PATH.
 
@@ -44,6 +43,7 @@ Wox prefetches bookmark favicons in the background and keeps them cached. Freque
 
 - Confirm the browser is enabled in plugin settings.
 - Confirm the bookmark is in a supported profile.
+- If Safari bookmarks are missing, grant Wox **Full Disk Access** in **System Settings → Privacy & Security**, then restart Wox.
 - Restart Wox if the browser just synced or rewrote its bookmark database.
 
 ### Duplicate bookmarks appear

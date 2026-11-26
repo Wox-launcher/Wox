@@ -23,8 +23,7 @@ b github
 | Chrome | 读取常见 profile，例如 `Default`、`Profile 1`、`Profile 2`、`Profile 3`。 |
 | Edge | 读取 Windows、macOS 和 Linux 上的常见 profile。 |
 | Firefox | 读取 Firefox profile 目录和 `places.sqlite`。 |
-
-目前不会索引 Safari 书签。
+| Safari | 在 macOS 上索引个人收藏和文件夹中的书签。 |
 
 Linux 上，Firefox 支持 `~/.mozilla/firefox` 和 `$XDG_CONFIG_HOME/mozilla/firefox`（默认是 `~/.config/mozilla/firefox`），以及 Snap 和 Flatpak 数据目录。Chrome 支持 `$XDG_CONFIG_HOME/google-chrome` 和 Flatpak 的 `~/.var/app/com.google.Chrome/config/google-chrome`。即使浏览器可执行文件不在宿主机的 PATH 中，插件也能通过这些数据目录发现并索引书签。
 
@@ -44,6 +43,7 @@ Wox 会在后台预取书签 favicon 并缓存。经常打开的书签会通过 
 
 - 确认插件设置里启用了对应浏览器。
 - 确认书签在受支持的 profile 中。
+- 如果搜不到 Safari 书签，请在 **系统设置 → 隐私与安全 → 完全磁盘访问权限** 中授权 Wox，然后重启 Wox。
 - 如果浏览器刚同步或重写了书签数据库，重启 Wox。
 
 ### 出现重复书签
