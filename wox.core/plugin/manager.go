@@ -271,7 +271,7 @@ func (m *Manager) mergeQueryLayouts(metadataLayout QueryLayout, responseLayout Q
 	return merged
 }
 
-func (m *Manager) queryForPlugin(ctx context.Context, pluginInstance *Instance, query Query) (response QueryResponse) {
+func (m *Manager) queryForPlugin(ctx context.Context, pluginInstance *Instance, query Query) (response QueryResponse, recovered bool) {
 	query = m.applyScopeForPlugin(query, pluginInstance)
 	query.ContextData = query.contextDataForPlugin(pluginInstance.Metadata.Id)
 	pluginLabel := queryDiagnosticPluginLabel(pluginInstance)
@@ -291,6 +291,7 @@ func (m *Manager) queryForPlugin(ctx context.Context, pluginInstance *Instance, 
 		queryContext: BuildQueryContext(query, pluginInstance),
 	}
 	defer util.GoRecover(ctx, fmt.Sprintf("<%s> query panic", pluginInstance.GetName(ctx)), func(err error) {
+		recovered = true
 		if tracker := timetracking.New("query_for_plugin_recovered"); tracker.Enabled() {
 			tracker.SetRawString("queryId", query.Id)
 			tracker.SetRawString("plugin", pluginLabel)
@@ -322,10 +323,13 @@ func (m *Manager) queryForPlugin(ctx context.Context, pluginInstance *Instance, 
 			tracker.SetInt64("elapsedMs", util.GetSystemTimestamp()-queryForPluginStart)
 			tracker.Log(ctx)
 		}
-		return input.blockedResponse
+		return input.blockedResponse, false
 	}
 
 	response, pluginQueryCost, recovered := m.executePluginQuery(ctx, pluginInstance, input.query, input.metadataLayout, input.queryContext)
+	if ctx.Err() != nil {
+		return QueryResponse{}, recovered
+	}
 	if recovered {
 		if tracker := timetracking.New("query_for_plugin_plugin_recovered"); tracker.Enabled() {
 			tracker.SetRawString("queryId", query.Id)
@@ -333,7 +337,10 @@ func (m *Manager) queryForPlugin(ctx context.Context, pluginInstance *Instance, 
 			tracker.SetInt64("elapsedMs", util.GetSystemTimestamp()-queryForPluginStart)
 			tracker.Log(ctx)
 		}
-		return response
+		return response, true
+	}
+	if response.QueryBackpressured {
+		return response, false
 	}
 
 	finalizeStart := util.GetSystemTimestamp()
@@ -349,7 +356,7 @@ func (m *Manager) queryForPlugin(ctx context.Context, pluginInstance *Instance, 
 		tracker.SetInt64("totalUs", time.Since(queryForPluginTimingStart).Microseconds())
 		tracker.Log(ctx)
 	}
-	return response
+	return response, false
 }
 
 func (m *Manager) buildPluginQueryInput(ctx context.Context, pluginInstance *Instance, query Query) pluginQueryInput {
@@ -1444,7 +1451,7 @@ func (m *Manager) Query(ctx context.Context, query Query) QueryExecution {
 	}
 
 	cacheStart := util.GetSystemTimestamp()
-	m.resultStore.startQuery(query)
+	m.resultStore.startQuery(ctx, query)
 	ctx = m.resultStore.withQueryResultLifetime(ctx, query.SessionId, query.Id)
 	if tracker := timetracking.New("start_session_query_cache"); tracker.Enabled() {
 		tracker.SetRawString("queryId", query.Id)
@@ -1457,6 +1464,25 @@ func (m *Manager) Query(ctx context.Context, query Query) QueryExecution {
 	execution := m.queryScheduler.start(ctx, query, jobs, firstFlushDeadlineMs, queryExecutionCallbacks{
 		queryPlugin:    m.queryForPlugin,
 		restoreAliases: m.restoreResultAliases,
+		timeoutPlugin: func(ctx context.Context, instance *Instance, query Query) QueryResponse {
+			if results, ok := m.resultStore.getQuery(query.SessionId, query.Id); ok {
+				results.timedOutPlugins.Store(instance.Metadata.Id, true)
+			}
+			if query.IsGlobalQuery() {
+				return QueryResponse{}
+			}
+			result := QueryResult{
+				Title:    "i18n:plugin_manager_query_timeout",
+				SubTitle: instance.GetName(ctx),
+				Icon:     icons.Get(icons.StatusWarning),
+			}
+			layout := m.buildMetadataBackedQueryLayout(ctx, instance, query)
+			result = m.PolishResult(ctx, instance, query, layout, result)
+			return QueryResponse{Results: []QueryResult{result}, Context: BuildQueryContext(query, instance), Layout: layout}
+		},
+		onCircuitOpen: func(ctx context.Context, instance *Instance, cooldown time.Duration) {
+			m.notifyPluginCircuitOpen(context.WithoutCancel(ctx), instance, cooldown)
+		},
 		onPluginResponse: func(ctx context.Context, query Query, response QueryResponse) {
 			if m.autoQueryHistory != nil {
 				m.autoQueryHistory.schedule(ctx, query, response)
@@ -1475,6 +1501,42 @@ func (m *Manager) Query(ctx context.Context, query Query) QueryExecution {
 	}
 
 	return execution
+}
+
+// notifyPluginCircuitOpen logs and displays a transient notice when a plugin is paused from global search.
+func (m *Manager) notifyPluginCircuitOpen(ctx context.Context, instance *Instance, cooldown time.Duration) {
+	if instance == nil {
+		return
+	}
+	pluginName := instance.GetName(ctx)
+	util.GetLogger().Warn(ctx, fmt.Sprintf("<%s> global query circuit opened for %s after repeated timeouts", pluginName, cooldown))
+	ui := m.GetUI()
+	if ui == nil {
+		return
+	}
+	seconds := max(1, int(cooldown/time.Second))
+	message := fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_manager_query_circuit_open"), pluginName, seconds)
+	doctorTrigger := "doctor"
+	if doctor := m.GetPluginInstanceById(common.DoctorPluginID); doctor != nil {
+		if keyword := doctor.PrimaryTriggerKeyword(); keyword != "" {
+			doctorTrigger = keyword
+		}
+	}
+	ui.ShowToast(ctx, common.ToastMsg{
+		Icon:           icons.Get(icons.StatusWarning).String(),
+		Text:           message,
+		DisplaySeconds: 8,
+		Action: &common.ToastAction{
+			Name: "i18n:plugin_manager_query_circuit_open_action",
+			Action: func(actionCtx context.Context) {
+				ui.ChangeQuery(actionCtx, common.PlainQuery{
+					QueryType: QueryTypeInput,
+					QueryText: doctorTrigger + " perf ",
+				})
+				ui.ShowApp(actionCtx, common.ShowContext{})
+			},
+		},
+	})
 }
 
 // buildQueryPlan resolves eligibility once so every runnable plugin starts from the same scheduling boundary.
@@ -2212,7 +2274,7 @@ func (m *Manager) QueryMRU(ctx context.Context, sessionId string, queryId string
 	query.Env.ActiveWindowIsOpenSaveDialogSelectFolder = activeWindowSnapshot.IsOpenSaveDialogSelectFolder
 	query.Env.ActiveBrowserUrl = m.getActiveBrowserUrl(ctx)
 	query.Env.IsMRU = true
-	m.resultStore.startQuery(query)
+	m.resultStore.startQuery(ctx, query)
 	ctx = m.resultStore.withQueryResultLifetime(ctx, query.SessionId, query.Id)
 
 	mruItems, err := setting.GetSettingManager().GetMRUItems(ctx, 10)
@@ -2226,6 +2288,9 @@ func (m *Manager) QueryMRU(ctx context.Context, sessionId string, queryId string
 
 	var results []QueryResultUI
 	for _, item := range mruItems {
+		if ctx.Err() != nil {
+			return nil
+		}
 		util.GetLogger().Debug(ctx, fmt.Sprintf("start to restore mru item: %s", item.Title))
 		pluginInstance := m.getPluginInstance(item.PluginID)
 		if pluginInstance == nil {

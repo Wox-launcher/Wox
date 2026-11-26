@@ -3,6 +3,7 @@ package settingadapter
 import (
 	"context"
 	"path/filepath"
+	"runtime/debug"
 	"slices"
 	"testing"
 	"wox/cloudsync"
@@ -74,6 +75,15 @@ func initSnapshotterTestDatabase(t *testing.T) {
 	if err := database.Init(context.Background()); err != nil {
 		t.Fatalf("init database: %v", err)
 	}
+	sqlDB, err := database.GetDB().DB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = sqlDB.Close()
+		_ = debug.SetCrashOutput(nil, debug.CrashOptions{})
+		_ = util.GetLogger().CloseFile()
+	})
 }
 
 func snapshotterTestOplogKeys(oplogs []database.Oplog, entityType string, entityID string) []string {

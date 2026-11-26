@@ -148,6 +148,47 @@ func TestCloudRefreshButtonWidthIncludesLeadingIcon(t *testing.T) {
 	}
 }
 
+func TestCloudSyncOptionsGroupsSettingsSwitchAndPluginExclusionsAfterDevices(t *testing.T) {
+	const description = "Ctrl ↔ Cmd and Alt ↔ Option"
+	var checked bool
+	options := CloudSyncOptionsProps{
+		SectionLabel: "Sync Options", HotkeysLabel: "Sync shortcuts across platforms", HotkeysDescription: description,
+		Plugins:       CloudPluginExclusionsProps{SectionLabel: "Plugin Sync Exclusions"},
+		OnSyncHotkeys: func(value bool) { checked = value },
+	}
+	page := CloudSettingsPage(CloudSettingsPageProps{
+		Width: 480, Height: 640, Account: CloudAccountProps{LoggedIn: true}, Options: options,
+	}).(woxwidget.Container)
+	scroll := page.Child.(woxwidget.Stateful).Widget.(woxcomponent.ScrollViewProps)
+	sections := scroll.Content.(woxwidget.Container).Child.(woxwidget.Flex).Children
+	group := sections[7].(woxwidget.Container).Child.(woxwidget.Flex).Children
+	if len(group) != 3 || group[2] == nil {
+		t.Fatal("sync options must contain a section title, a switch row, and the plugin exclusion table")
+	}
+	row := group[1].(woxwidget.Container).Child.(woxwidget.Flex).Children
+	label := row[0].(woxwidget.Container).Child.(woxwidget.Constrained).Child.(woxwidget.Flex).Children
+	if label[0].(woxwidget.Text).Value != options.HotkeysLabel || label[1].(woxwidget.TextBlock).Value != description {
+		t.Fatal("shortcut mapping help must appear below the title like other settings descriptions")
+	}
+	control := row[1].(woxwidget.Align)
+	switchControl := control.Child.(woxwidget.Semantics)
+	if control.Horizontal != 1 || switchControl.AutomationID != "setting-switch-cloud-sync-cross-platform-hotkeys" || switchControl.Checked || switchControl.Disabled {
+		t.Fatalf("expected a right-aligned, unchecked, enabled settings switch, got %+v", switchControl)
+	}
+	if err := switchControl.OnAction(woxui.AccessibilityActionToggle, ""); err != nil || !checked {
+		t.Fatalf("switch toggle = %v, error = %v", checked, err)
+	}
+
+	options.SyncHotkeys = true
+	options.OnSyncHotkeys = nil
+	disabled := cloudSyncOptions(options, 408, woxcomponent.ControlTheme{}).(woxwidget.Container)
+	row = disabled.Child.(woxwidget.Flex).Children[1].(woxwidget.Container).Child.(woxwidget.Flex).Children
+	switchControl = row[1].(woxwidget.Align).Child.(woxwidget.Semantics)
+	if !switchControl.Checked || !switchControl.Disabled || len(switchControl.Actions) != 0 {
+		t.Fatalf("unavailable sync must preserve the checked state and disable editing, got %+v", switchControl)
+	}
+}
+
 func TestCloudActionMenuUsesPaddedContentSize(t *testing.T) {
 	menu := cloudActionMenu(CloudActionMenuProps{Items: []CloudActionMenuItemProps{{ID: "account", Label: "Account", OnTap: func() {}}, {ID: "logout", Label: "Log out", OnTap: func() {}}}}, 200, woxcomponent.ControlTheme{}).(woxwidget.Container)
 	builder := menu.Child.(woxwidget.LayoutBuilder)

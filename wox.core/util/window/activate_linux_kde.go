@@ -14,14 +14,20 @@ import (
 // FocusKDEWindow restores the captured KWin window and checks fresh compositor
 // state before the caller sends input. Multiple windows may share one PID.
 func FocusKDEWindow(ctx context.Context, windowID string, pid int) error {
-	id, err := uuid.Parse(windowID)
-	if err != nil || id == uuid.Nil || pid <= 0 {
+	target := ""
+	if windowID != "" {
+		id, err := uuid.Parse(windowID)
+		if err != nil || id == uuid.Nil {
+			return ErrWindowManagementWindowNotFound
+		}
+		target = id.String()
+	}
+	if target == "" && pid <= 0 {
 		return ErrWindowManagementWindowNotFound
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, 350*time.Millisecond)
 	defer cancel()
-	target := id.String()
 	app, err := queryKDEWindow(ctx, fmt.Sprintf(kwinFocusWindowScript, target, pid))
 	if err != nil && !errors.Is(err, errLinuxForegroundMissing) {
 		return err
@@ -29,7 +35,7 @@ func FocusKDEWindow(ctx context.Context, windowID string, pid int) error {
 
 	// XWayland can report focus after the activation request returns to the
 	// script. Read again without reactivating over a subsequent focus change.
-	for app.WindowID != target || app.Pid != pid {
+	for (target != "" && app.WindowID != target) || (pid > 0 && app.Pid != pid) {
 		select {
 		case <-ctx.Done():
 			return fmt.Errorf("KWin did not focus window %s: %w", target, ctx.Err())
@@ -47,11 +53,15 @@ const kwinFocusWindowScript = `
     var targetId = "%s";
     var targetPid = %d;
     var active = workspace.activeWindow;
-    if (windowId(active) !== targetId || Number(active.pid) !== targetPid) {
+    function matchesTarget(window) {
+      return window && (!targetId || windowId(window) === targetId) &&
+        (targetPid <= 0 || Number(window.pid) === targetPid);
+    }
+    if (!matchesTarget(active)) {
       var windows = workspace.stackingOrder;
-      for (var i = 0; i < windows.length; i++) {
+      for (var i = windows.length - 1; i >= 0; i--) {
         var candidate = windows[i];
-        if (windowId(candidate) === targetId && Number(candidate.pid) === targetPid) {
+        if (matchesTarget(candidate)) {
           workspace.activeWindow = candidate;
           break;
         }

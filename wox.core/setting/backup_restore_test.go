@@ -2,6 +2,7 @@ package setting
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"os"
 	"os/exec"
@@ -27,7 +28,16 @@ func TestRestoreUserDataDirectoryReplacesTheLiveDirectory(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(backup, "current.txt"), []byte("new"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(backup, "backup.json"), []byte("{}"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(backup, "backup.json"), []byte(`{"Id":"backup","Timestamp":1}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	handle, err := sql.Open("sqlite3", filepath.Join(backup, "wox.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = handle.Exec("CREATE TABLE test (id INTEGER)")
+	_ = handle.Close()
+	if err != nil {
 		t.Fatal(err)
 	}
 
@@ -65,6 +75,20 @@ func TestRestoreUserDataDirectoryRejectsTheSamePath(t *testing.T) {
 	if err := RestoreUserDataDirectory(context.Background(), dir, dir); err == nil {
 		t.Fatal("restoring a directory onto itself should fail")
 	}
+}
+
+func TestRestoreUserDataDirectoryRejectsCorruptDatabase(t *testing.T) {
+	root := t.TempDir()
+	userData := filepath.Join(root, "wox-user")
+	backup := filepath.Join(root, "backup")
+	writeBackupFile(t, filepath.Join(userData, "current.txt"), "keep")
+	writeBackupFile(t, filepath.Join(backup, "backup.json"), `{"Id":"backup","Timestamp":1}`)
+	writeBackupFile(t, filepath.Join(backup, "wox.db"), "corrupt database")
+
+	if err := RestoreUserDataDirectory(context.Background(), backup, userData); err == nil {
+		t.Fatal("expected corrupt backup to be rejected")
+	}
+	assertBackupFile(t, filepath.Join(userData, "current.txt"), "keep")
 }
 
 func TestHasAutoBackupOnLocalDay(t *testing.T) {
@@ -132,7 +156,7 @@ func TestPluginBackupPath(t *testing.T) {
 func TestCopyUserDataForBackupSkipsDirectoryLinks(t *testing.T) {
 	src := t.TempDir()
 	dest := filepath.Join(t.TempDir(), "backup")
-	writeBackupFile(t, filepath.Join(src, "wox.db"), "database")
+	writeBackupFile(t, filepath.Join(src, "data.txt"), "user data")
 	writeBackupFile(t, filepath.Join(src, "settings", "settings.json"), "{}")
 	writeBackupFile(t, filepath.Join(src, "plugins", "good", "main.txt"), "good")
 	writeBackupFile(t, filepath.Join(src, "plugins", "flow", "real-plugin", "data.txt"), "plugin")
@@ -152,7 +176,7 @@ func TestCopyUserDataForBackupSkipsDirectoryLinks(t *testing.T) {
 	if err := copyUserDataForBackup(context.Background(), src, dest); err != nil {
 		t.Fatal(err)
 	}
-	assertBackupFile(t, filepath.Join(dest, "wox.db"), "database")
+	assertBackupFile(t, filepath.Join(dest, "data.txt"), "user data")
 	assertBackupFile(t, filepath.Join(dest, "settings", "settings.json"), "{}")
 	assertBackupFile(t, filepath.Join(dest, "plugins", "good", "main.txt"), "good")
 	assertBackupFile(t, filepath.Join(dest, "plugins", "flow", "real-plugin", "data.txt"), "plugin")

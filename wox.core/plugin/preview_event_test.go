@@ -12,7 +12,7 @@ import (
 func TestWoxViewPreviewEventScope(t *testing.T) {
 	manager := &Manager{resultStore: newQueryResultStore()}
 	query := Query{SessionId: "session", Id: "query"}
-	manager.resultStore.startQuery(query)
+	manager.resultStore.startQuery(context.Background(), query)
 	set, _ := manager.resultStore.getQuery(query.SessionId, query.Id)
 	called := 0
 	result := QueryResult{Id: "row", Preview: WoxPreview{PreviewType: WoxPreviewTypeWoxView, WoxViewID: "doc", OnWoxViewEvent: func(ctx context.Context, event WoxViewPreviewEvent) {

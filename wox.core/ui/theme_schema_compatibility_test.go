@@ -4,10 +4,14 @@ import (
 	"context"
 	"testing"
 	"wox/common"
+	"wox/util"
 )
 
 // TestThemeCompatibilityBoundaries ensures incompatible themes cannot load or reach persistence.
 func TestThemeCompatibilityBoundaries(t *testing.T) {
+	previous := util.ProdEnv
+	t.Cleanup(func() { util.ProdEnv = previous })
+	util.ProdEnv = "true"
 	manager := &Manager{}
 	if _, err := manager.parseTheme(`{"ThemeName":"Future","MinWoxVersion":"999.0.0"}`); err == nil {
 		t.Fatal("loaded incompatible theme")

@@ -380,20 +380,16 @@ func githubIssueURL(template, title string) string {
 		query.Set("platform", platform)
 	}
 	if template == feedbackBugTemplate && util.IsLinux() {
-		var environment []string
-		for _, envName := range []string{"XDG_CURRENT_DESKTOP", "XDG_SESSION_DESKTOP", "DESKTOP_SESSION", "GDMSESSION"} {
-			if value := os.Getenv(envName); value != "" {
-				environment = append(environment, value)
-				break
-			}
+		environment := currentLinuxEnvironment()
+		var labels []string
+		if environment.Desktop != linuxDesktopOther {
+			labels = append(labels, string(environment.Desktop))
 		}
-		if util.IsLinuxWaylandSession() {
-			environment = append(environment, "Wayland")
-		} else if os.Getenv("DISPLAY") != "" {
-			environment = append(environment, "X11 (Xorg)")
+		if environment.DisplayProtocol != linuxDisplayOther {
+			labels = append(labels, environment.DisplayProtocol.label())
 		}
-		if len(environment) > 0 {
-			query.Set("linux_environment", strings.Join(environment, " / "))
+		if len(labels) > 0 {
+			query.Set("linux_environment", strings.Join(labels, " / "))
 		}
 	}
 	return feedbackGitHubNewIssueURL + "?" + query.Encode()

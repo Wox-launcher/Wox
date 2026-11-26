@@ -18,6 +18,40 @@ import (
 	"wox/test/smokereport"
 )
 
+// TestCoreSmokeSuiteCompilesEachPackageOnce keeps the PR subset small and single-process.
+func TestCoreSmokeSuiteCompilesEachPackageOnce(t *testing.T) {
+	t.Chdir(filepath.Join("..", ".."))
+	targets, err := smokeSuiteTargets("", "core")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []smokeTarget{
+		{"test/smoke/launcher/plugin/app", "^Test001"},
+		{"test/smoke/launcher/plugin/filesearch", "^Test001"},
+		{"test/smoke/launcher/plugin/clipboard", "^Test001"},
+		{"test/smoke/launcher/plugin/calculator", "^Test001"},
+		{"test/smoke/launcher", "^Test009|^Test047"},
+		{"test/smoke/launcher/plugin/singlefile", "^Test002"},
+	}
+	if len(targets) != len(want) {
+		t.Fatalf("core targets = %+v", targets)
+	}
+	for i, target := range targets {
+		if target != want[i] || smokePackageUsesSupervisor(target.dir) {
+			t.Fatalf("unexpected core smoke target: %+v", target)
+		}
+	}
+	if err := duplicateSmokeBinaries(targets); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := smokeSuiteTargets("perf", "core"); err == nil {
+		t.Fatal("combined -suite and -case should be rejected")
+	}
+	if _, err := smokeSuiteTargets("", "unknown"); err == nil {
+		t.Fatal("unknown suite should be rejected")
+	}
+}
+
 // TestSeedSmokeMainHotkey keeps smoke registration separate from a running user's default hotkey.
 func TestSeedSmokeMainHotkey(t *testing.T) {
 	directory := t.TempDir()

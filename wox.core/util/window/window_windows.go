@@ -67,6 +67,7 @@ int moveResizeWindowForManagement(const char* windowId, int pid, int x, int y, i
 int maximizeWindowForManagement(const char* windowId, int pid);
 int minimizeWindowForManagement(const char* windowId, int pid);
 int activateWindowForManagement(const char* windowId, int pid);
+int requestCapturedWindowActivation(const char* windowId, int pid);
 int activateWindowByPid(int pid);
 int focusFileExplorerContentByHwnd(uintptr_t hwnd);
 int isOpenSaveDialog();
@@ -92,6 +93,7 @@ import (
 	"image/color"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"syscall"
 	"unsafe"
@@ -220,6 +222,20 @@ func GetWindowNameByPid(pid int) string {
 func GetActiveWindowPid() int {
 	pid := C.getActiveWindowPid()
 	return int(pid)
+}
+
+// GetActiveWindowIdentity captures the HWND and PID from the same foreground window.
+func GetActiveWindowIdentity(_ context.Context) (pid int, id string, name string) {
+	hwnd := win.GetForegroundWindow()
+	if hwnd == 0 {
+		return -1, "", ""
+	}
+	if root := win.GetAncestor(hwnd, win.GA_ROOT); root != 0 {
+		hwnd = root
+	}
+	var owner uint32
+	win.GetWindowThreadProcessId(hwnd, &owner)
+	return int(owner), strconv.FormatUint(uint64(hwnd), 10), getWindowTitleByHwnd(uintptr(hwnd))
 }
 
 // GetActiveWindowId returns the foreground top-level HWND as a decimal string.
@@ -401,6 +417,16 @@ func ActivateWindow(managedWindow ManagedWindow) bool {
 
 	result := C.activateWindowForManagement(cWindowId, C.int(managedWindow.Pid))
 	return int(result) == 1
+}
+
+// requestCapturedWindowActivation distinguishes a rejected request from pending foreground activation.
+func requestCapturedWindowActivation(id string, pid int) error {
+	cID := C.CString(id)
+	defer C.free(unsafe.Pointer(cID))
+	if C.requestCapturedWindowActivation(cID, C.int(pid)) != 1 {
+		return ErrWindowManagementWindowNotFound
+	}
+	return nil
 }
 
 func IsOpenSaveDialog() (bool, error) {

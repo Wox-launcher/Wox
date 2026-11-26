@@ -76,18 +76,18 @@ func TestValidateStorePluginManifestRequiresSingleFileMinWoxVersion(t *testing.T
 	require.NoError(t, err)
 }
 
-func TestValidateSingleFileHeaderMatchesManifest(t *testing.T) {
+func TestValidateArtifactMetadataMatchesManifest(t *testing.T) {
 	manifest := StorePluginManifest{Id: "abc", Runtime: PLUGIN_RUNTIME_PYTHON, Version: "1.2.3"}
-	err := ValidateSingleFileHeaderMatchesManifest(Metadata{Id: "abc", Runtime: "PYTHON", Version: "1.2.3"}, manifest)
+	err := validateArtifactMetadataMatchesManifest(Metadata{Id: "abc", Runtime: "PYTHON", Version: "1.2.3"}, manifest)
 	require.NoError(t, err)
 
-	err = ValidateSingleFileHeaderMatchesManifest(Metadata{Id: "other", Runtime: "PYTHON", Version: "1.2.3"}, manifest)
+	err = validateArtifactMetadataMatchesManifest(Metadata{Id: "other", Runtime: "PYTHON", Version: "1.2.3"}, manifest)
 	require.Error(t, err)
 
-	err = ValidateSingleFileHeaderMatchesManifest(Metadata{Id: "abc", Runtime: "NODEJS", Version: "1.2.3"}, manifest)
+	err = validateArtifactMetadataMatchesManifest(Metadata{Id: "abc", Runtime: "NODEJS", Version: "1.2.3"}, manifest)
 	require.Error(t, err)
 
-	err = ValidateSingleFileHeaderMatchesManifest(Metadata{Id: "abc", Runtime: "PYTHON", Version: "9.9.9"}, manifest)
+	err = validateArtifactMetadataMatchesManifest(Metadata{Id: "abc", Runtime: "PYTHON", Version: "9.9.9"}, manifest)
 	require.Error(t, err)
 }
 

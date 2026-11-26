@@ -31,7 +31,7 @@ func (p *toolbarCallbackTestPlugin) RetireToolbarSnapshot(_ context.Context, id 
 // TestManagedToolbarCallbacksFollowMessageLifetime covers dropped, replaced, and in-flight callbacks.
 func TestManagedToolbarCallbacksFollowMessageLifetime(t *testing.T) {
 	logger = util.GetLogger()
-	manager := newManager()
+	manager := newPresentationTestManager()
 	ui := &presentationTestUI{}
 	manager.AttachUI(ui)
 	host := &toolbarCallbackTestPlugin{released: make(chan string, 10), started: make(chan string, 1), finish: make(chan struct{})}
@@ -87,7 +87,7 @@ func TestManagedToolbarCallbacksFollowMessageLifetime(t *testing.T) {
 // TestManagedToolbarCallbacksExpireAndDiscardQueuedMessages exercises non-visible ownership transitions.
 func TestManagedToolbarCallbacksExpireAndDiscardQueuedMessages(t *testing.T) {
 	logger = util.GetLogger()
-	manager := newManager()
+	manager := newPresentationTestManager()
 	manager.AttachUI(&presentationTestUI{})
 	var expiry, hold func()
 	manager.presentation.scheduleToolbarExpiry = func(_ time.Duration, callback func()) { expiry = callback }
@@ -134,7 +134,7 @@ func TestManagedToolbarCallbacksExpireAndDiscardQueuedMessages(t *testing.T) {
 // TestPendingToolbarSnapshotPromotesAndClosesWithSession keeps only the selected message's callbacks.
 func TestPendingToolbarSnapshotPromotesAndClosesWithSession(t *testing.T) {
 	logger = util.GetLogger()
-	manager := newManager()
+	manager := newPresentationTestManager()
 	manager.AttachUI(&presentationTestUI{})
 	var hold func()
 	manager.presentation.scheduleToolbarHold = func(_ time.Duration, callback func()) { hold = callback }
@@ -172,7 +172,7 @@ func TestPendingToolbarSnapshotPromotesAndClosesWithSession(t *testing.T) {
 // TestManagedToolbarCallbackExpiryIsSessionScoped protects a replacement and another window from old timers.
 func TestManagedToolbarCallbackExpiryIsSessionScoped(t *testing.T) {
 	logger = util.GetLogger()
-	manager := newManager()
+	manager := newPresentationTestManager()
 	manager.AttachUI(&presentationTestUI{})
 	var timers []func()
 	manager.presentation.scheduleToolbarExpiry = func(_ time.Duration, callback func()) { timers = append(timers, callback) }
@@ -226,7 +226,7 @@ func TestManagedToolbarCallbackExpiryIsSessionScoped(t *testing.T) {
 // TestManagedToolbarCallbacksCannotReplayAfterUnload protects a queued snapshot racing plugin cleanup.
 func TestManagedToolbarCallbacksCannotReplayAfterUnload(t *testing.T) {
 	logger = util.GetLogger()
-	manager := newManager()
+	manager := newPresentationTestManager()
 	ui := &presentationTestUI{}
 	manager.AttachUI(ui)
 	host := &toolbarCallbackTestPlugin{released: make(chan string, 2)}

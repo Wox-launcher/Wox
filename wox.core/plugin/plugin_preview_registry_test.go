@@ -41,7 +41,7 @@ func TestPluginPreviewEventSurvivesResultCacheEviction(t *testing.T) {
 	owner := &Instance{Metadata: Metadata{Id: "radio"}}
 	preview := WoxPreview{PreviewType: WoxPreviewTypeWoxView, WoxViewID: "doc", OnWoxViewEvent: func(_ context.Context, _ WoxViewPreviewEvent) { count++ }}
 	registry.install("window", "first", owner, preview)
-	manager.resultStore.startQuery(Query{SessionId: "window", Id: "later"})
+	manager.resultStore.startQuery(context.Background(), Query{SessionId: "window", Id: "later"})
 	if err := manager.DispatchWoxViewPreviewEvent(context.Background(), "window", "first", "plugin-preview:radio", "doc", WoxViewPreviewEvent{Handler: "play"}); err != nil || count != 1 {
 		t.Fatalf("current event failed: count=%d err=%v", count, err)
 	}

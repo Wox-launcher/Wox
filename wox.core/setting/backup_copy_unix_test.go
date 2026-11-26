@@ -12,7 +12,7 @@ import (
 func TestCopyUserDataForBackupSkipsUnreadablePluginFile(t *testing.T) {
 	src := t.TempDir()
 	dest := filepath.Join(t.TempDir(), "backup")
-	writeBackupFile(t, filepath.Join(src, "wox.db"), "database")
+	writeBackupFile(t, filepath.Join(src, "data.txt"), "user data")
 	writeBackupFile(t, filepath.Join(src, "plugins", "good", "main.txt"), "good")
 	locked := filepath.Join(src, "plugins", "bad", "locked.txt")
 	writeBackupFile(t, locked, "locked")
@@ -22,7 +22,7 @@ func TestCopyUserDataForBackupSkipsUnreadablePluginFile(t *testing.T) {
 	if err := copyUserDataForBackup(context.Background(), src, dest); err != nil {
 		t.Fatal(err)
 	}
-	assertBackupFile(t, filepath.Join(dest, "wox.db"), "database")
+	assertBackupFile(t, filepath.Join(dest, "data.txt"), "user data")
 	assertBackupFile(t, filepath.Join(dest, "plugins", "good", "main.txt"), "good")
 	if _, statErr := os.Lstat(filepath.Join(dest, "plugins", "bad", "locked.txt")); !os.IsNotExist(statErr) {
 		t.Fatalf("unreadable plugin file copied: %v", statErr)
@@ -32,7 +32,7 @@ func TestCopyUserDataForBackupSkipsUnreadablePluginFile(t *testing.T) {
 func TestCopyUserDataForBackupFailsForUnreadableUserData(t *testing.T) {
 	src := t.TempDir()
 	dest := filepath.Join(t.TempDir(), "backup")
-	writeBackupFile(t, filepath.Join(src, "wox.db"), "database")
+	writeBackupFile(t, filepath.Join(src, "data.txt"), "user data")
 	locked := filepath.Join(src, "notes", "locked.txt")
 	writeBackupFile(t, locked, "locked")
 	restore := makeUnreadable(t, locked)

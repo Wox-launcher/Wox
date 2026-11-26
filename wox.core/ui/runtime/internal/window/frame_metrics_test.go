@@ -6,9 +6,17 @@ import (
 	"time"
 )
 
+func TestFrameSequenceToleratesUninitializedWindow(t *testing.T) {
+	for _, window := range []*Window{nil, {}} {
+		if got := window.FrameSequence(); got != 0 {
+			t.Fatalf("uninitialized window sequence = %d", got)
+		}
+	}
+}
+
 func TestFrameMetricsRecorderCorrelatesPortableAndNativePhases(t *testing.T) {
 	recorder := newFrameMetricsRecorder()
-	frameID := recorder.beginFrame()
+	frameID := recorder.beginFrame(Size{})
 	recorder.recordPhase(frameID, FrameMetricSnapshot, 120*time.Microsecond)
 	recorder.recordPhase(frameID, FrameMetricBuildLayout, 800*time.Microsecond)
 	recorder.recordPhase(frameID, FrameMetricDrawRecord, 240*time.Microsecond)
@@ -35,7 +43,7 @@ func TestFrameMetricsRecorderCorrelatesPortableAndNativePhases(t *testing.T) {
 
 func TestFrameMetricsRecorderStoresNestedWorkAndRendererResources(t *testing.T) {
 	recorder := newFrameMetricsRecorder()
-	frameID := recorder.beginFrame()
+	frameID := recorder.beginFrame(Size{})
 	work := FrameWorkMetrics{LayoutVisits: 12, IdentityVisits: 11, PaintVisits: 10, A11yVisits: 8, BoundaryBuilds: 2, BoundaryReuses: 3, TextDraws: 6, ImageDraws: 4}
 	resources := FrameRendererResourceMetrics{TextRasterizations: 6, ImageCreates: 4, ImageUploads: 4, CacheHits: 1, ResidentBytes: 2048}
 	recorder.recordWork(frameID, work)
@@ -79,25 +87,25 @@ func TestFrameMetricsSnapshotKeepsLegacyJSONFields(t *testing.T) {
 
 func TestFrameMetricsRecorderTracksCoalescedAndResetFrames(t *testing.T) {
 	recorder := newFrameMetricsRecorder()
-	coalescedID := recorder.beginFrame()
+	coalescedID := recorder.beginFrame(Size{})
 	recorder.coalesceFrame(coalescedID)
 	recorder.coalesceFrame(coalescedID)
 	if snapshot := recorder.current(); snapshot.DroppedFrameCount != 1 || snapshot.CoalescedFrameCount != 1 || len(snapshot.Recent) != 1 || !snapshot.Recent[0].Dropped || !snapshot.Recent[0].Coalesced {
 		t.Fatalf("unexpected coalesced metrics: %+v", snapshot)
 	}
 
-	backpressuredID := recorder.beginFrame()
+	backpressuredID := recorder.beginFrame(Size{})
 	recorder.backpressureFrame(backpressuredID)
 	if snapshot := recorder.current(); snapshot.DroppedFrameCount != 2 || snapshot.BackpressuredFrameCount != 1 || len(snapshot.Recent) != 2 || !snapshot.Recent[1].Dropped || !snapshot.Recent[1].Backpressured {
 		t.Fatalf("unexpected backpressure metrics: %+v", snapshot)
 	}
-	finishedBackpressureID := recorder.beginFrame()
+	finishedBackpressureID := recorder.beginFrame(Size{})
 	recorder.finishBackpressuredFrame(finishedBackpressureID, 2*time.Millisecond, -1)
 	if snapshot := recorder.current(); snapshot.DroppedFrameCount != 3 || snapshot.BackpressuredFrameCount != 2 || snapshot.NativeEncodedFrameCount != 1 || !snapshot.Recent[2].NativeEncodingCompleted || !snapshot.Recent[2].Backpressured {
 		t.Fatalf("unexpected finished backpressure metrics: %+v", snapshot)
 	}
 
-	droppedID := recorder.beginFrame()
+	droppedID := recorder.beginFrame(Size{})
 	recorder.dropFrame(droppedID)
 	recorder.dropFrame(droppedID)
 	if snapshot := recorder.current(); snapshot.DroppedFrameCount != 4 || snapshot.CoalescedFrameCount != 1 || snapshot.BackpressuredFrameCount != 2 || len(snapshot.Recent) != 4 || !snapshot.Recent[3].Dropped || snapshot.Recent[3].Coalesced || snapshot.Recent[3].Backpressured {
@@ -110,7 +118,7 @@ func TestFrameMetricsRecorderTracksCoalescedAndResetFrames(t *testing.T) {
 		t.Fatalf("stale in-flight frame crossed reset: %+v", snapshot)
 	}
 
-	currentID := recorder.beginFrame()
+	currentID := recorder.beginFrame(Size{})
 	recorder.finishNativeFrame(currentID, 2*time.Millisecond, -1, false)
 	snapshot := recorder.current()
 	if snapshot.FrameCount != 1 || snapshot.NativeEncodedFrameCount != 1 || snapshot.DroppedFrameCount != 1 || len(snapshot.Recent) != 1 || !snapshot.Recent[0].NativeEncodingCompleted {
@@ -121,7 +129,7 @@ func TestFrameMetricsRecorderTracksCoalescedAndResetFrames(t *testing.T) {
 func TestFrameMetricsRecorderBoundsRecentSamples(t *testing.T) {
 	recorder := newFrameMetricsRecorder()
 	for range recentFrameMetricsLimit + 5 {
-		recorder.beginFrame()
+		recorder.beginFrame(Size{})
 	}
 	snapshot := recorder.current()
 	if snapshot.FrameCount != recentFrameMetricsLimit+5 || len(snapshot.Recent) != recentFrameMetricsLimit {

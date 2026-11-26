@@ -12,6 +12,15 @@ import (
 const linuxForegroundTimeout = 200 * time.Millisecond
 const linuxForegroundCacheTTL = 200 * time.Millisecond
 
+type linuxForegroundProtocol string
+
+const (
+	linuxForegroundUnsupported linuxForegroundProtocol = ""
+	linuxForegroundX11         linuxForegroundProtocol = "x11"
+	linuxForegroundHyprland    linuxForegroundProtocol = "hyprland"
+	linuxForegroundKDE         linuxForegroundProtocol = "kde"
+)
+
 var (
 	errLinuxForegroundUnavailable = errors.New("focused application is unavailable on this Linux session")
 	errLinuxForegroundMissing     = errors.New("focused application is missing")
@@ -54,17 +63,17 @@ var (
 // linuxForegroundBackend chooses who can answer "which application is focused".
 // Hyprland exposes it through hyprctl, Plasma through a one-shot KWin script,
 // and X11 through EWMH. GNOME Wayland does not give a normal client that window.
-func linuxForegroundBackend(wayland bool, hyprland bool, kde bool) string {
+func linuxForegroundBackend(wayland bool, hyprland bool, kde bool) linuxForegroundProtocol {
 	if !wayland {
-		return "x11"
+		return linuxForegroundX11
 	}
 	if hyprland {
-		return "hyprland"
+		return linuxForegroundHyprland
 	}
 	if kde {
-		return "kde"
+		return linuxForegroundKDE
 	}
-	return ""
+	return linuxForegroundUnsupported
 }
 
 func linuxActiveWindowIcon() (image.Image, error) {
@@ -137,11 +146,11 @@ func currentLinuxForeground() (linuxForegroundApp, error) {
 
 func queryLinuxForeground(ctx context.Context) (linuxForegroundApp, error) {
 	switch linuxForegroundBackend(util.IsLinuxWaylandSession(), util.IsHyprlandSession(), util.IsKDEDesktopSession()) {
-	case "hyprland":
+	case linuxForegroundHyprland:
 		return queryHyprlandForeground(ctx)
-	case "kde":
+	case linuxForegroundKDE:
 		return queryKDEForeground(ctx)
-	case "x11":
+	case linuxForegroundX11:
 		return queryX11Foreground(ctx)
 	default:
 		return linuxForegroundApp{}, errLinuxForegroundUnavailable

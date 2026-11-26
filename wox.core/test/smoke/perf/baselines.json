@@ -1,0 +1,47 @@
+{
+  "darwin": {
+    "chat-scroll-down": null,
+    "chat-scroll-up": null,
+    "chat-settled": null,
+    "chat-stream": null,
+    "grid-500": null,
+    "keystroke-to-results": null,
+    "list-500": null,
+    "local-hover": null,
+    "local-resize": null,
+    "local-selection": null,
+    "plugin-catalog-500": null,
+    "show-to-visible": null,
+    "theme-catalog-500": null
+  },
+  "linux": {
+    "chat-scroll-down": null,
+    "chat-scroll-up": null,
+    "chat-settled": null,
+    "chat-stream": null,
+    "grid-500": null,
+    "keystroke-to-results": null,
+    "list-500": null,
+    "local-hover": null,
+    "local-resize": null,
+    "local-selection": null,
+    "plugin-catalog-500": null,
+    "show-to-visible": null,
+    "theme-catalog-500": null
+  },
+  "windows": {
+    "chat-scroll-down": null,
+    "chat-scroll-up": null,
+    "chat-settled": null,
+    "chat-stream": null,
+    "grid-500": null,
+    "keystroke-to-results": null,
+    "list-500": null,
+    "local-hover": null,
+    "local-resize": null,
+    "local-selection": null,
+    "plugin-catalog-500": null,
+    "show-to-visible": null,
+    "theme-catalog-500": null
+  }
+}

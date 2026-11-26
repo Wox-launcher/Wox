@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"sync/atomic"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -43,15 +44,15 @@ func TestQueryRunFallbackDeadline(t *testing.T) {
 				run := newQueryRun(ctx, contract.QueryRequest{}, nil, query, nil)
 				run.startTime = time.Now().Add(-tc.elapsed)
 				run.startTimestamp = run.startTime.UnixMilli()
-				finals, deadlines := 0, 0
+				var finals, deadlines atomic.Int32
 				var delivered []plugin.QueryResultUI
 				run.resultDebouncer = util.NewDebouncer(1000, 1000, func(items []plugin.QueryResultUI, reason string) {
 					delivered = append(delivered, items...)
 					if reason == "done" {
-						finals++
+						finals.Add(1)
 					}
 					if reason == "fallback_deadline" {
-						deadlines++
+						deadlines.Add(1)
 					}
 				})
 				run.resultDebouncer.Start(ctx)
@@ -61,37 +62,37 @@ func TestQueryRunFallbackDeadline(t *testing.T) {
 				if tc.earlyReady {
 					ready <- true
 				}
-				returned := false
+				var returned atomic.Bool
 				go func() {
 					run.waitForResults(plugin.QueryExecution{Results: results, ImmediateDone: ready, Done: done})
-					returned = true
+					returned.Store(true)
 				}()
 				synctest.Wait()
 				remaining := max(0, fallbackMaxWait-tc.elapsed)
 				if remaining > 0 {
 					time.Sleep(remaining - time.Millisecond)
 					synctest.Wait()
-					if run.fallbackHandled != tc.earlyReady {
-						t.Fatalf("fallback before deadline = %t", run.fallbackHandled)
+					if deadlines.Load() != 0 {
+						t.Fatal("fallback flushed before its deadline")
 					}
 					time.Sleep(time.Millisecond)
 				}
 				synctest.Wait()
 				wantFallback := !tc.queuedResult && !tc.pluginScoped
-				if run.fallbackHandled != wantFallback || finals != 0 || returned {
-					t.Fatalf("at deadline: fallback=%t want=%t finals=%d returned=%t", run.fallbackHandled, wantFallback, finals, returned)
+				if finals.Load() != 0 || returned.Load() {
+					t.Fatalf("query ended at deadline: finals=%d returned=%t", finals.Load(), returned.Load())
 				}
-				wantDeadlines := 0
+				var wantDeadlines int32
 				if wantFallback && !tc.earlyReady {
 					wantDeadlines = 1
 				}
-				if deadlines != wantDeadlines {
-					t.Fatalf("deadline flushes=%d want=%d", deadlines, wantDeadlines)
+				if deadlines.Load() != wantDeadlines {
+					t.Fatalf("deadline flushes=%d want=%d", deadlines.Load(), wantDeadlines)
 				}
 				results <- plugin.QueryResponseUI{Results: []plugin.QueryResultUI{{Id: "late"}}}
 				ready <- true
 				synctest.Wait()
-				if finals != 0 || returned {
+				if finals.Load() != 0 || returned.Load() {
 					t.Fatal("immediate completion ended pending jobs")
 				}
 				done <- true
@@ -100,8 +101,9 @@ func TestQueryRunFallbackDeadline(t *testing.T) {
 				if tc.queuedResult {
 					wantCount++
 				}
-				if !returned || finals != 1 || len(delivered) != wantCount || run.totalResultCount != wantCount {
-					t.Fatalf("completion: returned=%t finals=%d delivered=%d total=%d", returned, finals, len(delivered), run.totalResultCount)
+				if !returned.Load() || finals.Load() != 1 || len(delivered) != wantCount ||
+					run.totalResultCount != wantCount || run.fallbackHandled != wantFallback {
+					t.Fatalf("completion: returned=%t finals=%d delivered=%d total=%d fallback=%t", returned.Load(), finals.Load(), len(delivered), run.totalResultCount, run.fallbackHandled)
 				}
 			})
 		})

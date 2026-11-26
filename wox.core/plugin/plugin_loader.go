@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 
@@ -19,6 +21,9 @@ import (
 
 func (l *pluginLifecycle) loadPlugins(ctx context.Context) error {
 	logger.Info(ctx, "start loading plugins")
+	if err := reconcileInterruptedPluginUpgrades(ctx, filepath.Dir(util.GetLocation().GetPluginDirectory())); err != nil {
+		util.GetLogger().Warn(ctx, fmt.Sprintf("plugin upgrade recovery incomplete: %v", err))
+	}
 
 	// load system plugin first
 	l.loadSystemPlugins(ctx)
@@ -51,6 +56,10 @@ func (l *pluginLifecycle) discoverUserPluginMetadata(ctx context.Context) ([]Met
 			if errors.As(metadataErr, &pathErr) && !errors.Is(pathErr, os.ErrNotExist) {
 				discoveryErrors = append(discoveryErrors, metadataErr)
 			}
+			continue
+		}
+		if !supportsPluginPlatform(metadata) {
+			util.GetLogger().Info(ctx, fmt.Sprintf("skip installed plugin %s: unsupported on current OS", metadata.Id))
 			continue
 		}
 
@@ -108,7 +117,17 @@ func (l *pluginLifecycle) discoverUserPluginMetadata(ctx context.Context) ([]Met
 		}
 		metaDataList = append(metaDataList, discovered...)
 	}
-	return metaDataList, errors.Join(discoveryErrors...)
+	return slices.DeleteFunc(metaDataList, func(metadata Metadata) bool {
+		if supportsPluginPlatform(metadata) {
+			return false
+		}
+		util.GetLogger().Info(ctx, fmt.Sprintf("skip installed plugin %s: unsupported on current OS", metadata.Id))
+		return true
+	}), errors.Join(discoveryErrors...)
+}
+
+func supportsPluginPlatform(metadata Metadata) bool {
+	return len(metadata.SupportedOS) == 0 || IsAnySupportedInCurrentOS(metadata.SupportedOS)
 }
 
 // loadUserPlugins restores installed plugins without changing their persisted enablement.
@@ -215,6 +234,9 @@ func (l *pluginLifecycle) loadHostPluginLocked(ctx context.Context, host Host, m
 	// Installs and reloads must not bypass the startup-only troubleshooting mode.
 	if err := ensureThirdPartyPluginsEnabled(ctx); err != nil {
 		return err
+	}
+	if !supportsPluginPlatform(metadata) {
+		return fmt.Errorf("plugin %s is unsupported on this OS", metadata.Id)
 	}
 	// Plugin loading is the final shared gate for startup, local installs, and dev
 	// reloads. Install-time checks can be bypassed by existing files on disk, so

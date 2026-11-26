@@ -38,6 +38,18 @@ type RuntimeStats struct {
 	ProcessMemoryBytes uint64 `json:"processMemoryBytes"`
 }
 
+// SoakStats samples application-process resources and cumulative launcher frame work.
+type SoakStats struct {
+	ProcessMemoryBytes uint64                 `json:"process_memory_bytes"`
+	GoRetainedBytes    uint64                 `json:"go_retained_bytes"`
+	GoHeapAllocBytes   uint64                 `json:"go_heap_alloc_bytes"`
+	Goroutines         int                    `json:"goroutines"`
+	HandlesOrFDs       int                    `json:"handles_or_fds"`
+	CPUTimeNS          int64                  `json:"cpu_time_ns"`
+	Frames             uint64                 `json:"frames"`
+	GPU                woxui.ProcessGPUMemory `json:"gpu"`
+}
+
 // WindowState describes one real managed window exposed to lifecycle smoke tests.
 type WindowState struct {
 	Exists    bool   `json:"exists"`

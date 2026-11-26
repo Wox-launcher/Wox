@@ -26,7 +26,11 @@ func queryX11Foreground(ctx context.Context) (linuxForegroundApp, error) {
 	if err != nil {
 		return linuxForegroundApp{}, fmt.Errorf("xprop window %s: %w", windowID, err)
 	}
-	return parseX11ForegroundProperties(string(output))
+	// Some X11 clients publish neither a class nor a PID. Their XID still
+	// identifies the foreground window while it remains alive.
+	app, _ := parseX11ForegroundProperties(string(output))
+	app.WindowID = windowID
+	return app, nil
 }
 
 // parseX11ActiveWindowID extracts the window id from `_NET_ACTIVE_WINDOW(WINDOW): window id # 0x123`.

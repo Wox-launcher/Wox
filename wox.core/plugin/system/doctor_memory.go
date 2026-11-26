@@ -1,4 +1,4 @@
-package woxmemory
+package system
 
 import (
 	"context"
@@ -8,13 +8,13 @@ import (
 	"runtime"
 	"runtime/pprof"
 	"sort"
+	"strings"
 
 	"wox/ai"
 	"wox/common"
 	"wox/common/icons"
 	"wox/i18n"
 	"wox/plugin"
-	"wox/setting"
 	"wox/ui"
 	"wox/util"
 	"wox/util/ocr"
@@ -22,67 +22,17 @@ import (
 	"wox/util/sqlitememory"
 )
 
-const pluginID = common.WoxMemoryPluginID
-const legacyGlancePluginID = common.GlancePluginID
-const glanceID = "wox_memory"
-const profileCommand = "profile"
-const goCommand = "go"
-const nativeCommand = "native"
-const processCommand = "processes"
-const glanceRefreshIntervalMs = 3000
+type doctorMemoryCommand string
 
-func init() {
-	plugin.AllSystemPlugin = append(plugin.AllSystemPlugin, &WoxMemoryPlugin{})
-}
+const (
+	memoryGlanceID                = "wox_memory"
+	memoryGlanceRefreshIntervalMs = 3000
 
-type WoxMemoryPlugin struct {
-	api plugin.API
-}
-
-// GetMetadata declares the release-safe memory diagnostics surface.
-func (p *WoxMemoryPlugin) GetMetadata() plugin.Metadata {
-	return plugin.Metadata{
-		Id:              pluginID,
-		Name:            "i18n:plugin_wox_memory_plugin_name",
-		Author:          "Wox Launcher",
-		Website:         "https://github.com/Wox-launcher/Wox",
-		Version:         "1.0.0",
-		MinWoxVersion:   "2.0.0",
-		Runtime:         "Go",
-		Description:     "i18n:plugin_wox_memory_plugin_description",
-		Icon:            icons.Get(icons.ActionCPUProfile).String(),
-		TriggerKeywords: []string{"woxmemory"},
-		Commands: []plugin.MetadataCommand{
-			{Command: goCommand, Description: "i18n:plugin_wox_memory_go_command"},
-			{Command: nativeCommand, Description: "i18n:plugin_wox_memory_native_command"},
-			{Command: processCommand, Description: "i18n:plugin_wox_memory_process_command"},
-			{Command: profileCommand, Description: "i18n:plugin_wox_memory_profile_command"},
-		},
-		SupportedOS: []string{"Windows", "Macos", "Linux"},
-		Glances: []plugin.MetadataGlance{
-			{Id: glanceID, Name: "i18n:plugin_wox_memory_glance_name", Description: "i18n:plugin_wox_memory_glance_description", Icon: icons.Get(icons.ActionCPUProfile).String(), RefreshIntervalMs: glanceRefreshIntervalMs},
-		},
-	}
-}
-
-func (p *WoxMemoryPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
-	p.api = initParams.API
-	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
-	if glance, changed := migrateLegacyGlanceRef(woxSetting.PrimaryGlance.Get()); changed {
-		if err := woxSetting.PrimaryGlance.Set(glance); err != nil {
-			util.GetLogger().Warn(ctx, "failed to migrate Wox memory glance: "+err.Error())
-		}
-	}
-}
-
-// migrateLegacyGlanceRef preserves an existing Wox Memory Glance selection after moving providers.
-func migrateLegacyGlanceRef(glance setting.GlanceRef) (setting.GlanceRef, bool) {
-	if glance.PluginId != legacyGlancePluginID || glance.GlanceId != glanceID {
-		return glance, false
-	}
-	glance.PluginId = pluginID
-	return glance, true
-}
+	memoryCommandGo        doctorMemoryCommand = "go"
+	memoryCommandNative    doctorMemoryCommand = "native"
+	memoryCommandProcesses doctorMemoryCommand = "processes"
+	memoryCommandProfile   doctorMemoryCommand = "profile"
+)
 
 // memoryDiagnostics separates three kinds of numbers. The private-page fields are a measured
 // partition of the process private working set. The Go runtime fields describe how the Go part is
@@ -165,20 +115,20 @@ func (o memoryProcessOwner) totalBytes() uint64 {
 // title names the owner on the default page.
 func (o memoryProcessOwner) title(ctx context.Context) string {
 	if o.kind == memoryOwnerMCPServer {
-		return fmt.Sprintf(translateMemory(ctx, "plugin_wox_memory_mcp_server"), o.label)
+		return fmt.Sprintf(translateMemory(ctx, "plugin_doctor_memory_mcp_server"), o.label)
 	}
-	return fmt.Sprintf(translateMemory(ctx, "plugin_wox_memory_host"), o.label)
+	return fmt.Sprintf(translateMemory(ctx, "plugin_doctor_memory_host"), o.label)
 }
 
 // detail describes the owner's own process, plus the helpers it is answering for. A plugin host
 // reports how many plugins it runs, while an MCP server has no equivalent count.
 func (o memoryProcessOwner) detail(ctx context.Context) string {
-	detail := fmt.Sprintf(translateMemory(ctx, "plugin_wox_memory_mcp_server_detail"), formatMemoryBytes(o.memoryBytes), o.processID)
+	detail := fmt.Sprintf(translateMemory(ctx, "plugin_doctor_memory_mcp_server_detail"), formatMemoryBytes(o.memoryBytes), o.processID)
 	if o.kind == memoryOwnerPluginHost {
-		detail = fmt.Sprintf(translateMemory(ctx, "plugin_wox_memory_host_detail"), formatMemoryBytes(o.memoryBytes), o.processID, o.pluginCount)
+		detail = fmt.Sprintf(translateMemory(ctx, "plugin_doctor_memory_host_detail"), formatMemoryBytes(o.memoryBytes), o.processID, o.pluginCount)
 	}
 	if len(o.helpers) > 0 {
-		detail += " · " + fmt.Sprintf(translateMemory(ctx, "plugin_wox_memory_host_helpers"), len(o.helpers), formatMemoryBytes(o.helperBytes))
+		detail += " · " + fmt.Sprintf(translateMemory(ctx, "plugin_doctor_memory_host_helpers"), len(o.helpers), formatMemoryBytes(o.helperBytes))
 	}
 	return detail
 }
@@ -194,9 +144,9 @@ func (o memoryProcessOwner) resultID() string {
 // detailGroup heads the owner's section on the per-process page.
 func (o memoryProcessOwner) detailGroup(ctx context.Context) string {
 	if o.kind == memoryOwnerMCPServer {
-		return fmt.Sprintf(translateMemory(ctx, "plugin_wox_memory_mcp_process_group"), o.label, formatMemoryBytes(o.totalBytes()))
+		return fmt.Sprintf(translateMemory(ctx, "plugin_doctor_memory_mcp_process_group"), o.label, formatMemoryBytes(o.totalBytes()))
 	}
-	return fmt.Sprintf(translateMemory(ctx, "plugin_wox_memory_host_process_group"), o.label, formatMemoryBytes(o.totalBytes()))
+	return fmt.Sprintf(translateMemory(ctx, "plugin_doctor_memory_host_process_group"), o.label, formatMemoryBytes(o.totalBytes()))
 }
 
 // memoryProcessDiagnostics identifies one separate process listed on the detail page.
@@ -210,28 +160,33 @@ type processHost interface {
 	ProcessID() int
 }
 
-// Query returns release-safe counters without forcing a GC or writing a heap profile. The native
+// queryMemory returns release-safe counters without forcing a GC or writing a heap profile. The native
 // owner breakdown and the per-process list live behind their own commands so the default page
 // stays a short list of totals that do not overlap.
-func (p *WoxMemoryPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResponse {
-	switch query.Command {
-	case profileCommand:
+func (p *DoctorPlugin) queryMemory(ctx context.Context, query plugin.Query) plugin.QueryResponse {
+	command, _, _ := strings.Cut(strings.TrimSpace(query.Search), " ")
+	switch doctorMemoryCommand(command) {
+	case memoryCommandProfile:
 		return plugin.NewQueryResponse([]plugin.QueryResult{p.heapProfileResult(ctx)})
-	case goCommand:
+	case memoryCommandGo:
 		return plugin.NewQueryResponse(goMemoryResults(ctx, captureMemoryDiagnostics(ctx)))
-	case nativeCommand:
+	case memoryCommandNative:
 		return plugin.NewQueryResponse(nativeOwnerResults(ctx, captureMemoryDiagnostics(ctx)))
-	case processCommand:
+	case memoryCommandProcesses:
 		return plugin.NewQueryResponse(separateProcessResults(ctx, captureMemoryDiagnostics(ctx)))
 	default:
 		return plugin.NewQueryResponse(p.buildMemoryDiagnosticResults(ctx, query, captureMemoryDiagnostics(ctx)))
 	}
 }
 
+func memoryCommandQuery(trigger string, command doctorMemoryCommand) string {
+	return fmt.Sprintf("%s %s %s ", trigger, doctorCommandMemory, command)
+}
+
 // Glance reports the same Wox process footprint used by the diagnostic results.
-func (p *WoxMemoryPlugin) Glance(ctx context.Context, request plugin.GlanceRequest) plugin.GlanceResponse {
+func (p *DoctorPlugin) Glance(ctx context.Context, request plugin.GlanceRequest) plugin.GlanceResponse {
 	for _, id := range request.Ids {
-		if id != glanceID {
+		if id != memoryGlanceID {
 			continue
 		}
 		memoryBytes, err := processmemory.GetProcessMemoryBytes(os.Getpid())
@@ -240,32 +195,32 @@ func (p *WoxMemoryPlugin) Glance(ctx context.Context, request plugin.GlanceReque
 		}
 		text := formatMemoryBytes(memoryBytes)
 		return plugin.GlanceResponse{Items: []plugin.GlanceItem{{
-			Id:      glanceID,
+			Id:      memoryGlanceID,
 			Text:    text,
 			Icon:    icons.Get(icons.ActionCPUProfile),
-			Tooltip: fmt.Sprintf(translateMemory(ctx, "plugin_wox_memory_glance_tooltip"), text, os.Getpid()),
+			Tooltip: fmt.Sprintf(translateMemory(ctx, "plugin_doctor_memory_glance_tooltip"), text, os.Getpid()),
 		}}}
 	}
 	return plugin.GlanceResponse{}
 }
 
 // heapProfileResult exposes heap capture as an explicit plugin command action.
-func (p *WoxMemoryPlugin) heapProfileResult(ctx context.Context) plugin.QueryResult {
+func (p *DoctorPlugin) heapProfileResult(ctx context.Context) plugin.QueryResult {
 	profilePath := filepath.Join(util.GetLocation().GetWoxDataDirectory(), "memory.prof")
-	subTitle := fmt.Sprintf(translateMemory(ctx, "plugin_wox_memory_profile_path"), profilePath)
+	subTitle := fmt.Sprintf(translateMemory(ctx, "plugin_doctor_memory_profile_path"), profilePath)
 	if runtime.MemProfileRate == 0 {
 		// Production disables allocation sampling to save memory, so a profile written now
 		// would be empty; tell the user how to turn sampling on for the next start.
-		subTitle = translateMemory(ctx, "plugin_wox_memory_profile_disabled")
+		subTitle = translateMemory(ctx, "plugin_doctor_memory_profile_disabled")
 	}
 	return plugin.QueryResult{
 		Id:          "memory.profile",
 		IdentityKey: "memory.profile",
-		Title:       translateMemory(ctx, "plugin_wox_memory_profile_action"),
+		Title:       translateMemory(ctx, "plugin_doctor_memory_profile_action"),
 		SubTitle:    subTitle,
 		Icon:        icons.Get(icons.ActionCPUProfile),
 		Actions: []plugin.QueryResultAction{{
-			Name: translateMemory(ctx, "plugin_wox_memory_profile_action"),
+			Name: translateMemory(ctx, "plugin_doctor_memory_profile_action"),
 			Icon: icons.Get(icons.ActionCPUProfile),
 			Action: func(actionCtx context.Context, _ plugin.ActionContext) {
 				writeHeapProfile(actionCtx, profilePath)
@@ -306,7 +261,7 @@ const (
 // buildMemoryDiagnosticResults reports the default page: a measured partition of the private
 // working set whose components sum to the process total, plus the processes that live outside it.
 // The named owners of the native component are one level deeper, behind the native command.
-func (p *WoxMemoryPlugin) buildMemoryDiagnosticResults(ctx context.Context, query plugin.Query, diagnostics memoryDiagnostics) []plugin.QueryResult {
+func (p *DoctorPlugin) buildMemoryDiagnosticResults(ctx context.Context, query plugin.Query, diagnostics memoryDiagnostics) []plugin.QueryResult {
 	results := p.processMemoryResults(ctx, query, diagnostics)
 	results = append(results, p.externalProcessResults(ctx, query, diagnostics)...)
 	if query.IsGlobalQuery() {
@@ -319,10 +274,10 @@ func (p *WoxMemoryPlugin) buildMemoryDiagnosticResults(ctx context.Context, quer
 
 // processMemoryResults partitions the private working set by measured page ownership, falling
 // back to the older subtraction estimate on platforms that cannot classify private pages.
-func (p *WoxMemoryPlugin) processMemoryResults(ctx context.Context, query plugin.Query, diagnostics memoryDiagnostics) []plugin.QueryResult {
-	group := fmt.Sprintf(translateMemory(ctx, "plugin_wox_memory_process_group"), formatMemoryBytes(diagnostics.processBytes), os.Getpid())
+func (p *DoctorPlugin) processMemoryResults(ctx context.Context, query plugin.Query, diagnostics memoryDiagnostics) []plugin.QueryResult {
+	group := fmt.Sprintf(translateMemory(ctx, "plugin_doctor_memory_process_group"), formatMemoryBytes(diagnostics.processBytes), os.Getpid())
 	goDetail := fmt.Sprintf(
-		translateMemory(ctx, "plugin_wox_memory_go_runtime_detail"),
+		translateMemory(ctx, "plugin_doctor_memory_go_runtime_detail"),
 		formatMemoryBytes(diagnostics.goRetainedBytes),
 		formatMemoryBytes(diagnostics.goHeapInuseBytes),
 		formatMemoryBytes(diagnostics.goHeapObjectsBytes),
@@ -337,16 +292,16 @@ func (p *WoxMemoryPlugin) processMemoryResults(ctx context.Context, query plugin
 	if diagnostics.privateAttributed {
 		goBytes = diagnostics.goPrivateBytes
 	}
-	goResult := memoryDiagnosticResult("memory.heap", translateMemory(ctx, "plugin_wox_memory_go_runtime"), goDetail, goBytes, group, processGroupScore)
+	goResult := memoryDiagnosticResult("memory.heap", translateMemory(ctx, "plugin_doctor_memory_go_runtime"), goDetail, goBytes, group, processGroupScore)
 	goResult.Actions = []plugin.QueryResultAction{p.goBreakdownAction(query)}
 
 	var results []plugin.QueryResult
 	if diagnostics.privateAttributed {
 		nativeResult := memoryDiagnosticResult(
 			"memory.native",
-			translateMemory(ctx, "plugin_wox_memory_native_measured"),
+			translateMemory(ctx, "plugin_doctor_memory_native_measured"),
 			fmt.Sprintf(
-				translateMemory(ctx, "plugin_wox_memory_native_measured_detail"),
+				translateMemory(ctx, "plugin_doctor_memory_native_measured_detail"),
 				formatMemoryBytes(nativeComponentBytes(diagnostics)),
 				formatMemoryBytes(diagnostics.nativeHeapBytes),
 				formatMemoryBytes(diagnostics.nativeAnonBytes),
@@ -361,27 +316,27 @@ func (p *WoxMemoryPlugin) processMemoryResults(ctx context.Context, query plugin
 			nativeResult,
 			memoryDiagnosticResult(
 				"memory.stack",
-				translateMemory(ctx, "plugin_wox_memory_thread_stack"),
-				fmt.Sprintf(translateMemory(ctx, "plugin_wox_memory_thread_stack_detail"), formatMemoryBytes(diagnostics.threadStackBytes)),
+				translateMemory(ctx, "plugin_doctor_memory_thread_stack"),
+				fmt.Sprintf(translateMemory(ctx, "plugin_doctor_memory_thread_stack_detail"), formatMemoryBytes(diagnostics.threadStackBytes)),
 				diagnostics.threadStackBytes,
 				group,
 				processGroupScore,
 			),
 		)
 	} else {
-		nativeDetail := fmt.Sprintf(translateMemory(ctx, "plugin_wox_memory_native_detail"), formatMemoryBytes(diagnostics.nativeGapBytes))
+		nativeDetail := fmt.Sprintf(translateMemory(ctx, "plugin_doctor_memory_native_detail"), formatMemoryBytes(diagnostics.nativeGapBytes))
 		if diagnostics.paddleOCRLoaded {
-			nativeDetail += " · " + translateMemory(ctx, "plugin_wox_memory_native_paddle_loaded")
+			nativeDetail += " · " + translateMemory(ctx, "plugin_doctor_memory_native_paddle_loaded")
 		}
-		estimatedResult := memoryDiagnosticResult("memory.native", translateMemory(ctx, "plugin_wox_memory_native"), nativeDetail, diagnostics.nativeGapBytes, group, processGroupScore)
+		estimatedResult := memoryDiagnosticResult("memory.native", translateMemory(ctx, "plugin_doctor_memory_native"), nativeDetail, diagnostics.nativeGapBytes, group, processGroupScore)
 		estimatedResult.Actions = []plugin.QueryResultAction{p.nativeBreakdownAction(query)}
 		results = append(results, goResult, estimatedResult)
 	}
 	if diagnostics.privateImageBytes > 0 {
 		results = append(results, memoryDiagnosticResult(
 			"memory.image",
-			translateMemory(ctx, "plugin_wox_memory_private_image"),
-			fmt.Sprintf(translateMemory(ctx, "plugin_wox_memory_private_image_detail"), formatMemoryBytes(diagnostics.privateImageBytes)),
+			translateMemory(ctx, "plugin_doctor_memory_private_image"),
+			fmt.Sprintf(translateMemory(ctx, "plugin_doctor_memory_private_image_detail"), formatMemoryBytes(diagnostics.privateImageBytes)),
 			diagnostics.privateImageBytes,
 			group,
 			processGroupScore,
@@ -390,8 +345,8 @@ func (p *WoxMemoryPlugin) processMemoryResults(ctx context.Context, query plugin
 	if diagnostics.privateMappedBytes > 0 {
 		results = append(results, memoryDiagnosticResult(
 			"memory.mapped",
-			translateMemory(ctx, "plugin_wox_memory_private_mapped"),
-			fmt.Sprintf(translateMemory(ctx, "plugin_wox_memory_private_mapped_detail"), formatMemoryBytes(diagnostics.privateMappedBytes)),
+			translateMemory(ctx, "plugin_doctor_memory_private_mapped"),
+			fmt.Sprintf(translateMemory(ctx, "plugin_doctor_memory_private_mapped_detail"), formatMemoryBytes(diagnostics.privateMappedBytes)),
 			diagnostics.privateMappedBytes,
 			group,
 			processGroupScore,
@@ -401,10 +356,10 @@ func (p *WoxMemoryPlugin) processMemoryResults(ctx context.Context, query plugin
 }
 
 // goBreakdownAction opens the Go command so the default page can keep one line for the runtime.
-func (p *WoxMemoryPlugin) goBreakdownAction(query plugin.Query) plugin.QueryResultAction {
+func (p *DoctorPlugin) goBreakdownAction(query plugin.Query) plugin.QueryResultAction {
 	return plugin.QueryResultAction{
 		Id:                     "memory.go.breakdown",
-		Name:                   "i18n:plugin_wox_memory_go_action",
+		Name:                   "i18n:plugin_doctor_memory_go_action",
 		Icon:                   icons.Get(icons.ActionCPUProfile),
 		IsDefault:              true,
 		PreventHideAfterAction: true,
@@ -414,7 +369,7 @@ func (p *WoxMemoryPlugin) goBreakdownAction(query plugin.Query) plugin.QueryResu
 			}
 			p.api.ChangeQuery(actionCtx, common.PlainQuery{
 				QueryType: plugin.QueryTypeInput,
-				QueryText: fmt.Sprintf("%s %s ", query.TriggerKeyword, goCommand),
+				QueryText: memoryCommandQuery(query.TriggerKeyword, memoryCommandGo),
 			})
 		},
 	}
@@ -425,7 +380,7 @@ func (p *WoxMemoryPlugin) goBreakdownAction(query plugin.Query) plugin.QueryResu
 // has not reused or handed back, and the runtime's own bookkeeping. The entries partition the
 // retained total exactly, because Sys-HeapReleased is the sum of every bucket listed here.
 func goMemoryResults(ctx context.Context, diagnostics memoryDiagnostics) []plugin.QueryResult {
-	group := fmt.Sprintf(translateMemory(ctx, "plugin_wox_memory_go_group"), formatMemoryBytes(diagnostics.goRetainedBytes))
+	group := fmt.Sprintf(translateMemory(ctx, "plugin_doctor_memory_go_group"), formatMemoryBytes(diagnostics.goRetainedBytes))
 	entries := []struct {
 		id     string
 		title  string
@@ -436,53 +391,53 @@ func goMemoryResults(ctx context.Context, diagnostics memoryDiagnostics) []plugi
 	}{
 		{
 			id:     "memory.go.objects",
-			title:  "plugin_wox_memory_go_objects",
-			detail: "plugin_wox_memory_go_objects_detail",
+			title:  "plugin_doctor_memory_go_objects",
+			detail: "plugin_doctor_memory_go_objects_detail",
 			bytes:  diagnostics.goHeapObjectsBytes,
 			extra:  []any{formatMemoryBytes(diagnostics.decodedImageBytes)},
 		},
 		{
 			id:    "memory.go.garbage",
-			title: "plugin_wox_memory_go_garbage",
+			title: "plugin_doctor_memory_go_garbage",
 			// Heap pages already charged to the process that hold no live object: objects the
 			// collector has not swept yet plus free slots stranded inside in-use spans.
-			detail: "plugin_wox_memory_go_garbage_detail",
+			detail: "plugin_doctor_memory_go_garbage_detail",
 			bytes:  subtractFloor(diagnostics.goHeapInuseBytes, diagnostics.goHeapObjectsBytes),
 		},
 		{
 			id:     "memory.go.idle",
-			title:  "plugin_wox_memory_go_idle",
-			detail: "plugin_wox_memory_go_idle_detail",
+			title:  "plugin_doctor_memory_go_idle",
+			detail: "plugin_doctor_memory_go_idle_detail",
 			bytes:  diagnostics.goHeapRetainedIdle,
 		},
 		{
 			id:     "memory.go.stacks",
-			title:  "plugin_wox_memory_go_stacks",
-			detail: "plugin_wox_memory_go_stacks_detail",
+			title:  "plugin_doctor_memory_go_stacks",
+			detail: "plugin_doctor_memory_go_stacks_detail",
 			bytes:  diagnostics.goStackBytes,
 		},
 		{
 			id:     "memory.go.gc",
-			title:  "plugin_wox_memory_go_gc",
-			detail: "plugin_wox_memory_go_gc_detail",
+			title:  "plugin_doctor_memory_go_gc",
+			detail: "plugin_doctor_memory_go_gc_detail",
 			bytes:  diagnostics.goGCBytes,
 		},
 		{
 			id:     "memory.go.spans",
-			title:  "plugin_wox_memory_go_spans",
-			detail: "plugin_wox_memory_go_spans_detail",
+			title:  "plugin_doctor_memory_go_spans",
+			detail: "plugin_doctor_memory_go_spans_detail",
 			bytes:  diagnostics.goSpanCacheBytes,
 		},
 		{
 			id:     "memory.go.profiling",
-			title:  "plugin_wox_memory_go_profiling",
-			detail: "plugin_wox_memory_go_profiling_detail",
+			title:  "plugin_doctor_memory_go_profiling",
+			detail: "plugin_doctor_memory_go_profiling_detail",
 			bytes:  diagnostics.goProfilingBytes,
 		},
 		{
 			id:     "memory.go.other",
-			title:  "plugin_wox_memory_go_other",
-			detail: "plugin_wox_memory_go_other_detail",
+			title:  "plugin_doctor_memory_go_other",
+			detail: "plugin_doctor_memory_go_other_detail",
 			bytes:  diagnostics.goOtherRuntime,
 		},
 	}
@@ -506,10 +461,10 @@ func goMemoryResults(ctx context.Context, diagnostics memoryDiagnostics) []plugi
 
 // nativeBreakdownAction opens the native command so the default page keeps only components that
 // partition the process total.
-func (p *WoxMemoryPlugin) nativeBreakdownAction(query plugin.Query) plugin.QueryResultAction {
+func (p *DoctorPlugin) nativeBreakdownAction(query plugin.Query) plugin.QueryResultAction {
 	return plugin.QueryResultAction{
 		Id:                     "memory.native.breakdown",
-		Name:                   "i18n:plugin_wox_memory_native_action",
+		Name:                   "i18n:plugin_doctor_memory_native_action",
 		Icon:                   icons.Get(icons.ActionCPUProfile),
 		IsDefault:              true,
 		PreventHideAfterAction: true,
@@ -519,7 +474,7 @@ func (p *WoxMemoryPlugin) nativeBreakdownAction(query plugin.Query) plugin.Query
 			}
 			p.api.ChangeQuery(actionCtx, common.PlainQuery{
 				QueryType: plugin.QueryTypeInput,
-				QueryText: fmt.Sprintf("%s %s ", query.TriggerKeyword, nativeCommand),
+				QueryText: memoryCommandQuery(query.TriggerKeyword, memoryCommandNative),
 			})
 		},
 	}
@@ -530,17 +485,17 @@ func (p *WoxMemoryPlugin) nativeBreakdownAction(query plugin.Query) plugin.Query
 // driver totals are listed in their own group and must not shrink the unnamed remainder:
 // Windows VidMm pages are kernel-managed and are not part of the process private working set.
 func nativeOwnerResults(ctx context.Context, diagnostics memoryDiagnostics) []plugin.QueryResult {
-	group := fmt.Sprintf(translateMemory(ctx, "plugin_wox_memory_native_group"), formatMemoryBytes(nativeComponentBytes(diagnostics)))
+	group := fmt.Sprintf(translateMemory(ctx, "plugin_doctor_memory_native_group"), formatMemoryBytes(nativeComponentBytes(diagnostics)))
 	var results []plugin.QueryResult
 	if diagnostics.gpu.Available && diagnostics.gpu.SystemBytes+diagnostics.gpu.DedicatedBytes > 0 {
 		detail := fmt.Sprintf(
-			translateMemory(ctx, "plugin_wox_memory_gpu_detail_unified"),
+			translateMemory(ctx, "plugin_doctor_memory_gpu_detail_unified"),
 			formatMemoryBytes(diagnostics.gpu.SystemBytes),
 			formatMemoryBytes(diagnostics.gpu.SystemBudgetBytes),
 		)
 		if !diagnostics.gpu.UnifiedMemory {
 			detail = fmt.Sprintf(
-				translateMemory(ctx, "plugin_wox_memory_gpu_detail_discrete"),
+				translateMemory(ctx, "plugin_doctor_memory_gpu_detail_discrete"),
 				formatMemoryBytes(diagnostics.gpu.SystemBytes),
 				formatMemoryBytes(diagnostics.gpu.SystemBudgetBytes),
 				formatMemoryBytes(diagnostics.gpu.DedicatedBytes),
@@ -549,18 +504,18 @@ func nativeOwnerResults(ctx context.Context, diagnostics memoryDiagnostics) []pl
 		}
 		results = append(results, memoryDiagnosticResult(
 			gpuOwnerResultID,
-			translateMemory(ctx, "plugin_wox_memory_gpu"),
+			translateMemory(ctx, "plugin_doctor_memory_gpu"),
 			detail,
 			diagnostics.gpu.SystemBytes,
-			translateMemory(ctx, "plugin_wox_memory_gpu_group"),
+			translateMemory(ctx, "plugin_doctor_memory_gpu_group"),
 			gpuOwnerGroupScore,
 		))
 	}
 	if diagnostics.nativeHeapFreeBytes > 0 {
 		results = append(results, memoryDiagnosticResult(
 			heapFreeOwnerResultID,
-			translateMemory(ctx, "plugin_wox_memory_heap_free"),
-			fmt.Sprintf(translateMemory(ctx, "plugin_wox_memory_heap_free_detail"), formatMemoryBytes(diagnostics.nativeHeapFreeBytes)),
+			translateMemory(ctx, "plugin_doctor_memory_heap_free"),
+			fmt.Sprintf(translateMemory(ctx, "plugin_doctor_memory_heap_free_detail"), formatMemoryBytes(diagnostics.nativeHeapFreeBytes)),
 			diagnostics.nativeHeapFreeBytes,
 			group,
 			nativeOwnerGroupScore,
@@ -569,8 +524,8 @@ func nativeOwnerResults(ctx context.Context, diagnostics memoryDiagnostics) []pl
 	if diagnostics.sqliteBytes > 0 {
 		results = append(results, memoryDiagnosticResult(
 			"memory.native.sqlite",
-			translateMemory(ctx, "plugin_wox_memory_sqlite"),
-			fmt.Sprintf(translateMemory(ctx, "plugin_wox_memory_sqlite_detail"), formatMemoryBytes(diagnostics.sqliteBytes), formatMemoryBytes(diagnostics.sqlitePeakBytes)),
+			translateMemory(ctx, "plugin_doctor_memory_sqlite"),
+			fmt.Sprintf(translateMemory(ctx, "plugin_doctor_memory_sqlite_detail"), formatMemoryBytes(diagnostics.sqliteBytes), formatMemoryBytes(diagnostics.sqlitePeakBytes)),
 			diagnostics.sqliteBytes,
 			group,
 			nativeOwnerGroupScore,
@@ -579,8 +534,8 @@ func nativeOwnerResults(ctx context.Context, diagnostics memoryDiagnostics) []pl
 	if diagnostics.rendererBytes > 0 {
 		results = append(results, memoryDiagnosticResult(
 			"memory.native.renderer",
-			translateMemory(ctx, "plugin_wox_memory_ui"),
-			fmt.Sprintf(translateMemory(ctx, "plugin_wox_memory_ui_detail"), formatMemoryBytes(diagnostics.rendererBytes)),
+			translateMemory(ctx, "plugin_doctor_memory_ui"),
+			fmt.Sprintf(translateMemory(ctx, "plugin_doctor_memory_ui_detail"), formatMemoryBytes(diagnostics.rendererBytes)),
 			diagnostics.rendererBytes,
 			group,
 			nativeOwnerGroupScore,
@@ -589,8 +544,8 @@ func nativeOwnerResults(ctx context.Context, diagnostics memoryDiagnostics) []pl
 	if diagnostics.paddleOCRBytes > 0 {
 		results = append(results, memoryDiagnosticResult(
 			"memory.native.ocr",
-			translateMemory(ctx, "plugin_wox_memory_paddle"),
-			fmt.Sprintf(translateMemory(ctx, "plugin_wox_memory_paddle_detail"), formatMemoryBytes(diagnostics.paddleOCRBytes)),
+			translateMemory(ctx, "plugin_doctor_memory_paddle"),
+			fmt.Sprintf(translateMemory(ctx, "plugin_doctor_memory_paddle_detail"), formatMemoryBytes(diagnostics.paddleOCRBytes)),
 			diagnostics.paddleOCRBytes,
 			group,
 			nativeOwnerGroupScore,
@@ -601,8 +556,8 @@ func nativeOwnerResults(ctx context.Context, diagnostics memoryDiagnostics) []pl
 		// is a meaningful answer rather than an error.
 		return []plugin.QueryResult{memoryDiagnosticResult(
 			"memory.native.empty",
-			translateMemory(ctx, "plugin_wox_memory_native_empty"),
-			translateMemory(ctx, "plugin_wox_memory_native_empty_detail"),
+			translateMemory(ctx, "plugin_doctor_memory_native_empty"),
+			translateMemory(ctx, "plugin_doctor_memory_native_empty_detail"),
 			0,
 			group,
 			nativeOwnerGroupScore,
@@ -613,8 +568,8 @@ func nativeOwnerResults(ctx context.Context, diagnostics memoryDiagnostics) []pl
 	if remainder := unnamedNativeBytes(results, diagnostics); remainder > 0 {
 		results = append(results, memoryDiagnosticResult(
 			"memory.native.unnamed",
-			translateMemory(ctx, "plugin_wox_memory_native_unnamed"),
-			fmt.Sprintf(translateMemory(ctx, "plugin_wox_memory_native_unnamed_detail"), formatMemoryBytes(remainder)),
+			translateMemory(ctx, "plugin_doctor_memory_native_unnamed"),
+			fmt.Sprintf(translateMemory(ctx, "plugin_doctor_memory_native_unnamed_detail"), formatMemoryBytes(remainder)),
 			remainder,
 			group,
 			nativeOwnerGroupScore,
@@ -649,8 +604,8 @@ func nativeComponentBytes(diagnostics memoryDiagnostics) uint64 {
 // externalProcessResults keeps the default page to one line per owner, each carrying the combined
 // cost of that owner and its helper processes. Individual processes are one level deeper, behind
 // the process command.
-func (p *WoxMemoryPlugin) externalProcessResults(ctx context.Context, query plugin.Query, diagnostics memoryDiagnostics) []plugin.QueryResult {
-	group := translateMemory(ctx, "plugin_wox_memory_host_group")
+func (p *DoctorPlugin) externalProcessResults(ctx context.Context, query plugin.Query, diagnostics memoryDiagnostics) []plugin.QueryResult {
+	group := translateMemory(ctx, "plugin_doctor_memory_host_group")
 	var results []plugin.QueryResult
 	for _, owner := range diagnostics.owners {
 		result := memoryDiagnosticResult(
@@ -667,8 +622,8 @@ func (p *WoxMemoryPlugin) externalProcessResults(ctx context.Context, query plug
 	if len(diagnostics.otherProcesses) > 0 {
 		result := memoryDiagnosticResult(
 			"memory.process.other",
-			translateMemory(ctx, "plugin_wox_memory_other_processes"),
-			fmt.Sprintf(translateMemory(ctx, "plugin_wox_memory_other_processes_detail"), formatMemoryBytes(totalProcessBytes(diagnostics.otherProcesses)), len(diagnostics.otherProcesses)),
+			translateMemory(ctx, "plugin_doctor_memory_other_processes"),
+			fmt.Sprintf(translateMemory(ctx, "plugin_doctor_memory_other_processes_detail"), formatMemoryBytes(totalProcessBytes(diagnostics.otherProcesses)), len(diagnostics.otherProcesses)),
 			totalProcessBytes(diagnostics.otherProcesses),
 			group,
 			externalGroupScore,
@@ -680,10 +635,10 @@ func (p *WoxMemoryPlugin) externalProcessResults(ctx context.Context, query plug
 }
 
 // separateProcessAction opens the process command so the default page keeps one line per host.
-func (p *WoxMemoryPlugin) separateProcessAction(query plugin.Query) plugin.QueryResultAction {
+func (p *DoctorPlugin) separateProcessAction(query plugin.Query) plugin.QueryResultAction {
 	return plugin.QueryResultAction{
 		Id:                     "memory.process.detail",
-		Name:                   "i18n:plugin_wox_memory_process_action",
+		Name:                   "i18n:plugin_doctor_memory_process_action",
 		Icon:                   icons.Get(icons.ActionCPUProfile),
 		IsDefault:              true,
 		PreventHideAfterAction: true,
@@ -693,7 +648,7 @@ func (p *WoxMemoryPlugin) separateProcessAction(query plugin.Query) plugin.Query
 			}
 			p.api.ChangeQuery(actionCtx, common.PlainQuery{
 				QueryType: plugin.QueryTypeInput,
-				QueryText: fmt.Sprintf("%s %s ", query.TriggerKeyword, processCommand),
+				QueryText: memoryCommandQuery(query.TriggerKeyword, memoryCommandProcesses),
 			})
 		},
 	}
@@ -717,16 +672,16 @@ func separateProcessResults(ctx context.Context, diagnostics memoryDiagnostics) 
 		groupScore--
 	}
 	if len(diagnostics.otherProcesses) > 0 {
-		group := fmt.Sprintf(translateMemory(ctx, "plugin_wox_memory_other_process_group"), formatMemoryBytes(totalProcessBytes(diagnostics.otherProcesses)))
+		group := fmt.Sprintf(translateMemory(ctx, "plugin_doctor_memory_other_process_group"), formatMemoryBytes(totalProcessBytes(diagnostics.otherProcesses)))
 		results = append(results, processDetailResults(ctx, diagnostics.otherProcesses, group, groupScore)...)
 	}
 	if len(results) == 0 {
 		return []plugin.QueryResult{memoryDiagnosticResult(
 			"memory.process.empty",
-			translateMemory(ctx, "plugin_wox_memory_process_empty"),
-			translateMemory(ctx, "plugin_wox_memory_process_empty_detail"),
+			translateMemory(ctx, "plugin_doctor_memory_process_empty"),
+			translateMemory(ctx, "plugin_doctor_memory_process_empty_detail"),
 			0,
-			translateMemory(ctx, "plugin_wox_memory_host_group"),
+			translateMemory(ctx, "plugin_doctor_memory_host_group"),
 			externalGroupScore,
 		)}
 	}
@@ -739,7 +694,7 @@ func processDetailResults(ctx context.Context, processes []memoryProcessDiagnost
 		results = append(results, memoryDiagnosticResult(
 			fmt.Sprintf("memory.process.%d", process.processID),
 			process.name,
-			fmt.Sprintf(translateMemory(ctx, "plugin_wox_memory_process_detail"), formatMemoryBytes(process.memoryBytes), process.processID),
+			fmt.Sprintf(translateMemory(ctx, "plugin_doctor_memory_process_detail"), formatMemoryBytes(process.memoryBytes), process.processID),
 			process.memoryBytes,
 			group,
 			groupScore,

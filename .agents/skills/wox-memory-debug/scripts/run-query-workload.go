@@ -258,12 +258,12 @@ func findWoxSettingsResult(snapshot woxwidget.AutomationSnapshot) (string, bool)
 	return "", false
 }
 
-// captureHeapProfile invokes the Wox Memory plugin's heap-profile command through the launcher.
+// captureHeapProfile invokes Doctor's heap-profile command through the launcher.
 func captureHeapProfile(ctx context.Context, client *automationdriver.Client) error {
 	if err := showAndWaitForInput(ctx, client); err != nil {
 		return err
 	}
-	if err := client.Perform(ctx, "launcher.query.input", woxui.AccessibilityActionSetValue, "woxmemory profile "); err != nil {
+	if err := client.Perform(ctx, "launcher.query.input", woxui.AccessibilityActionSetValue, "doctor memory profile "); err != nil {
 		return err
 	}
 	var resultID string

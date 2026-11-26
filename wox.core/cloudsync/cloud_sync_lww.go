@@ -75,6 +75,8 @@ type preApplyOplog struct {
 	ID        uint
 	Timestamp int64
 	Value     string
+	Operation string
+	Synced    bool
 }
 
 // noteRemoteChangeForApply is the bookkeeping step after a remote value is applied.
@@ -179,7 +181,7 @@ func loadPreApplyOplogs(record CloudSyncRecord, restore bool) ([]preApplyOplog, 
 	var preexisting []preApplyOplog
 	var lastID uint
 	for {
-		query := db.Select("id", "timestamp", "value").
+		query := db.Select("id", "timestamp", "value", "operation", "synced_to_cloud").
 			Where("entity_type = ? AND entity_id = ? AND key = ? AND cloud_sync_discarded = ? AND id > ?", record.EntityType, entityID, record.Key, false, lastID)
 		if !restore {
 			query = query.Where("synced_to_cloud = ? AND timestamp <= ?", false, record.ClientTs)
@@ -197,6 +199,8 @@ func loadPreApplyOplogs(record CloudSyncRecord, restore bool) ([]preApplyOplog, 
 				ID:        row.ID,
 				Timestamp: row.Timestamp,
 				Value:     row.Value,
+				Operation: row.Operation,
+				Synced:    row.SyncedToCloud,
 			})
 			lastID = row.ID
 		}

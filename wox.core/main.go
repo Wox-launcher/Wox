@@ -37,6 +37,7 @@ import (
 	"wox/util/overlay"
 	"wox/util/overlay/imageoverlay"
 	"wox/util/permission"
+	"wox/util/power"
 	"wox/util/selection"
 	"wox/util/windowhook"
 
@@ -83,8 +84,6 @@ import (
 	_ "wox/plugin/system/glance"
 
 	_ "wox/plugin/system/window_manager"
-
-	_ "wox/plugin/system/wox_memory"
 )
 
 var embeddedGoUIApp *golauncher.App
@@ -317,6 +316,7 @@ func run() {
 		util.GetLogger().Error(ctx, fmt.Sprintf("failed to initialize database: %s", err.Error()))
 		return
 	}
+	recoveredDatabase, recoverySyncReady := prepareDatabaseRecovery(ctx)
 
 	if err := analytics.Init(ctx, database.GetDB()); err != nil {
 		util.GetLogger().Error(ctx, fmt.Sprintf("failed to initialize analytics: %s", err.Error()))
@@ -375,7 +375,9 @@ func run() {
 	network.SetErrorTranslator(func() string {
 		return i18n.GetI18nManager().TranslateWox(context.Background(), "ui_offline_unavailable")
 	})
-	initCloudSync(ctx)
+	if recoverySyncReady {
+		initCloudSync(ctx)
+	}
 
 	ui.InitializeLanguage(ctx)
 
@@ -497,6 +499,7 @@ func run() {
 		embeddedGoUIApp = nil
 		return
 	}
+	showDatabaseRecovery(ctx, recoveredDatabase, recoverySyncReady)
 	if util.IsWindows() {
 		util.Go(ctx, "clean up window hook runtime", func() {
 			windowhook.CleanupRuntime(ctx)
@@ -505,6 +508,18 @@ func run() {
 	woxui.SetProtocolURLHandler(func(deeplink string) {
 		ui.GetUIManager().ProcessDeeplink(util.NewTraceContext(), deeplink)
 	})
+	if supervisor.GetManager().IsChildArg(os.Args) {
+		supervisor.GetManager().StartUIHeartbeat(ctx, woxui.Post)
+	}
+	woxui.SetSystemWakeHandler(power.Watch(ctx, func() {
+		wakeCtx := util.NewTraceContext()
+		if err := ui.GetUIManager().RegisterAllHotkeys(wakeCtx); err != nil {
+			util.GetLogger().Warn(wakeCtx, "failed to restore hotkeys after wake: "+err.Error())
+		}
+		plugin.GetPluginManager().CheckHostsAfterWake()
+		clipboard.CheckAfterWake()
+		plugin.GetPluginManager().CheckWatchersAfterWake(wakeCtx)
+	}))
 	for _, deeplink := range startupDeepLinks {
 		// The launcher is already shown on startup, so toggling here would
 		// immediately hide it when a URL starts the first Wox instance.

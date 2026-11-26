@@ -8,6 +8,7 @@ import (
 
 	"wox/test/automationdriver"
 	"wox/test/smoke"
+	"wox/test/smokeperf"
 	woxwidget "wox/ui/widget"
 )
 
@@ -29,7 +30,7 @@ func Test003Catalog500Work(t *testing.T) {
 		}); err != nil {
 			t.Fatalf("wait for plugin catalog fixture: %v", err)
 		}
-		assertSettledWork(t, waitForPresentedSamples(t, ctx, client))
+		assertSettledWork(t, smokeperf.ScenarioPluginCatalog, waitForPresentedSamples(t, ctx, client, smokeperf.ScenarioPluginCatalog))
 
 		if err := client.OpenSettings(ctx, "/themes"); err != nil {
 			t.Fatalf("open theme catalog: %v", err)
@@ -44,7 +45,7 @@ func Test003Catalog500Work(t *testing.T) {
 		}); err != nil {
 			t.Fatalf("wait for theme catalog fixture: %v", err)
 		}
-		assertSettledWork(t, waitForPresentedSamples(t, ctx, client))
+		assertSettledWork(t, smokeperf.ScenarioThemeCatalog, waitForPresentedSamples(t, ctx, client, smokeperf.ScenarioThemeCatalog))
 		assertUnexpectedDroppedFramesAtMost(t, ctx, client, 0)
 	})
 }

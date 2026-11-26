@@ -8,6 +8,7 @@ import (
 
 	"wox/test/automationdriver"
 	"wox/test/smoke"
+	"wox/test/smokeperf"
 )
 
 // Test001List500Work verifies the 500-item list fixture records per-frame work without unexpected dropped frames.
@@ -20,8 +21,8 @@ func Test001List500Work(t *testing.T) {
 		if _, found := automationdriver.Find(snapshot, "launcher.result.perf-list-0000"); !found {
 			t.Fatal("expected first list fixture result")
 		}
-		samples := waitForPresentedSamples(t, ctx, client)
-		assertSettledWork(t, samples)
+		samples := waitForPresentedSamples(t, ctx, client, smokeperf.ScenarioList)
+		assertSettledWork(t, smokeperf.ScenarioList, samples)
 		assertUnexpectedDroppedFramesAtMost(t, ctx, client, 0)
 	})
 }

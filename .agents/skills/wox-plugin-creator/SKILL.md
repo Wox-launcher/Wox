@@ -16,6 +16,12 @@ description: Create, scaffold, implement, design logos for, and package Wox plug
   - Explicit Node.js: `python3 scripts/scaffold_wox_plugin.py --type singlefile-nodejs --name "Weather" --trigger-keywords weather`
   - Explicit Python: `python3 scripts/scaffold_wox_plugin.py --type singlefile-python --name "Weather" --trigger-keywords weather`
 
+## Query budgets and slow work
+
+- Treat `*` as a fast global search path. The current scheduler gives each plugin 1.5 seconds for global queries and 5 seconds for queries directed to a plugin, such as `repo search fix` when `repo` is the trigger keyword.
+- A nonempty result batch accepted via `PushResults` / `push_results` can extend a running directed query, up to 15 seconds total. Give users useful partial results when available. For work that can exceed the budget or must continue after the launcher closes, offer a named action that starts the job and gives the user a way to monitor or cancel it.
+- Handle cancellation when the user changes the query or hides the launcher. Read [Query lifecycle and long-running work](references/query_lifecycle.md) before adding remote lookup, streaming, or background work. It covers timeout and circuit-breaker behavior, how to guide the user, and Node.js and Python cancellation.
+
 ## Toolbar status and Toast notifications
 
 Choose the API by lifetime and scope:

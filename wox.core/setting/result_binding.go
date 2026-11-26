@@ -35,6 +35,31 @@ func IsSingleWordResultAlias(alias string) bool {
 	return strings.IndexFunc(trimmed, unicode.IsSpace) < 0
 }
 
+// MergeResultHotkeysAndAliases combines each binding by its durable result hash.
+func MergeResultHotkeysAndAliases(hotkeys, aliases []ResultBinding) []ResultBinding {
+	bindings := make([]ResultBinding, 0, len(hotkeys))
+	byHash := make(map[string]int, len(hotkeys))
+	for _, binding := range CloneResultBindings(hotkeys) {
+		if binding.Hotkey != "" {
+			binding.Alias = ""
+			byHash[binding.Hash] = len(bindings)
+			bindings = append(bindings, binding)
+		}
+	}
+	for _, binding := range CloneResultBindings(aliases) {
+		if binding.Alias == "" {
+			continue
+		}
+		if index, ok := byHash[binding.Hash]; ok {
+			bindings[index].Alias = binding.Alias
+		} else {
+			binding.Hotkey = ""
+			bindings = append(bindings, binding)
+		}
+	}
+	return bindings
+}
+
 // CloneResultBindings copies a binding slice so callers can edit without sharing storage.
 func CloneResultBindings(bindings []ResultBinding) []ResultBinding {
 	if len(bindings) == 0 {

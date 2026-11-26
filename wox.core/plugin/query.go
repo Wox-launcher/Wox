@@ -170,10 +170,12 @@ type QueryEnv struct {
 // such as refinements and layout hints into side channels. Keeping them in one
 // response lets the UI apply the controls and results from the same query id.
 type QueryResponse struct {
-	Results     []QueryResult
-	Refinements []QueryRefinement
-	Layout      QueryLayout
-	Context     QueryContext
+	QueryFailed        bool `json:"-"`
+	QueryBackpressured bool `json:"-"`
+	Results            []QueryResult
+	Refinements        []QueryRefinement
+	Layout             QueryLayout
+	Context            QueryContext
 	// PluginPreview is installed once for the active plugin context; later queries do not replace it.
 	PluginPreview *WoxPreview `json:",omitempty"`
 	// AutoRecordQueryHistory lets built-in Go plugins mark a successful display-only query as completed.

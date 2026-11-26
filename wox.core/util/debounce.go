@@ -113,14 +113,14 @@ func (r *Debouncer[T]) FlushNow(ctx context.Context, reason string) {
 	r.flush(ctx, reason)
 }
 
-func (r *Debouncer[T]) flush(_ context.Context, reason string) {
+func (r *Debouncer[T]) flush(ctx context.Context, reason string) {
 	// Keep callbacks ordered while allowing Add to continue during snapshot
 	// building, serialization, or any other work performed by onFlush.
 	r.flushMu.Lock()
 	defer r.flushMu.Unlock()
 
 	r.m.Lock()
-	if r.done && reason != "done" {
+	if ctx.Err() != nil || (r.done && reason != "done") {
 		r.m.Unlock()
 		return
 	}

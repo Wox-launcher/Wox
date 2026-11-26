@@ -26,6 +26,7 @@ type WebsocketClient struct {
 	reconnectCount       int
 	isConnected          bool
 	mu                   sync.RWMutex
+	writeGate            chan struct{}
 	// stopped is closed by Close to make a pending reconnect loop give up.
 	stopped       chan struct{}
 	stopOnce      sync.Once
@@ -33,12 +34,14 @@ type WebsocketClient struct {
 }
 
 func NewWebsocketClient(url string) *WebsocketClient {
-	return &WebsocketClient{url: url, stopped: make(chan struct{})}
+	return &WebsocketClient{url: url, stopped: make(chan struct{}), writeGate: make(chan struct{}, 1)}
 }
 
 // NewWebsocketClientWithHandshake preserves and validates headers across reconnects.
 func NewWebsocketClientWithHandshake(url string, headers, expectedHeaders http.Header) *WebsocketClient {
-	return &WebsocketClient{url: url, headers: headers.Clone(), expectedHeaders: expectedHeaders.Clone(), stopped: make(chan struct{})}
+	client := NewWebsocketClient(url)
+	client.headers, client.expectedHeaders = headers.Clone(), expectedHeaders.Clone()
+	return client
 }
 
 func (w *WebsocketClient) Connect(ctx context.Context) error {
@@ -127,7 +130,7 @@ func (w *WebsocketClient) ping(ctx context.Context, conn *websocket.Conn, cancel
 	for {
 		select {
 		case <-ticker.C:
-			w.sendMsgToConn(ctx, conn, websocket.PingMessage, []byte{})
+			_ = conn.WriteControl(websocket.PingMessage, nil, time.Now().Add(time.Second))
 		case <-cancelReceiveMsgChan:
 			GetLogger().Info(ctx, "disconnect signal received, stop pinging")
 			return
@@ -212,24 +215,33 @@ func (w *WebsocketClient) Send(ctx context.Context, data []byte) error {
 }
 
 func (w *WebsocketClient) sendMsg(ctx context.Context, msgType int, data []byte) error {
-	w.mu.Lock()
-	defer w.mu.Unlock()
+	select {
+	case w.writeGate <- struct{}{}:
+	case <-ctx.Done():
+		return context.Cause(ctx)
+	}
+	defer func() { <-w.writeGate }()
 
-	if w.conn == nil {
+	conn := w.currentConn()
+	if conn == nil {
 		return fmt.Errorf("websocket client is not connected")
 	}
-	return w.conn.WriteMessage(msgType, data)
+	if ctx.Err() != nil {
+		return context.Cause(ctx)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	if requested, ok := ctx.Deadline(); ok && requested.Before(deadline) {
+		deadline = requested
+	}
+	_ = conn.SetWriteDeadline(deadline)
+	defer conn.SetWriteDeadline(time.Time{})
+	return conn.WriteMessage(msgType, data)
 }
 
-// sendMsgToConn prevents a stale ping loop from writing to a replacement connection.
-func (w *WebsocketClient) sendMsgToConn(ctx context.Context, conn *websocket.Conn, msgType int, data []byte) error {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-
-	if w.conn != conn {
-		return fmt.Errorf("websocket connection is no longer active")
-	}
-	return conn.WriteMessage(msgType, data)
+func (w *WebsocketClient) currentConn() *websocket.Conn {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	return w.conn
 }
 
 func (w *WebsocketClient) disconnect(ctx context.Context) {

@@ -21,6 +21,9 @@ var (
 	hangMiniDump    = windows.NewLazySystemDLL("dbghelp.dll").NewProc("MiniDumpWriteDump")
 )
 
+// Windows probes the native message loop directly.
+func (*Manager) StartUIHeartbeat(context.Context, func(func()) error) {}
+
 // watchUI probes hidden as well as visible top-level windows from outside Wox.
 // WM_NULL must be dispatched by the owning thread, so background Go activity
 // cannot disguise a blocked UI loop. It never terminates the child.
@@ -175,8 +178,7 @@ type windowProbe struct {
 	blocked uintptr
 }
 
-var hangWindowCallback = windows.NewCallback(func(hwnd, parameter uintptr) uintptr {
-	probe := (*windowProbe)(unsafe.Pointer(parameter))
+var hangWindowCallback = windows.NewCallback(func(hwnd uintptr, probe *windowProbe) uintptr {
 	var owner uint32
 	hangWindowPID.Call(hwnd, uintptr(unsafe.Pointer(&owner)))
 	if owner != uint32(probe.pid) {

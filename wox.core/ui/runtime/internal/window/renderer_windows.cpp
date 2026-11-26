@@ -901,6 +901,10 @@ extern "C" int32_t wox_renderer_get_diagnostics(WoxRenderer *renderer, char *buf
   return S_OK;
 }
 
+extern "C" int32_t wox_renderer_uses_software_rendering(WoxRenderer *renderer) {
+  return renderer != nullptr && renderer->uses_warp;
+}
+
 extern "C" int32_t wox_renderer_resize(WoxRenderer *renderer, uint32_t width, uint32_t height) {
   if (renderer == nullptr || width == 0 || height == 0) {
     return S_OK;

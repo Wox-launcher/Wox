@@ -21,9 +21,12 @@ const (
 	CloudSyncProgressOperationPull     = "pull"
 	CloudSyncProgressOperationRestore  = "restore"
 
-	CloudSyncHistoryStatusSucceeded        = "succeeded"
-	CloudSyncHistoryStatusPartialSucceeded = "partial_succeeded"
-	CloudSyncHistoryStatusFailed           = "failed"
+	CloudSyncHistoryStatusSucceeded             = "succeeded"
+	CloudSyncHistoryStatusPartialSucceeded      = "partial_succeeded"
+	CloudSyncHistoryStatusFailed                = "failed"
+	CloudSyncHistoryStatusSkippedUnsupportedOS  = "skipped_unsupported_os"
+	CloudSyncHistoryStatusSkippedHotkeyConflict = "skipped_hotkey_conflict"
+	CloudSyncHistoryStatusHotkeyUnavailable     = "hotkey_unavailable"
 )
 
 type CloudSyncProgress struct {

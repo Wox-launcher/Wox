@@ -54,26 +54,29 @@ type FrameRendererResourceMetrics struct {
 
 // FrameMetricsSample keeps correlated timings and tree sizes for one recent frame.
 type FrameMetricsSample struct {
-	FrameID                   uint64                       `json:"frameId"`
-	SnapshotMicroseconds      int64                        `json:"snapshotMicroseconds"`
-	BuildLayoutMicroseconds   int64                        `json:"buildLayoutMicroseconds"`
-	DrawRecordMicroseconds    int64                        `json:"drawRecordMicroseconds"`
-	AccessibilityMicroseconds int64                        `json:"accessibilityMicroseconds"`
-	NativeEncodeMicroseconds  int64                        `json:"nativeEncodeMicroseconds"`
-	NativePresentMicroseconds int64                        `json:"nativePresentMicroseconds"`
-	NodeCount                 int                          `json:"nodeCount"`
-	DisplayCommandCount       int                          `json:"displayCommandCount"`
-	AccessibilityNodeCount    int                          `json:"accessibilityNodeCount"`
-	LogicalDamage             Rect                         `json:"logicalDamage"`
-	HostCompleted             bool                         `json:"hostCompleted"`
-	NativeEncodingCompleted   bool                         `json:"nativeEncodingCompleted"`
-	PreparedWindowResize      bool                         `json:"preparedWindowResize"`
-	Presented                 bool                         `json:"presented"`
-	Dropped                   bool                         `json:"dropped"`
-	Coalesced                 bool                         `json:"coalesced"`
-	Backpressured             bool                         `json:"backpressured"`
-	Work                      FrameWorkMetrics             `json:"work"`
-	RendererResources         FrameRendererResourceMetrics `json:"rendererResources"`
+	FrameID                     uint64                       `json:"frameId"`
+	LogicalSize                 Size                         `json:"logicalSize"`
+	SnapshotMicroseconds        int64                        `json:"snapshotMicroseconds"`
+	BuildLayoutMicroseconds     int64                        `json:"buildLayoutMicroseconds"`
+	DrawRecordMicroseconds      int64                        `json:"drawRecordMicroseconds"`
+	AccessibilityMicroseconds   int64                        `json:"accessibilityMicroseconds"`
+	NativeEncodeMicroseconds    int64                        `json:"nativeEncodeMicroseconds"`
+	NativePresentMicroseconds   int64                        `json:"nativePresentMicroseconds"`
+	NodeCount                   int                          `json:"nodeCount"`
+	DisplayCommandCount         int                          `json:"displayCommandCount"`
+	AccessibilityNodeCount      int                          `json:"accessibilityNodeCount"`
+	LogicalDamage               Rect                         `json:"logicalDamage"`
+	HostCompleted               bool                         `json:"hostCompleted"`
+	NativeEncodingCompleted     bool                         `json:"nativeEncodingCompleted"`
+	PreparedWindowResize        bool                         `json:"preparedWindowResize"`
+	PreparedWindowShow          bool                         `json:"preparedWindowShow"`
+	Presented                   bool                         `json:"presented"`
+	PresentedAtUnixMicroseconds int64                        `json:"presentedAtUnixMicroseconds,omitempty"`
+	Dropped                     bool                         `json:"dropped"`
+	Coalesced                   bool                         `json:"coalesced"`
+	Backpressured               bool                         `json:"backpressured"`
+	Work                        FrameWorkMetrics             `json:"work"`
+	RendererResources           FrameRendererResourceMetrics `json:"rendererResources"`
 }
 
 // FrameMetricsSnapshot is the detached metrics view exposed to automation and diagnostics.
@@ -100,13 +103,14 @@ type frameMetricsRecorder struct {
 	order          []uint64
 	samples        map[uint64]*FrameMetricsSample
 	snapshot       FrameMetricsSnapshot
+	onPresented    func(uint64, time.Time)
 }
 
 func newFrameMetricsRecorder() *frameMetricsRecorder {
 	return &frameMetricsRecorder{minimumFrameID: 1, samples: map[uint64]*FrameMetricsSample{}}
 }
 
-func (r *frameMetricsRecorder) beginFrame() uint64 {
+func (r *frameMetricsRecorder) beginFrame(size Size) uint64 {
 	if r == nil {
 		return 0
 	}
@@ -114,7 +118,7 @@ func (r *frameMetricsRecorder) beginFrame() uint64 {
 	defer r.mu.Unlock()
 	r.nextFrameID++
 	frameID := r.nextFrameID
-	r.samples[frameID] = &FrameMetricsSample{FrameID: frameID}
+	r.samples[frameID] = &FrameMetricsSample{FrameID: frameID, LogicalSize: size}
 	r.order = append(r.order, frameID)
 	r.snapshot.FrameCount++
 	if len(r.order) > recentFrameMetricsLimit {
@@ -213,6 +217,18 @@ func (r *frameMetricsRecorder) markPreparedWindowResize(frameID uint64) {
 	}
 }
 
+// markPreparedWindowShow records that DWM synchronized the new frame before remapping the HWND.
+func (r *frameMetricsRecorder) markPreparedWindowShow(frameID uint64) {
+	if r == nil || frameID == 0 {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if sample := r.samples[frameID]; sample != nil {
+		sample.PreparedWindowShow = true
+	}
+}
+
 func (r *frameMetricsRecorder) recordWork(frameID uint64, work FrameWorkMetrics) {
 	if r == nil || frameID == 0 {
 		return
@@ -252,13 +268,17 @@ func (r *frameMetricsRecorder) finishNativeFrame(frameID uint64, encode, present
 	if r == nil || frameID == 0 {
 		return
 	}
+	var presentedAt time.Time
+	if presented {
+		presentedAt = time.Now()
+	}
 	r.recordPhase(frameID, FrameMetricNativeEncode, encode)
 	if present >= 0 {
 		r.recordPhase(frameID, FrameMetricNativePresent, present)
 	}
 	r.mu.Lock()
-	defer r.mu.Unlock()
 	if frameID < r.minimumFrameID {
+		r.mu.Unlock()
 		return
 	}
 	r.snapshot.NativeEncodedFrameCount++
@@ -266,11 +286,18 @@ func (r *frameMetricsRecorder) finishNativeFrame(frameID uint64, encode, present
 		sample.NativeEncodingCompleted = true
 		sample.Presented = presented
 		sample.Dropped = !presented
+		if presented {
+			sample.PresentedAtUnixMicroseconds = presentedAt.UnixMicro()
+		}
 	}
 	if presented {
 		r.snapshot.PresentedFrameCount++
 	} else {
 		r.snapshot.DroppedFrameCount++
+	}
+	r.mu.Unlock()
+	if presented && r.onPresented != nil {
+		r.onPresented(frameID, presentedAt)
 	}
 }
 

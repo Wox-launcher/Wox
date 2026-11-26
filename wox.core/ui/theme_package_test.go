@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"image"
 	"image/png"
 	"os"
 	"path/filepath"
 	"runtime"
+	"syscall"
 	"testing"
 	"time"
 	"wox/common"
@@ -115,6 +117,7 @@ func TestPersistThemePackageWithMonitoring(t *testing.T) {
 	assertAssetsWatched := func() {
 		t.Helper()
 		if runtime.GOOS == "windows" {
+			const sharingViolation = syscall.Errno(32)
 			// A child watch blocks this rename; the package's own watch alone does not.
 			target := filepath.Dir(manifest)
 			probe := filepath.Join(directory, ".watch-probe")
@@ -123,7 +126,7 @@ func TestPersistThemePackageWithMonitoring(t *testing.T) {
 					t.Fatal(restoreErr)
 				}
 				t.Fatal("package assets directory is no longer watched")
-			} else if !os.IsPermission(err) {
+			} else if !os.IsPermission(err) && !errors.Is(err, sharingViolation) {
 				t.Fatal(err)
 			}
 		}

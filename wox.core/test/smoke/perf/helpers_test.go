@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"wox/test/automationdriver"
+	"wox/test/smokeperf"
 	"wox/ui/automation"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
@@ -22,19 +23,23 @@ import (
 func TestPhaseBudgetsRejectSingleOutlier(t *testing.T) {
 	t.Setenv("GITHUB_ACTIONS", "false")
 	samples := make([]woxui.FrameMetricsSample, perfSampleCount-perfWarmupSamples)
-	if err := checkPhaseBudgets(samples); err != nil {
+	budget := frameBudgetFor(smokeperf.ScenarioHover, "darwin")
+	if err := checkPhaseBudgets(smokeperf.ScenarioHover, "darwin", samples); err != nil {
 		t.Fatal(err)
 	}
-	samples[len(samples)-1].AccessibilityMicroseconds = perfAccessibilityBudgetMicroseconds + 1
-	if err := checkPhaseBudgets(samples); err == nil {
+	samples[len(samples)-1].AccessibilityMicroseconds = budget.a11y + 1
+	if err := checkPhaseBudgets(smokeperf.ScenarioHover, "darwin", samples); err == nil {
 		t.Fatal("one slow frame must still exceed the strict budget")
 	}
 	t.Setenv("GITHUB_ACTIONS", "true")
-	if err := checkPhaseBudgets(samples); err != nil {
+	if err := checkPhaseBudgets(smokeperf.ScenarioPluginCatalog, "darwin", samples); err != nil {
+		t.Fatalf("the catalog has its own phase ceiling: %v", err)
+	}
+	if err := checkPhaseBudgets(smokeperf.ScenarioHover, "darwin", samples); err != nil {
 		t.Fatalf("CI budget should tolerate a small local overrun: %v", err)
 	}
-	samples[len(samples)-1].AccessibilityMicroseconds = 5*perfAccessibilityBudgetMicroseconds + 1
-	if err := checkPhaseBudgets(samples); err == nil {
+	samples[len(samples)-1].AccessibilityMicroseconds = 5*budget.a11y + 1
+	if err := checkPhaseBudgets(smokeperf.ScenarioHover, "darwin", samples); err == nil {
 		t.Fatal("CI must still reject a frame beyond its expanded ceiling")
 	}
 }

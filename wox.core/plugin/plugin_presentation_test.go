@@ -19,6 +19,15 @@ type presentationTestUI struct {
 	cleared []string
 }
 
+// newPresentationTestManager keeps wall-clock timers from mutating test UI state.
+// Tests for expiry and selection holds install their own controllable callbacks.
+func newPresentationTestManager() *Manager {
+	manager := newManager()
+	manager.presentation.scheduleToolbarExpiry = func(time.Duration, func()) {}
+	manager.presentation.scheduleToolbarHold = func(time.Duration, func()) {}
+	return manager
+}
+
 func (ui *presentationTestUI) ShowToolbarMsg(_ context.Context, msg common.ToolbarMsgUI) {
 	ui.shown = append(ui.shown, msg)
 }
@@ -29,7 +38,7 @@ func (ui *presentationTestUI) ClearToolbarMsg(_ context.Context, id string) {
 
 // TestToolbarMessageExpiry protects replacement snapshots and persistent messages from old timers.
 func TestToolbarMessageExpiry(t *testing.T) {
-	manager := newManager()
+	manager := newPresentationTestManager()
 	ui := &presentationTestUI{}
 	manager.AttachUI(ui)
 	instance := newInitTestInstance(&fakeLifecyclePlugin{})
@@ -71,7 +80,7 @@ func TestToolbarMessageExpiry(t *testing.T) {
 // TestPresentationCallbacksFollowPluginLifetime exercises the public Manager wiring and owner isolation.
 func TestPresentationCallbacksFollowPluginLifetime(t *testing.T) {
 	logger = util.GetLogger()
-	manager := newManager()
+	manager := newPresentationTestManager()
 	ui := &presentationTestUI{}
 	manager.AttachUI(ui)
 	ctx := util.WithSessionContext(context.Background(), "session")
@@ -108,7 +117,7 @@ func TestPresentationCallbacksFollowPluginLifetime(t *testing.T) {
 
 func TestSessionToolbarMessageActionsWithoutScopedQuery(t *testing.T) {
 	logger = util.GetLogger()
-	manager := newManager()
+	manager := newPresentationTestManager()
 	ui := &presentationTestUI{}
 	manager.AttachUI(ui)
 	instance := newInitTestInstance(&fakeLifecyclePlugin{})
@@ -129,7 +138,7 @@ func TestSessionToolbarMessageActionsWithoutScopedQuery(t *testing.T) {
 // TestGlobalResultToolbarContext retains status across one plugin's rows and isolates sessions.
 func TestGlobalResultToolbarContext(t *testing.T) {
 	logger = util.GetLogger()
-	manager := newManager()
+	manager := newPresentationTestManager()
 	var holds []func()
 	manager.presentation.scheduleToolbarHold = func(_ time.Duration, expire func()) { holds = append(holds, expire) }
 	ui := &presentationTestUI{}
@@ -214,7 +223,7 @@ func TestGlobalResultToolbarContext(t *testing.T) {
 // TestSelectedFileResultAndScopedQueryOwnToolbar covers both result-selected and fixed query owners.
 func TestSelectedFileResultAndScopedQueryOwnToolbar(t *testing.T) {
 	logger = util.GetLogger()
-	manager := newManager()
+	manager := newPresentationTestManager()
 	var holds []func()
 	manager.presentation.scheduleToolbarHold = func(_ time.Duration, expire func()) { holds = append(holds, expire) }
 	ui := &presentationTestUI{}
@@ -256,7 +265,7 @@ func TestSelectedFileResultAndScopedQueryOwnToolbar(t *testing.T) {
 // TestToolbarSelectionHold covers refresh, replacement, timeout, and session isolation.
 func TestToolbarSelectionHold(t *testing.T) {
 	logger = util.GetLogger()
-	manager := newManager()
+	manager := newPresentationTestManager()
 	ui := &presentationTestUI{}
 	manager.AttachUI(ui)
 	var holds []func()
@@ -315,7 +324,7 @@ func TestToolbarSelectionHold(t *testing.T) {
 // TestToolbarSelectionHoldDoesNotReplayClearedOrClosedSessions protects deferred messages.
 func TestToolbarSelectionHoldDoesNotReplayClearedOrClosedSessions(t *testing.T) {
 	logger = util.GetLogger()
-	manager := newManager()
+	manager := newPresentationTestManager()
 	ui := &presentationTestUI{}
 	manager.AttachUI(ui)
 	var expire func()
@@ -350,7 +359,7 @@ func TestToolbarSelectionHoldDoesNotReplayClearedOrClosedSessions(t *testing.T) 
 // TestToolbarSelectionHoldDiscardsUnloadedPlugin checks the deferred callback lifetime.
 func TestToolbarSelectionHoldDiscardsUnloadedPlugin(t *testing.T) {
 	logger = util.GetLogger()
-	manager := newManager()
+	manager := newPresentationTestManager()
 	ui := &presentationTestUI{}
 	manager.AttachUI(ui)
 	var expire func()
@@ -375,7 +384,7 @@ func TestToolbarSelectionHoldDiscardsUnloadedPlugin(t *testing.T) {
 // TestUnscopedToolbarMessageUsesOnlyUnambiguousActivePluginSession covers background status calls.
 func TestUnscopedToolbarMessageUsesOnlyUnambiguousActivePluginSession(t *testing.T) {
 	logger = util.GetLogger()
-	manager := newManager()
+	manager := newPresentationTestManager()
 	ui := &presentationTestUI{}
 	manager.AttachUI(ui)
 	instance := newInitTestInstance(&fakeLifecyclePlugin{})
@@ -392,7 +401,7 @@ func TestUnscopedToolbarMessageUsesOnlyUnambiguousActivePluginSession(t *testing
 // TestGlobalToolbarRequiresResultAction checks real action execution and session-scoped eligibility.
 func TestGlobalToolbarRequiresResultAction(t *testing.T) {
 	logger = util.GetLogger()
-	manager := newManager()
+	manager := newPresentationTestManager()
 	ui := &presentationTestUI{}
 	manager.AttachUI(ui)
 	instance := newInitTestInstance(&fakeLifecyclePlugin{})
@@ -407,7 +416,7 @@ func TestGlobalToolbarRequiresResultAction(t *testing.T) {
 	manager.ShowToolbarMsg(context.Background(), instance, ToolbarMsg{Id: "status", Title: "unscoped", IsPersist: true})
 	require.Empty(t, ui.shown, "selection and background callbacks alone stay quiet")
 
-	manager.resultStore.startQuery(query)
+	manager.resultStore.startQuery(context.Background(), query)
 	set, ok := manager.resultStore.getQuery(query.SessionId, query.Id)
 	require.True(t, ok)
 	result := QueryResult{Id: "result", Actions: []QueryResultAction{{Id: systemActionPinInQueryID, Action: func(actionCtx context.Context, _ ActionContext) {
@@ -428,7 +437,7 @@ func TestGlobalToolbarRequiresResultAction(t *testing.T) {
 	require.Len(t, ui.shown, 1, "an action in another window grants no permission")
 
 	formQuery := Query{Id: "query", SessionId: "two", Type: QueryTypeInput}
-	manager.resultStore.startQuery(formQuery)
+	manager.resultStore.startQuery(context.Background(), formQuery)
 	formSet, ok := manager.resultStore.getQuery("two", "query")
 	require.True(t, ok)
 	form := QueryResult{Id: "result", Actions: []QueryResultAction{{Id: systemActionPinInQueryID, Type: QueryResultActionTypeForm, OnSubmit: func(actionCtx context.Context, _ FormActionContext) {
@@ -443,7 +452,7 @@ func TestGlobalToolbarRequiresResultAction(t *testing.T) {
 // TestGlobalToolbarActionPermissionSurvivesRefreshOnlyForTheSamePlugin protects long-running actions.
 func TestGlobalToolbarActionPermissionSurvivesRefreshOnlyForTheSamePlugin(t *testing.T) {
 	logger = util.GetLogger()
-	manager := newManager()
+	manager := newPresentationTestManager()
 	ui := &presentationTestUI{}
 	manager.AttachUI(ui)
 	var expire func()
@@ -475,7 +484,7 @@ func TestGlobalToolbarActionPermissionSurvivesRefreshOnlyForTheSamePlugin(t *tes
 // TestGlobalToolbarQueuesActionDuringAnotherOwnersHold covers refresh while the previous toolbar is still visible.
 func TestGlobalToolbarQueuesActionDuringAnotherOwnersHold(t *testing.T) {
 	logger = util.GetLogger()
-	manager := newManager()
+	manager := newPresentationTestManager()
 	ui := &presentationTestUI{}
 	manager.AttachUI(ui)
 	var expire func()

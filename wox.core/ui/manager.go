@@ -65,6 +65,7 @@ var logger *util.Log
 const mainHotkeyRegistrationToolbarMessageID = "wox-main-hotkey-registration-failed"
 
 type Manager struct {
+	activeQueries *util.HashMap[string, context.CancelCauseFunc]
 	hotkeyService *corehotkey.Service
 	ui            common.UI
 	viewMu        sync.RWMutex
@@ -91,6 +92,8 @@ type Manager struct {
 	hyprlandToggleLast time.Time
 	omarchyReloadMu    sync.Mutex
 	omarchyReloadTimer *time.Timer
+	hiddenTrimMu       sync.Mutex
+	cancelHiddenTrim   context.CancelFunc
 
 	activeWindowSnapshot        common.ActiveWindowSnapshot // cached active window snapshot
 	activeWindowSnapshotMu      sync.RWMutex
@@ -108,7 +111,7 @@ type Manager struct {
 
 func GetUIManager() *Manager {
 	managerOnce.Do(func() {
-		managerInstance = &Manager{}
+		managerInstance = &Manager{activeQueries: util.NewHashMap[string, context.CancelCauseFunc]()}
 		managerInstance.hotkeyService = corehotkey.NewService(corehotkey.Callbacks{
 			OnMain: func(combineKey string) {
 				managerInstance.handleMainHotkeyTrigger(combineKey)
@@ -233,6 +236,7 @@ func (m *Manager) UnregisterView(sessionID string) {
 	if sessionID == "" {
 		return
 	}
+	m.cancelSessionQuery(sessionID)
 	m.viewMu.Lock()
 	if m.primaryView == nil || m.primaryView.SessionID() != sessionID {
 		delete(m.views, sessionID)
@@ -282,12 +286,18 @@ func (m *Manager) CollectWoxSettingHotkeys(ctx context.Context, woxSetting *sett
 // hotkeys. This is the registration-phase entry point called after all sources
 // have populated the collector.
 func (m *Manager) RegisterAllHotkeys(ctx context.Context) error {
-	err := m.hotkeyService.RegisterAll(ctx)
+	settings := setting.GetSettingManager().GetWoxSetting(ctx)
+	var err error
+	if settings.CloudSyncCrossPlatformHotkeys.Get() {
+		err = m.hotkeyService.ApplySyncedConfig(ctx, corehotkey.WoxConfigFromSetting(settings), nil)
+	} else {
+		err = m.hotkeyService.RegisterAll(ctx)
+	}
 	if bindingErr := m.hotkeyService.ResultBindingRegistrationError(); bindingErr != nil {
 		util.GetLogger().Warn(ctx, bindingErr.Error())
 		m.notifyResultHotkeyRegistrationFailure(ctx)
 	}
-	mainHotkey := setting.GetSettingManager().GetWoxSetting(ctx).MainHotkey.Get()
+	mainHotkey := settings.MainHotkey.Get()
 	m.syncMainHotkeyToolbarWarning(ctx, mainHotkey, err)
 	return err
 }
@@ -1199,6 +1209,12 @@ func (m *Manager) PostOnShow(ctx context.Context) {
 			impl.isRecordingHotkey = false
 		}
 	}
+	m.hiddenTrimMu.Lock()
+	if m.cancelHiddenTrim != nil {
+		m.cancelHiddenTrim()
+		m.cancelHiddenTrim = nil
+	}
+	m.hiddenTrimMu.Unlock()
 
 	analytics.TrackUIOpened(ctx)
 	m.showMainHotkeyToolbarWarning(ctx)
@@ -1250,6 +1266,7 @@ func (m *Manager) PostOnQueryBoxFocus(ctx context.Context) {
 
 func (m *Manager) PostOnHide(ctx context.Context) {
 	sessionID := util.GetContextSessionId(ctx)
+	m.cancelSessionQuery(sessionID)
 	// Update cached visibility state
 	if impl, ok := m.ui.(*uiImpl); ok {
 		impl.sessionMu.Lock()
@@ -1271,10 +1288,28 @@ func (m *Manager) PostOnHide(ctx context.Context) {
 
 // releaseHiddenCoreMemory lets Go return idle heap pages after hide cleanup settles.
 func (m *Manager) releaseHiddenCoreMemory(ctx context.Context) {
+	// The hide notification returns before the idle cleanup deadlines.
+	ctx, cancel := context.WithCancel(context.WithoutCancel(ctx))
+	m.hiddenTrimMu.Lock()
+	if m.cancelHiddenTrim != nil {
+		m.cancelHiddenTrim()
+	}
+	m.cancelHiddenTrim = cancel
+	m.hiddenTrimMu.Unlock()
 	util.Go(ctx, "release hidden core memory", func() {
-		time.Sleep(10 * time.Second)
-
-		if impl, ok := m.ui.(*uiImpl); ok && impl.hasAnyVisibleSession() {
+		defer cancel()
+		waitWhileHidden := func(delay time.Duration) bool {
+			timer := time.NewTimer(delay)
+			defer timer.Stop()
+			select {
+			case <-ctx.Done():
+				return false
+			case <-timer.C:
+				impl, ok := m.ui.(*uiImpl)
+				return ctx.Err() == nil && (!ok || !impl.hasAnyVisibleSession())
+			}
+		}
+		if !waitWhileHidden(10 * time.Second) {
 			return
 		}
 
@@ -1288,8 +1323,7 @@ func (m *Manager) releaseHiddenCoreMemory(ctx context.Context) {
 		// The character table is several megabytes of map buckets and is only
 		// needed while matching Chinese text. Drop it once the launcher has
 		// stayed hidden as long as the renderer trim, then return those pages.
-		time.Sleep(20 * time.Second)
-		if impl, ok := m.ui.(*uiImpl); ok && impl.hasAnyVisibleSession() {
+		if !waitWhileHidden(20 * time.Second) {
 			return
 		}
 		// Drop prepared search text before the pinyin table. Those indexes hold the
@@ -1304,8 +1338,7 @@ func (m *Manager) releaseHiddenCoreMemory(ctx context.Context) {
 		// Native windows release their renderers on an independent 30-second
 		// timer. Let that cleanup finish before asking Windows to decommit LFH
 		// caches; Go's scavenger cannot return these native heap pages.
-		time.Sleep(5 * time.Second)
-		if impl, ok := m.ui.(*uiImpl); ok && impl.hasAnyVisibleSession() {
+		if !waitWhileHidden(5 * time.Second) {
 			return
 		}
 		// Background indexing and screenshot persistence can refill SQLite after
@@ -2089,7 +2122,7 @@ func (m *Manager) RefreshActiveWindowSnapshotBlocking(ctx context.Context) {
 func (m *Manager) refreshActiveWindowSnapshot(ctx context.Context, waitForDetails bool) {
 	activeWindowPid, activeWindowId, activeWindowName := window.GetActiveWindowIdentity(ctx)
 
-	if activeWindowPid <= 0 {
+	if activeWindowPid <= 0 && activeWindowId == "" {
 		m.activeWindowSnapshotMu.Lock()
 		m.activeWindowSnapshotSeq++
 		m.activeWindowSnapshot = common.ActiveWindowSnapshot{}
@@ -2117,6 +2150,9 @@ func (m *Manager) refreshActiveWindowSnapshot(ctx context.Context, waitForDetail
 	}
 	m.activeWindowSnapshotMu.Unlock()
 
+	if activeWindowPid <= 0 {
+		return
+	}
 	if waitForDetails {
 		m.refreshActiveWindowSnapshotDetails(activeWindowPid, snapshotSeq)
 		return

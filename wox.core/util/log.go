@@ -94,6 +94,9 @@ func (l *Log) GetWriter() io.Writer {
 	return l.writer
 }
 
+// CloseFile releases the current log file. A later log entry can reopen it.
+func (l *Log) CloseFile() error { return l.fileWriter.Close() }
+
 func (l *Log) CurrentLogPath() string {
 	if l.fileWriter == nil {
 		return path.Join(l.logFolder, logFileBaseName)

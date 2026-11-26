@@ -49,7 +49,7 @@ func TestSilentQueryReleasesTemporarySessions(t *testing.T) {
 	instance := &Instance{Plugin: plugin, Metadata: Metadata{Id: "silent", Name: "Silent", TriggerKeywords: []string{"silent"}}}
 	instance.API = NewAPI(instance)
 	require.True(t, manager.lifecycle.appendPluginInstance(instance))
-	manager.resultStore.startQuery(Query{SessionId: "visible", Id: "keep"})
+	manager.resultStore.startQuery(context.Background(), Query{SessionId: "visible", Id: "keep"})
 	for i := 0; i < 3; i++ {
 		ctx := util.WithCoreSessionContext(util.NewTraceContext())
 		query := Query{Id: fmt.Sprint(i), SessionId: util.GetContextSessionId(ctx), Type: QueryTypeInput, TriggerKeyword: "silent", RawQuery: "silent"}

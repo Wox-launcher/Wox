@@ -118,9 +118,9 @@ func TestQueryDebounceReplacement(t *testing.T) {
 		return scheduler.start(context.Background(), Query{Id: id, SessionId: session},
 			[]queryPluginJob{{pluginInstance: instance, debounced: delay > 0, intervalMs: delay, blocksFallback: delay == 0}}, 0,
 			queryExecutionCallbacks{
-				queryPlugin: func(_ context.Context, _ *Instance, query Query) QueryResponse {
+				queryPlugin: func(_ context.Context, _ *Instance, query Query) (QueryResponse, bool) {
 					calls <- query.Id
-					return QueryResponse{}
+					return QueryResponse{}, false
 				},
 				onPluginResponse: func(context.Context, Query, QueryResponse) {},
 			})

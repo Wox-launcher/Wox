@@ -272,7 +272,7 @@ func TestMRUResultsResetGridLayout(t *testing.T) {
 	app.resultList.layout = queryLayout{GridLayout: &gridLayout{Columns: 4}}
 	defer app.cancel()
 
-	app.loadTypedMRU(app.querySession.query.QueryID)
+	app.loadTypedMRU(context.Background(), app.querySession.query.QueryID)
 
 	if app.resultList.layout.GridLayout != nil {
 		t.Fatal("MRU results retained the previous query's grid layout")

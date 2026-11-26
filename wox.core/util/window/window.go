@@ -1,9 +1,39 @@
 package window
 
 import (
+	"context"
 	"errors"
 	"sort"
+	"time"
 )
+
+// FocusWindow returns only after the captured target is foreground. The caller
+// supplies the deadline and must wait for any covering launcher to hide first.
+func FocusWindow(ctx context.Context, id string, pid int) error {
+	if id == "" && pid <= 0 {
+		return ErrWindowManagementWindowNotFound
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return focusCapturedWindow(ctx, id, pid)
+}
+
+// waitForForeground allows an asynchronous activation to settle without a fixed delay.
+func waitForForeground(ctx context.Context, matches func() bool) error {
+	ticker := time.NewTicker(15 * time.Millisecond)
+	defer ticker.Stop()
+	for ctx.Err() == nil {
+		if matches() {
+			return ctx.Err()
+		}
+		select {
+		case <-ctx.Done():
+		case <-ticker.C:
+		}
+	}
+	return ctx.Err()
+}
 
 var (
 	ErrWindowManagementUnsupported       = errors.New("window management is not supported on this platform")

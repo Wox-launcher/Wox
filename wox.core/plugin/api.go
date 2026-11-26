@@ -1239,6 +1239,23 @@ func (a *APIImpl) PushResults(ctx context.Context, query Query, results []QueryR
 	if util.GetContextSessionId(ctx) == "" {
 		ctx = util.WithQueryIdContext(util.WithSessionContext(ctx, query.SessionId), query.Id)
 	}
+	manager := GetPluginManager()
+	if ctx.Err() != nil {
+		return false
+	}
+	if latest, ok := manager.presentation.latestSessionQueries.Load(query.SessionId); ok && latest != query.Id {
+		return false
+	}
+	if set, ok := manager.resultStore.getQuery(query.SessionId, query.Id); ok {
+		select {
+		case <-set.queryDone:
+			return false
+		default:
+		}
+		if set.timedOutPlugins.Exist(a.pluginInstance.Metadata.Id) {
+			return false
+		}
+	}
 
 	// Bug fix: core no longer owns "current query" state because backend query
 	// pipelines are concurrent. Push by query id and let UI accept or reject
@@ -1253,7 +1270,11 @@ func (a *APIImpl) PushResults(ctx context.Context, query Query, results []QueryR
 		QueryId: query.Id,
 		Results: polishedResults,
 	}
-	return GetPluginManager().GetUI().PushResults(ctx, payload)
+	accepted := manager.GetUI().PushResults(ctx, payload)
+	if accepted && len(results) > 0 {
+		manager.queryScheduler.notePluginQueryProgress(query, a.pluginInstance.Metadata.Id)
+	}
+	return accepted
 }
 
 func (a *APIImpl) GetUpdatableResult(ctx context.Context, resultId string) *UpdatableResult {

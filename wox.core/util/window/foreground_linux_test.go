@@ -310,6 +310,14 @@ func TestX11ForegroundReadsActiveWindow(t *testing.T) {
 	if got := GetActiveWindowName(); got != "Google Chrome" {
 		t.Fatalf("name = %q", got)
 	}
+	t.Setenv("WOX_TEST_FOREGROUND", "_NET_ACTIVE_WINDOW(WINDOW): window id # 0x56\n")
+	if pid, id, name := GetActiveWindowIdentity(context.Background()); pid != 7 || id != "0x56" || name != "Google Chrome" {
+		t.Fatalf("launcher captured cached or incorrect foreground: %d %q %q", pid, id, name)
+	}
+	t.Setenv("WOX_TEST_PROPS", "WM_CLASS: not found.\n_NET_WM_PID: not found.\n")
+	if pid, id, _ := GetActiveWindowIdentity(context.Background()); pid > 0 || id != "0x56" {
+		t.Fatalf("launcher lost the exact XID of a window without PID metadata: %d %q", pid, id)
+	}
 }
 
 func TestWaylandWithoutForegroundQueryLeavesIdentityEmpty(t *testing.T) {

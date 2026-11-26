@@ -3,6 +3,8 @@ package migration
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -51,10 +53,15 @@ func Run(ctx context.Context) error {
 	if db == nil {
 		return fmt.Errorf("migration: database not initialized")
 	}
-	return RunWithDB(ctx, db)
+	return runWithBackup(ctx, db, util.GetLocation().GetBackupDirectory())
 }
 
 func RunWithDB(ctx context.Context, db *gorm.DB) error {
+	return runWithBackup(ctx, db, "")
+}
+
+// runWithBackup snapshots the live database once before the first pending migration.
+func runWithBackup(ctx context.Context, db *gorm.DB, backupRoot string) error {
 	logger := util.GetLogger()
 
 	migrations := make([]Migration, 0, len(registeredMigrations))
@@ -74,6 +81,12 @@ func RunWithDB(ctx context.Context, db *gorm.DB) error {
 		id := m.ID()
 		if _, ok := appliedSet[id]; ok {
 			continue
+		}
+		if backupRoot != "" {
+			if err := backupBeforeMigrations(ctx, db, backupRoot); err != nil {
+				return fmt.Errorf("migration: create pre-migration snapshot: %w", err)
+			}
+			backupRoot = ""
 		}
 
 		if conditional, ok := m.(ConditionalMigration); ok {
@@ -119,4 +132,44 @@ func RunWithDB(ctx context.Context, db *gorm.DB) error {
 	}
 
 	return nil
+}
+
+// backupBeforeMigrations retains the three latest verified snapshots outside daily backup rotation.
+func backupBeforeMigrations(ctx context.Context, db *gorm.DB, root string) error {
+	return database.WithFileMaintenance(func() error {
+		source, err := db.DB()
+		if err != nil {
+			return err
+		}
+		if err := os.MkdirAll(root, 0700); err != nil {
+			return err
+		}
+		dir, err := os.MkdirTemp(root, "pre_migration_"+time.Now().UTC().Format("20060102T150405.000000000")+"-")
+		if err != nil {
+			return err
+		}
+		if err := database.SnapshotDatabase(ctx, source, filepath.Join(dir, database.FileName)); err != nil {
+			_ = os.RemoveAll(dir)
+			return err
+		}
+		entries, err := os.ReadDir(root)
+		if err != nil {
+			return err
+		}
+		var snapshots []string
+		for _, entry := range entries {
+			if entry.IsDir() && strings.HasPrefix(entry.Name(), "pre_migration_") {
+				path := filepath.Join(root, entry.Name(), database.FileName)
+				if database.CheckDatabaseFile(ctx, path) == nil {
+					snapshots = append(snapshots, entry.Name())
+				}
+			}
+		}
+		for _, name := range snapshots[:max(0, len(snapshots)-3)] {
+			if err := os.RemoveAll(filepath.Join(root, name)); err != nil {
+				util.GetLogger().Warn(ctx, fmt.Sprintf("remove old pre-migration snapshot: %v", err))
+			}
+		}
+		return nil
+	})
 }

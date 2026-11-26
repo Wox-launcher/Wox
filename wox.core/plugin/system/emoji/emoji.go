@@ -356,6 +356,7 @@ func (e *EmojiPlugin) maybeStartAIMatch(ctx context.Context, query plugin.Query,
 	aiGeneratingResult := e.createAIPlaceholderResult()
 	*results = append(*results, aiGeneratingResult)
 
+	ctx = plugin.QuerySessionContext(ctx)
 	util.Go(ctx, "emoji ai match", func() {
 		systemPrompt := "You are an emoji matcher. Return JSON only."
 		userPrompt := fmt.Sprintf("Query: %s\nReturn JSON: {\"emojis\": [\"😀\", \"😄\"]}. Return up to 12 emojis.", search)

@@ -2,6 +2,7 @@ package system
 
 import (
 	"context"
+	"strings"
 	"wox/common"
 	"wox/common/icons"
 	"wox/plugin"
@@ -9,6 +10,15 @@ import (
 )
 
 var doctorIcon = icons.Get(icons.PluginDoctor)
+
+type doctorCommand string
+
+const (
+	doctorTriggerKeyword               = "doctor"
+	doctorCommandPerf    doctorCommand = "perf"
+	doctorCommandMemory  doctorCommand = "memory"
+	doctorCommandExport  doctorCommand = "export"
+)
 
 func init() {
 	plugin.AllSystemPlugin = append(plugin.AllSystemPlugin, &DoctorPlugin{})
@@ -29,8 +39,22 @@ func (r *DoctorPlugin) GetMetadata() plugin.Metadata {
 		Runtime:         "Go",
 		Description:     "i18n:plugin_doctor_plugin_description",
 		Icon:            doctorIcon.String(),
-		TriggerKeywords: []string{"doctor"},
-		SupportedOS:     []string{"Windows", "Macos", "Linux"},
+		TriggerKeywords: []string{doctorTriggerKeyword},
+		Commands: []plugin.MetadataCommand{
+			{Command: string(doctorCommandPerf), Description: "i18n:plugin_doctor_perf"},
+			{Command: string(doctorCommandMemory), Description: "i18n:plugin_doctor_memory"},
+			{Command: string(doctorCommandExport), Description: "i18n:plugin_doctor_export"},
+		},
+		Glances: []plugin.MetadataGlance{
+			{
+				Id:                memoryGlanceID,
+				Name:              "i18n:plugin_doctor_memory_glance_name",
+				Description:       "i18n:plugin_doctor_memory_glance_description",
+				Icon:              icons.Get(icons.ActionCPUProfile).String(),
+				RefreshIntervalMs: memoryGlanceRefreshIntervalMs,
+			},
+		},
+		SupportedOS: []string{"Windows", "Macos", "Linux"},
 		Features: []plugin.MetadataFeature{
 			{
 				Name: plugin.MetadataFeatureIgnoreAutoScore,
@@ -44,6 +68,15 @@ func (r *DoctorPlugin) Init(ctx context.Context, initParams plugin.InitParams) {
 }
 
 func (r *DoctorPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResponse {
+	switch doctorQueryCommand(query) {
+	case doctorCommandPerf:
+		return r.queryPerformance(ctx)
+	case doctorCommandMemory:
+		return r.queryMemory(ctx, query)
+	case doctorCommandExport:
+		result := r.diagnosticExportResult(ctx, collectDoctorDiagnosticReport(ctx))
+		return plugin.NewQueryResponse([]plugin.QueryResult{result})
+	}
 	var results []plugin.QueryResult
 	checkResults := plugin.RunDoctorChecks(ctx)
 
@@ -64,7 +97,9 @@ func (r *DoctorPlugin) Query(ctx context.Context, query plugin.Query) plugin.Que
 				Icon:                   icons.Get(icons.ActionRun),
 				PreventHideAfterAction: check.PreventHideAfterAction,
 				Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-					check.Action(ctx, actionContext)
+					if check.Action != nil {
+						check.Action(ctx, actionContext)
+					}
 				},
 			},
 		}
@@ -104,6 +139,14 @@ func (r *DoctorPlugin) Query(ctx context.Context, query plugin.Query) plugin.Que
 	}
 
 	return plugin.NewQueryResponse(results)
+}
+
+// doctorQueryCommand also recognizes completed command text before a trailing space is entered.
+func doctorQueryCommand(query plugin.Query) doctorCommand {
+	if query.Command != "" {
+		return doctorCommand(query.Command)
+	}
+	return doctorCommand(strings.TrimSpace(query.Search))
 }
 
 // toggleDoctorCheckIgnored adds or removes a doctor check type from the

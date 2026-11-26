@@ -155,6 +155,8 @@ func TestLongClipboardTextKeepsFullContent(t *testing.T) {
 
 func (a *imagePasteFailureAPI) GetSetting(context.Context, string) string { return "" }
 
+func (a *imagePasteFailureAPI) HideApp(context.Context) {}
+
 func (a *imagePasteFailureAPI) GetTranslation(_ context.Context, key string) string {
 	return "translated:" + key
 }

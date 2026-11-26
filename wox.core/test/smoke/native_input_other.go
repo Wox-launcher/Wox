@@ -1,4 +1,4 @@
-//go:build wox_ui_smoke && !windows && !darwin
+//go:build wox_ui_smoke && !windows && !darwin && !linux
 
 package smoke
 

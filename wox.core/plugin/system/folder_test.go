@@ -64,14 +64,19 @@ func TestFolderActionsExposeStableIDs(t *testing.T) {
 }
 
 func TestFolderCopyNamePrefersTitleAndVolumeRoot(t *testing.T) {
-	if got := folderCopyName("Droppy", `C:\Users\qianl\Droppy`); got != "Droppy" {
+	dir := t.TempDir()
+	if got := folderCopyName("Droppy", filepath.Join(dir, "Droppy")); got != "Droppy" {
 		t.Fatalf("folder name = %q, want Droppy", got)
 	}
-	if got := folderCopyName("", `C:\Users\qianl\notes.txt`); got != "notes.txt" {
+	if got := folderCopyName("", filepath.Join(dir, "notes.txt")); got != "notes.txt" {
 		t.Fatalf("file name = %q, want notes.txt", got)
 	}
-	if got := folderCopyName("Projects", `D:\dev\Wox`); got != "Projects" {
+	if got := folderCopyName("Projects", filepath.Join(dir, "Wox")); got != "Projects" {
 		t.Fatalf("favorite name = %q, want Projects", got)
+	}
+	root := filepath.VolumeName(dir) + string(os.PathSeparator)
+	if got := folderCopyName("", root); got != root {
+		t.Fatalf("volume root = %q, want %q", got, root)
 	}
 }
 

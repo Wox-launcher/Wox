@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"wox/util"
@@ -85,10 +86,13 @@ func TestReadFileWithRetryReturnsStableContent(t *testing.T) {
 }
 
 func TestDebounceKeyedTimerRunsOnce(t *testing.T) {
-	timers := util.NewHashMap[string, *time.Timer]()
-	runs := 0
-	debounceKeyedTimer(timers, "key", 30*time.Millisecond, func() { runs++ })
-	debounceKeyedTimer(timers, "key", 30*time.Millisecond, func() { runs++ })
-	time.Sleep(80 * time.Millisecond)
-	assert.Equal(t, 1, runs)
+	synctest.Test(t, func(t *testing.T) {
+		timers := util.NewHashMap[string, *time.Timer]()
+		runs := 0
+		debounceKeyedTimer(timers, "key", 30*time.Millisecond, func() { runs++ })
+		debounceKeyedTimer(timers, "key", 30*time.Millisecond, func() { runs++ })
+		time.Sleep(80 * time.Millisecond)
+		synctest.Wait()
+		assert.Equal(t, 1, runs)
+	})
 }

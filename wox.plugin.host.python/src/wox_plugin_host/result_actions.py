@@ -38,14 +38,14 @@ class QueryActions:
         """Replace one result's callbacks; late responses cannot revive a released bucket."""
         if isinstance(result, dict):
             return
-        if not result.id:
-            result.id = str(uuid4())
         preview = getattr(result, "preview", None)
         if not self.active:
             binding = getattr(preview, "_wox_preview_binding", None)
             if binding is not None:
                 binding.release()
             return
+        if not result.id:
+            result.id = str(uuid4())
         if preview is not None:
             previous = self.previews.get(result.id)
             document = getattr(preview, "wox_view_id", "")
@@ -143,6 +143,8 @@ class ResultActions:
         bucket = self.find(session, query, result_id)
         if bucket is not None:
             bucket.stage_plugin_preview(result_id, preview)
+        elif binding is not None:
+            binding.release()
 
     def plugin_preview(self, ctx: Context, result_id: str, document: str, activate: bool, api: Any) -> tuple[str, Any, Any] | None:
         session, query = ctx.values.get("SessionId", ""), ctx.values.get("QueryId", "")

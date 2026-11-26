@@ -502,6 +502,12 @@ func (p *CloudSyncPlugin) historyDetailStatusLabel(ctx context.Context, status s
 		return p.tr(ctx, "plugin_cloudsync_history_tail_succeeded")
 	case cloudsync.CloudSyncHistoryStatusFailed:
 		return p.tr(ctx, "plugin_cloudsync_history_tail_failed")
+	case cloudsync.CloudSyncHistoryStatusSkippedUnsupportedOS:
+		return p.tr(ctx, "plugin_cloudsync_history_tail_skipped_unsupported_os")
+	case cloudsync.CloudSyncHistoryStatusSkippedHotkeyConflict:
+		return p.tr(ctx, "plugin_cloudsync_history_tail_skipped_hotkey_conflict")
+	case cloudsync.CloudSyncHistoryStatusHotkeyUnavailable:
+		return p.tr(ctx, "plugin_cloudsync_history_tail_hotkey_unavailable")
 	default:
 		return status
 	}
@@ -509,10 +515,16 @@ func (p *CloudSyncPlugin) historyDetailStatusLabel(ctx context.Context, status s
 
 // historyDetailTails mirrors the per-record outcome instead of the aggregate history status.
 func (p *CloudSyncPlugin) historyDetailTails(ctx context.Context, detail cloudsync.CloudSyncHistoryRecordDetail) []plugin.QueryResultTail {
-	if detail.Status == cloudsync.CloudSyncHistoryStatusFailed {
-		return []plugin.QueryResultTail{plugin.NewQueryResultTailTextWithCategory(p.tr(ctx, "plugin_cloudsync_history_tail_failed"), plugin.QueryResultTailTextCategoryDanger)}
+	category := plugin.QueryResultTailTextCategoryDefault
+	switch detail.Status {
+	case cloudsync.CloudSyncHistoryStatusFailed:
+		category = plugin.QueryResultTailTextCategoryDanger
+	case cloudsync.CloudSyncHistoryStatusSucceeded:
+		category = plugin.QueryResultTailTextCategorySuccess
+	case cloudsync.CloudSyncHistoryStatusHotkeyUnavailable:
+		category = plugin.QueryResultTailTextCategoryWarning
 	}
-	return []plugin.QueryResultTail{plugin.NewQueryResultTailTextWithCategory(p.tr(ctx, "plugin_cloudsync_history_tail_succeeded"), plugin.QueryResultTailTextCategorySuccess)}
+	return []plugin.QueryResultTail{plugin.NewQueryResultTailTextWithCategory(p.historyDetailStatusLabel(ctx, detail.Status), category)}
 }
 
 // historyPluginLabel resolves IDs from both installed plugins and store manifests so failed install rows stay readable.

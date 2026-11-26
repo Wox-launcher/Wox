@@ -124,9 +124,11 @@ type WindowOptions struct {
 	PassThroughTransparent bool
 	// Topmost raises a utility window above the launcher so preview overlays
 	// cannot open behind Wox when both share the floating window band.
-	Topmost                    bool
-	HideOnBlur                 bool
-	OnFrame                    func(displayList *DisplayList, frame FrameInfo)
+	Topmost    bool
+	HideOnBlur bool
+	OnFrame    func(displayList *DisplayList, frame FrameInfo)
+	// OnFramePresented observes successful native presentation on the rendering thread.
+	OnFramePresented           func(frameID uint64, presentedAt time.Time)
 	OnFocus                    func(event FocusEvent)
 	OnKey                      func(event KeyEvent) bool
 	OnTextInput                func(event TextInputEvent)
@@ -186,6 +188,7 @@ func Open(options WindowOptions) (*Window, error) {
 	}
 
 	window := &Window{userOnClosed: options.OnClosed, metrics: newFrameMetricsRecorder()}
+	window.metrics.onPresented = options.OnFramePresented
 	window.lifecycle.Store(uint32(windowLifecycleOpen))
 	options.frameMetrics = window.metrics
 	// Bind closed state to the real native teardown callback, including external destroys.
@@ -210,6 +213,26 @@ func (w *Window) FrameMetrics() FrameMetricsSnapshot {
 		return FrameMetricsSnapshot{}
 	}
 	return w.metrics.current()
+}
+
+// FrameSequence identifies the latest begun frame and does not reset with diagnostics.
+func (w *Window) FrameSequence() uint64 {
+	if w == nil || w.metrics == nil {
+		return 0
+	}
+	w.metrics.mu.Lock()
+	defer w.metrics.mu.Unlock()
+	return w.metrics.nextFrameID
+}
+
+// SoftwareRendering reports the window's raster backend. Call on the UI thread.
+func (w *Window) SoftwareRendering() bool {
+	if w != nil && w.native != nil {
+		if backend, ok := any(w.native).(interface{ softwareRendering() bool }); ok {
+			return backend.softwareRendering()
+		}
+	}
+	return SoftwareRenderingEnabled()
 }
 
 // ResetFrameMetrics starts a fresh measurement interval without disturbing in-flight rendering.

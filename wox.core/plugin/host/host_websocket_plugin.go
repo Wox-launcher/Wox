@@ -130,9 +130,13 @@ func (w *WebsocketPlugin) RetireToolbarSnapshot(ctx context.Context, snapshotId 
 
 func (w *WebsocketPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryResponse {
 	response, queryErr := w.QueryWithError(ctx, query)
+	if ctx.Err() != nil {
+		return plugin.QueryResponse{}
+	}
 	if queryErr != nil {
 		return plugin.QueryResponse{
-			Results: []plugin.QueryResult{plugin.GetPluginManager().GetResultForFailedQuery(ctx, w.metadata, query, queryErr)},
+			QueryFailed: true,
+			Results:     []plugin.QueryResult{plugin.GetPluginManager().GetResultForFailedQuery(ctx, w.metadata, query, queryErr)},
 		}
 	}
 	return response
@@ -140,6 +144,7 @@ func (w *WebsocketPlugin) Query(ctx context.Context, query plugin.Query) plugin.
 
 // QueryWithError runs the host query RPC and returns the transport or decode error.
 func (w *WebsocketPlugin) QueryWithError(ctx context.Context, query plugin.Query) (plugin.QueryResponse, error) {
+	ctx = util.WithQueryIdContext(util.WithSessionContext(ctx, query.SessionId), query.Id)
 	selectionJson, marshalErr := json.Marshal(query.Selection)
 	if marshalErr != nil {
 		return plugin.QueryResponse{}, fmt.Errorf("failed to marshal plugin query selection: %w", marshalErr)
@@ -192,11 +197,16 @@ func (w *WebsocketPlugin) QueryWithError(ctx context.Context, query plugin.Query
 		"ContextData":    string(contextDataJson),
 	})
 	if queryErr != nil {
-		util.GetLogger().Error(ctx, fmt.Sprintf("[%s] query failed: %s", w.metadata.GetName(ctx), queryErr.Error()))
+		if ctx.Err() == nil {
+			util.GetLogger().Error(ctx, fmt.Sprintf("[%s] query failed: %s", w.metadata.GetName(ctx), queryErr.Error()))
+		}
 		return plugin.QueryResponse{}, queryErr
 	}
 
-	var response plugin.QueryResponse
+	var response struct {
+		plugin.QueryResponse
+		QuerySkipped bool
+	}
 	marshalData, marshalErr := json.Marshal(rawResults)
 	if marshalErr != nil {
 		return plugin.QueryResponse{}, fmt.Errorf("failed to marshal plugin query response: %w", marshalErr)
@@ -208,5 +218,6 @@ func (w *WebsocketPlugin) QueryWithError(ctx context.Context, query plugin.Query
 		return plugin.QueryResponse{}, fmt.Errorf("failed to unmarshal query response: %w", unmarshalErr)
 	}
 
-	return response, nil
+	response.QueryBackpressured = response.QuerySkipped
+	return response.QueryResponse, nil
 }

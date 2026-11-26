@@ -23,6 +23,7 @@ const (
 type AutomationSnapshot struct {
 	Tree        woxui.AccessibilityTree
 	Diagnostics []string
+	FrameID     uint64
 }
 
 // HostServices is the minimal native surface required by the retained widget host.
@@ -448,7 +449,7 @@ func (h *Host) Frame(displayList *woxui.DisplayList, frame woxui.FrameInfo) {
 	accessibilityStart := time.Now()
 	h.generation++
 	tree, diagnostics := h.buildAccessibilityTree(diagnostics, work)
-	h.publishSnapshot(tree, diagnostics)
+	h.publishSnapshot(tree, diagnostics, frameID)
 	if err := h.window.UpdateAccessibility(tree, h.dispatchAccessibilityAction); err != nil {
 		h.reportDiagnostic(fmt.Sprintf("publish accessibility tree: %v", err))
 	}
@@ -2207,8 +2208,8 @@ func (h *Host) performAccessibilityAction(nodeID woxui.AccessibilityNodeID, acti
 	return fmt.Errorf("accessibility action %q is not supported by node %d", action, nodeID)
 }
 
-func (h *Host) publishSnapshot(tree woxui.AccessibilityTree, diagnostics []string) {
-	snapshot := AutomationSnapshot{Tree: cloneTree(tree), Diagnostics: append([]string(nil), diagnostics...)}
+func (h *Host) publishSnapshot(tree woxui.AccessibilityTree, diagnostics []string, frameID uint64) {
+	snapshot := AutomationSnapshot{Tree: cloneTree(tree), Diagnostics: append([]string(nil), diagnostics...), FrameID: frameID}
 	h.snapshot.Store(snapshot)
 	h.changeMu.Lock()
 	close(h.change)
@@ -2219,7 +2220,7 @@ func (h *Host) publishSnapshot(tree woxui.AccessibilityTree, diagnostics []strin
 // Snapshot returns a detached semantics snapshot for assertions and automation.
 func (h *Host) Snapshot() AutomationSnapshot {
 	value := h.snapshot.Load().(AutomationSnapshot)
-	return AutomationSnapshot{Tree: cloneTree(value.Tree), Diagnostics: append([]string(nil), value.Diagnostics...)}
+	return AutomationSnapshot{Tree: cloneTree(value.Tree), Diagnostics: append([]string(nil), value.Diagnostics...), FrameID: value.FrameID}
 }
 
 // WaitForChange blocks until a newer frame is published or the context ends.

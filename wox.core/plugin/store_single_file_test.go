@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"wox/util"
@@ -16,6 +17,16 @@ import (
 
 func TestUninstallSingleFilePluginRemovesOnlyTargetFile(t *testing.T) {
 	initSingleFileTestLocation(t)
+	if runtime.GOOS == "linux" {
+		// A headless runner's temporary mount may not support the desktop trash.
+		bin := t.TempDir()
+		t.Setenv("WOX_TEST_PLUGIN_TRASH", t.TempDir())
+		require.NoError(t, os.WriteFile(filepath.Join(bin, "gio"), []byte(`#!/bin/sh
+[ "$#" -eq 2 ] && [ "$1" = trash ] || exit 1
+exec mv -- "$2" "$WOX_TEST_PLUGIN_TRASH/"
+`), 0o755))
+		t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	}
 	directory := util.GetLocation().GetUserSingleFilePluginsDirectory()
 	target := filepath.Join(directory, "keep.py")
 	other := filepath.Join(directory, "other.py")
@@ -37,6 +48,7 @@ func TestUninstallSingleFilePluginRemovesOnlyTargetFile(t *testing.T) {
 	require.NoError(t, statErr)
 	assert.True(t, info.IsDir())
 	assert.True(t, util.IsFileExists(other))
+	assert.NoFileExists(t, target)
 }
 
 func TestUninstallSingleFilePluginRejectsPathEscape(t *testing.T) {

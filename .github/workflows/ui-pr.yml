@@ -1,22 +1,30 @@
 name: UI Quality
 
-# Pull requests only compile the native UI. Widget unit tests and launcher
-# smoke stay on the daily schedule in ui-scheduled.yml until that coverage
-# should gate PRs again.
 on:
   pull_request:
     paths:
       - ".github/workflows/ui-pr.yml"
       - ".github/workflows/ui-scheduled.yml"
       - "Makefile"
+      - "lang/**"
       - "wox.core/appcontrol/**"
+      - "wox.core/cloud_sync_bootstrap.go"
+      - "wox.core/cloudsync/**"
       - "wox.core/common/**"
+      - "wox.core/database_recovery_bootstrap.go"
+      - "wox.core/database/**"
       - "wox.core/main.go"
-      - "wox.core/plugin/system/shell/terminal/**"
+      - "wox.core/migration/**"
+      - "wox.core/go.*"
+      - "wox.core/plugin/**"
+      - "wox.core/resource/**"
+      - "wox.core/setting/**"
       - "wox.core/ui/**"
+      - "wox.core/util/**"
       - "wox.core/test/automationdriver/**"
       - "wox.core/test/smoke/**"
       - "wox.core/test/smokerunner/**"
+      - "wox.core/test/smokeperf/**"
       - "wox.plugin.host.nodejs/**"
       - "wox.plugin.host.python/**"
       - "wox.plugin.nodejs/**"
@@ -25,6 +33,12 @@ on:
 permissions:
   contents: read
 
+env:
+  LINUX_UI_DEPENDENCIES: >-
+    pkg-config libgtk-3-dev libsecret-1-dev libx11-dev libxfixes-dev libxi-dev
+    libxrandr-dev libxkbcommon-dev libxkbcommon-x11-dev libxtst-dev
+    libkeybinder-3.0-dev libpipewire-0.3-dev
+
 jobs:
   native-compile-pr:
     name: Native UI compile (${{ matrix.name }})
@@ -32,6 +46,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - name: Linux
+            os: ubuntu-latest
           - name: macOS
             os: macos-latest
           - name: Windows
@@ -39,6 +55,11 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
+      - name: Install Linux UI dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y $LINUX_UI_DEPENDENCIES
       - name: Setup Go
         uses: actions/setup-go@v6
         with:
@@ -57,4 +78,136 @@ jobs:
         run: >-
           go test ./ui/runtime ./ui/runtime/internal/window ./ui/runtime/internal/graphics
           ./ui/widget ./ui/launcher ./ui/launcher/component ./ui/woxview ./ui/pluginwindow
-          ./plugin ./plugin/host -run TestDoesNotExist
+          ./ui ./plugin ./plugin/host ./plugin/system -run '^$'
+
+  unit-pr:
+    name: UI contracts and core race tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install Linux UI dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y $LINUX_UI_DEPENDENCIES xvfb xauth
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: wox.core/go.mod
+          cache: false
+      - name: Test UI contracts
+        run: make test-go-ui-unit
+      - name: Test core packages with race detection
+        working-directory: wox.core
+        run: >-
+          GDK_BACKEND=x11 xvfb-run -a go test -race -tags sqlite_fts5 ./plugin ./plugin/host ./plugin/system
+          ./ui ./test/smokeperf ./test/smokerunner -count=1
+
+  resilience-pr:
+    name: Core resilience (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            runner: env -u WAYLAND_DISPLAY -u WAYLAND_SOCKET XDG_SESSION_TYPE=x11 GDK_BACKEND=x11 xvfb-run -a
+          - os: macos-latest
+            runner: ""
+          - os: windows-latest
+            runner: ""
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install Linux native dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y $LINUX_UI_DEPENDENCIES xvfb xauth
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: wox.core/go.mod
+          cache: false
+      - name: Create host embed placeholder
+        shell: bash
+        run: |
+          mkdir -p wox.core/resource/hosts
+          touch wox.core/resource/hosts/placeholder
+      - name: Test recovery and cross-platform settings
+        shell: bash
+        working-directory: wox.core
+        run: >-
+          ${{ matrix.runner }} go test -race -tags sqlite_fts5 -count=1
+          ./database ./setting ./cloudsync ./cloudsync/settingadapter
+          ./migration ./util/hotkey ./plugin ./plugin/system/notes
+      - name: Test Doctor and system setting boundaries
+        shell: bash
+        working-directory: wox.core
+        run: >-
+          ${{ matrix.runner }} go test -race -tags sqlite_fts5 -count=1
+          ./plugin/system -run 'TestDoctor|TestSystemPluginMachineSettings'
+
+  core-smoke-pr:
+    name: Core smoke (${{ matrix.name }})
+    # Observe the three native runners before making this a required check.
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux
+            os: ubuntu-latest
+            runner: env -u WAYLAND_DISPLAY -u WAYLAND_SOCKET XDG_SESSION_TYPE=x11 GDK_BACKEND=x11 xvfb-run -a
+          - name: macOS
+            os: macos-latest
+            runner: ""
+          - name: Windows
+            os: windows-latest
+            runner: ""
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install Linux UI dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y $LINUX_UI_DEPENDENCIES xclip xvfb xauth
+      - name: Install make on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: choco install -y make
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: wox.core/go.mod
+          cache: false
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 12.6.0
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v10.0.1
+        with:
+          enable-cache: false
+      - name: Build plugin hosts
+        shell: bash
+        run: make host
+      - name: Run core smoke
+        shell: bash
+        env:
+          GO_UI_SMOKE_RUNNER: ${{ matrix.runner }}
+          WOX_SMOKE_ARTIFACT_DIR: ${{ github.workspace }}/artifacts/smoke
+        run: make smoke-core
+      - name: Upload core smoke failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ui-core-smoke-failure-${{ matrix.name }}
+          path: artifacts/smoke/
+          if-no-files-found: ignore

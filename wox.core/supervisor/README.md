@@ -37,7 +37,7 @@ After an abnormal exit the supervisor waits up to 10 seconds for a dump and
 explicitly logs when none was collected. A late WER dump remains in the dump
 directory but is not retroactively added to an already exported report.
 
-## Windows UI hangs
+## UI hangs
 
 While a child is alive, the supervisor probes its top-level windows (including
 hidden windows) every 5 seconds with a bounded `WM_NULL` request. At least 30
@@ -49,8 +49,13 @@ change rendering, free memory, terminate the child, or request a restart.
 
 This detects blocked window message loops, not every application-level hang:
 a thread that continues dispatching messages may still have a stalled workflow.
-No window means there is nothing to probe yet. Non-Windows platforms retain
-their existing crash handling without this native window watchdog.
+No window means there is nothing to probe yet.
+
+On Linux and macOS, Wox posts periodic heartbeats to the UI loop. The child
+publishes timestamps under the supervisor runtime directory. After sustained
+unresponsiveness the supervisor requests a goroutine stack snapshot using
+`SIGUSR1`. Snapshots stay in the local crash dump directory. The 30-second
+normal and 5-second debug thresholds share the sleep-gap handling on Windows.
 
 ## Debug sessions
 

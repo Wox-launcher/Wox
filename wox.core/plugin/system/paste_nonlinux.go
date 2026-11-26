@@ -5,9 +5,9 @@ package system
 import (
 	"context"
 	"wox/plugin"
-	"wox/util/window"
+	"wox/util/keyboard"
 )
 
-func pasteToKDEWindow(context.Context, plugin.API, plugin.QueryEnv) error {
-	return window.ErrWindowManagementUnsupported
+func simulatePasteAfterFocus(_ context.Context, _ plugin.QueryEnv, focus func() error) error {
+	return keyboard.SimulatePasteAfterFocus(focus)
 }

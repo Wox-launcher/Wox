@@ -148,6 +148,10 @@ func (c *Client) RuntimeStats(ctx context.Context) (automation.RuntimeStats, err
 	return call[automation.RuntimeStats](ctx, c, "perf.runtime_stats", nil)
 }
 
+func (c *Client) SoakStats(ctx context.Context) (automation.SoakStats, error) {
+	return call[automation.SoakStats](ctx, c, "perf.soak_stats", nil)
+}
+
 // FrameMetrics returns correlated Host and native frame timings for the active window.
 func (c *Client) FrameMetrics(ctx context.Context) (woxui.FrameMetricsSnapshot, error) {
 	return call[woxui.FrameMetricsSnapshot](ctx, c, "render.metrics", nil)

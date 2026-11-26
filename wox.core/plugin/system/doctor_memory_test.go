@@ -1,4 +1,4 @@
-package woxmemory
+package system
 
 import (
 	"context"
@@ -9,11 +9,67 @@ import (
 	"slices"
 	"testing"
 
+	"wox/common"
 	"wox/plugin"
-	"wox/setting"
+	"wox/plugin/plugintest"
 	"wox/ui"
 	"wox/util/processmemory"
 )
+
+func TestDoctorMemoryProfileRoutesThroughDoctor(t *testing.T) {
+	doctor := &DoctorPlugin{}
+	metadata := doctor.GetMetadata()
+	if !slices.Equal(metadata.TriggerKeywords, []string{"doctor"}) {
+		t.Fatalf("trigger keywords = %#v, want doctor", metadata.TriggerKeywords)
+	}
+	if !slices.ContainsFunc(metadata.Commands, func(command plugin.MetadataCommand) bool { return command.Command == "memory" }) {
+		t.Fatal("missing Doctor memory command")
+	}
+	if len(metadata.Glances) != 1 || metadata.Glances[0].Id != memoryGlanceID {
+		t.Fatalf("glances = %#v, want wox_memory", metadata.Glances)
+	}
+	query := plugin.Query{TriggerKeyword: "doctor", Command: "memory", Search: "profile"}
+	results := doctor.Query(context.Background(), query).Results
+	if len(results) != 1 || results[0].Id != "memory.profile" || len(results[0].Actions) != 1 {
+		t.Fatalf("query %+v returned %+v, want the heap profile action", query, results)
+	}
+}
+
+type memoryNavigationAPI struct {
+	plugintest.StubAPI
+	query string
+}
+
+func (a *memoryNavigationAPI) ChangeQuery(_ context.Context, query common.PlainQuery) {
+	a.query = query.QueryText
+}
+
+func TestDoctorMemoryActionsKeepTheActiveTrigger(t *testing.T) {
+	ctx := context.Background()
+	api := &memoryNavigationAPI{}
+	doctor := &DoctorPlugin{api: api}
+	for _, test := range []struct {
+		trigger, goQuery, nativeQuery, processQuery string
+	}{
+		{"doctor", "doctor memory go ", "doctor memory native ", "doctor memory processes "},
+		{"diag", "diag memory go ", "diag memory native ", "diag memory processes "},
+	} {
+		query := plugin.Query{TriggerKeyword: test.trigger}
+		for _, target := range []struct {
+			action plugin.QueryResultAction
+			want   string
+		}{
+			{doctor.goBreakdownAction(query), test.goQuery},
+			{doctor.nativeBreakdownAction(query), test.nativeQuery},
+			{doctor.separateProcessAction(query), test.processQuery},
+		} {
+			target.action.Action(ctx, plugin.ActionContext{})
+			if api.query != target.want {
+				t.Fatalf("action %q changed query to %q, want %q", target.action.Id, api.query, target.want)
+			}
+		}
+	}
+}
 
 func TestMemoryDiagnosticsHelpers(t *testing.T) {
 	if got := subtractFloor(100, 40); got != 60 {
@@ -27,26 +83,8 @@ func TestMemoryDiagnosticsHelpers(t *testing.T) {
 	}
 }
 
-func TestMetadataUsesDedicatedTriggerKeyword(t *testing.T) {
-	metadata := (&WoxMemoryPlugin{}).GetMetadata()
-	if len(metadata.TriggerKeywords) != 1 || metadata.TriggerKeywords[0] != "woxmemory" {
-		t.Fatalf("trigger keywords = %#v, want woxmemory", metadata.TriggerKeywords)
-	}
-	wantCommands := []string{goCommand, nativeCommand, processCommand, profileCommand}
-	gotCommands := make([]string, 0, len(metadata.Commands))
-	for _, command := range metadata.Commands {
-		gotCommands = append(gotCommands, command.Command)
-	}
-	if !slices.Equal(gotCommands, wantCommands) {
-		t.Fatalf("commands = %#v, want %#v", gotCommands, wantCommands)
-	}
-	if len(metadata.Glances) != 1 || metadata.Glances[0].Id != glanceID {
-		t.Fatalf("glances = %#v, want wox_memory", metadata.Glances)
-	}
-}
-
 func TestGlobalMemoryResultsUseLowRankingScore(t *testing.T) {
-	results := (&WoxMemoryPlugin{}).buildMemoryDiagnosticResults(context.Background(), plugin.Query{Type: plugin.QueryTypeInput}, memoryDiagnostics{
+	results := (&DoctorPlugin{}).buildMemoryDiagnosticResults(context.Background(), plugin.Query{Type: plugin.QueryTypeInput}, memoryDiagnostics{
 		processBytes:      1000,
 		privateAttributed: true,
 		goPrivateBytes:    1000,
@@ -70,13 +108,6 @@ func TestWriteHeapProfile(t *testing.T) {
 	}
 }
 
-func TestMigrateLegacyGlanceRef(t *testing.T) {
-	migrated, changed := migrateLegacyGlanceRef(setting.GlanceRef{PluginId: legacyGlancePluginID, GlanceId: glanceID})
-	if !changed || migrated.PluginId != pluginID || migrated.GlanceId != glanceID {
-		t.Fatalf("migrated glance = %#v, changed=%t", migrated, changed)
-	}
-}
-
 // resultIDsByGroup keeps assertions readable by collecting each group's result ids in the order
 // the plugin emitted them.
 func resultIDsByGroup(results []plugin.QueryResult) map[string][]string {
@@ -88,7 +119,7 @@ func resultIDsByGroup(results []plugin.QueryResult) map[string][]string {
 }
 
 func TestAttributedDiagnosticsPartitionThePrivateWorkingSet(t *testing.T) {
-	memoryPlugin := &WoxMemoryPlugin{}
+	memoryPlugin := &DoctorPlugin{}
 	diagnostics := memoryDiagnostics{
 		processBytes:       1000,
 		privateAttributed:  true,
@@ -110,13 +141,13 @@ func TestAttributedDiagnosticsPartitionThePrivateWorkingSet(t *testing.T) {
 			{name: "msedgewebview2.exe", processID: 9, memoryBytes: 150},
 		},
 	}
-	results := memoryPlugin.buildMemoryDiagnosticResults(context.Background(), plugin.Query{TriggerKeyword: "woxmemory"}, diagnostics)
+	results := memoryPlugin.buildMemoryDiagnosticResults(context.Background(), plugin.Query{TriggerKeyword: "doctor"}, diagnostics)
 	grouped := resultIDsByGroup(results)
 	if len(grouped) != 2 {
 		t.Fatalf("the default page must only show the process and external groups, got %#v", grouped)
 	}
 
-	processGroup := fmt.Sprintf(translateMemory(context.Background(), "plugin_wox_memory_process_group"), formatMemoryBytes(diagnostics.processBytes), os.Getpid())
+	processGroup := fmt.Sprintf(translateMemory(context.Background(), "plugin_doctor_memory_process_group"), formatMemoryBytes(diagnostics.processBytes), os.Getpid())
 	wantProcess := []string{"memory.native", "memory.heap", "memory.image", "memory.stack", "memory.mapped"}
 	if got := grouped[processGroup]; !slices.Equal(got, wantProcess) {
 		t.Fatalf("process components = %#v, want %#v sorted by size", got, wantProcess)
@@ -132,7 +163,7 @@ func TestAttributedDiagnosticsPartitionThePrivateWorkingSet(t *testing.T) {
 		t.Fatalf("process components sum to %d, want the measured private working set %d", processTotal, diagnostics.processBytes)
 	}
 
-	externalGroup := translateMemory(context.Background(), "plugin_wox_memory_host_group")
+	externalGroup := translateMemory(context.Background(), "plugin_doctor_memory_host_group")
 	wantExternal := []string{"memory.host." + string(plugin.PLUGIN_RUNTIME_NODEJS), "memory.mcp.duckduckgo", "memory.process.other"}
 	if got := grouped[externalGroup]; !slices.Equal(got, wantExternal) {
 		t.Fatalf("external processes = %#v, want %#v", got, wantExternal)
@@ -170,9 +201,9 @@ func TestSeparateProcessResultsGroupHelpersUnderTheirOwner(t *testing.T) {
 	})
 
 	grouped := resultIDsByGroup(results)
-	hostGroup := fmt.Sprintf(translateMemory(context.Background(), "plugin_wox_memory_host_process_group"), plugin.PLUGIN_RUNTIME_PYTHON, formatMemoryBytes(320))
-	mcpGroup := fmt.Sprintf(translateMemory(context.Background(), "plugin_wox_memory_mcp_process_group"), "duckduckgo", formatMemoryBytes(270))
-	otherGroup := fmt.Sprintf(translateMemory(context.Background(), "plugin_wox_memory_other_process_group"), formatMemoryBytes(400))
+	hostGroup := fmt.Sprintf(translateMemory(context.Background(), "plugin_doctor_memory_host_process_group"), plugin.PLUGIN_RUNTIME_PYTHON, formatMemoryBytes(320))
+	mcpGroup := fmt.Sprintf(translateMemory(context.Background(), "plugin_doctor_memory_mcp_process_group"), "duckduckgo", formatMemoryBytes(270))
+	otherGroup := fmt.Sprintf(translateMemory(context.Background(), "plugin_doctor_memory_other_process_group"), formatMemoryBytes(400))
 	if got := grouped[hostGroup]; !slices.Equal(got, []string{"memory.process.7", "memory.process.8"}) {
 		t.Fatalf("host processes = %#v, want the host and its helper sorted by size", got)
 	}
@@ -229,7 +260,7 @@ func TestOwningProcessIndexStopsOutsideTheWalkedSubtree(t *testing.T) {
 }
 
 func TestNativeComponentOpensTheBreakdownCommand(t *testing.T) {
-	results := (&WoxMemoryPlugin{}).buildMemoryDiagnosticResults(context.Background(), plugin.Query{TriggerKeyword: "mem"}, memoryDiagnostics{
+	results := (&DoctorPlugin{}).buildMemoryDiagnosticResults(context.Background(), plugin.Query{TriggerKeyword: "mem"}, memoryDiagnostics{
 		processBytes:      600,
 		privateAttributed: true,
 		goPrivateBytes:    100,
@@ -281,7 +312,7 @@ func TestGoMemoryResultsExplainTheRetainedTotal(t *testing.T) {
 	diagnostics.goRetainedBytes = diagnostics.goHeapInuseBytes + diagnostics.goHeapRetainedIdle + diagnostics.goStackBytes + diagnostics.goMetadataBytes
 
 	results := goMemoryResults(context.Background(), diagnostics)
-	group := fmt.Sprintf(translateMemory(context.Background(), "plugin_wox_memory_go_group"), formatMemoryBytes(diagnostics.goRetainedBytes))
+	group := fmt.Sprintf(translateMemory(context.Background(), "plugin_doctor_memory_go_group"), formatMemoryBytes(diagnostics.goRetainedBytes))
 	want := []string{"memory.go.objects", "memory.go.gc", "memory.go.garbage", "memory.go.idle", "memory.go.stacks", "memory.go.spans", "memory.go.profiling", "memory.go.other"}
 	if got := resultIDsByGroup(results)[group]; !slices.Equal(got, want) {
 		t.Fatalf("go breakdown = %#v, want %#v sorted by size", got, want)
@@ -314,7 +345,7 @@ func TestGoMemoryResultsSkipEmptyBuckets(t *testing.T) {
 }
 
 func TestGoComponentOpensTheBreakdownCommand(t *testing.T) {
-	results := (&WoxMemoryPlugin{}).buildMemoryDiagnosticResults(context.Background(), plugin.Query{TriggerKeyword: "mem"}, memoryDiagnostics{
+	results := (&DoctorPlugin{}).buildMemoryDiagnosticResults(context.Background(), plugin.Query{TriggerKeyword: "mem"}, memoryDiagnostics{
 		processBytes:      600,
 		privateAttributed: true,
 		goPrivateBytes:    100,
@@ -362,7 +393,7 @@ func TestNativeOwnerResultsIncludeHeapFree(t *testing.T) {
 		sqliteBytes:         80,
 	}
 	results := nativeOwnerResults(context.Background(), diagnostics)
-	nativeGroup := fmt.Sprintf(translateMemory(context.Background(), "plugin_wox_memory_native_group"), formatMemoryBytes(nativeComponentBytes(diagnostics)))
+	nativeGroup := fmt.Sprintf(translateMemory(context.Background(), "plugin_doctor_memory_native_group"), formatMemoryBytes(nativeComponentBytes(diagnostics)))
 	want := []string{"memory.native.unnamed", heapFreeOwnerResultID, "memory.native.sqlite"}
 	if got := resultIDsByGroup(results)[nativeGroup]; !slices.Equal(got, want) {
 		t.Fatalf("native owners = %#v, want %#v sorted by size", got, want)
@@ -385,12 +416,12 @@ func TestNativeOwnerResultsExplainTheNativeComponent(t *testing.T) {
 		gpu:               ui.GPUMemoryUsage{Available: true, SystemBytes: 300, DedicatedBytes: 80},
 	}
 	results := nativeOwnerResults(context.Background(), diagnostics)
-	nativeGroup := fmt.Sprintf(translateMemory(context.Background(), "plugin_wox_memory_native_group"), formatMemoryBytes(nativeComponentBytes(diagnostics)))
+	nativeGroup := fmt.Sprintf(translateMemory(context.Background(), "plugin_doctor_memory_native_group"), formatMemoryBytes(nativeComponentBytes(diagnostics)))
 	wantNative := []string{"memory.native.unnamed", "memory.native.sqlite", "memory.native.renderer"}
 	if got := resultIDsByGroup(results)[nativeGroup]; !slices.Equal(got, wantNative) {
 		t.Fatalf("native owners = %#v, want %#v sorted by size", got, wantNative)
 	}
-	gpuGroup := translateMemory(context.Background(), "plugin_wox_memory_gpu_group")
+	gpuGroup := translateMemory(context.Background(), "plugin_doctor_memory_gpu_group")
 	if got := resultIDsByGroup(results)[gpuGroup]; !slices.Equal(got, []string{gpuOwnerResultID}) {
 		t.Fatalf("gpu owners = %#v, want the driver listed outside the native bucket", got)
 	}
@@ -425,14 +456,14 @@ func TestNativeOwnerResultsExplainTheNativeComponent(t *testing.T) {
 }
 
 func TestUnattributedDiagnosticsKeepTheEstimatedNativeGap(t *testing.T) {
-	results := (&WoxMemoryPlugin{}).buildMemoryDiagnosticResults(context.Background(), plugin.Query{TriggerKeyword: "woxmemory"}, memoryDiagnostics{
+	results := (&DoctorPlugin{}).buildMemoryDiagnosticResults(context.Background(), plugin.Query{TriggerKeyword: "doctor"}, memoryDiagnostics{
 		processBytes:    1000,
 		nativeGapBytes:  600,
 		goRetainedBytes: 300,
 		paddleOCRBytes:  200,
 	})
 
-	processGroup := fmt.Sprintf(translateMemory(context.Background(), "plugin_wox_memory_process_group"), formatMemoryBytes(1000), os.Getpid())
+	processGroup := fmt.Sprintf(translateMemory(context.Background(), "plugin_doctor_memory_process_group"), formatMemoryBytes(1000), os.Getpid())
 	wantProcess := []string{"memory.native", "memory.heap"}
 	if got := resultIDsByGroup(results)[processGroup]; !slices.Equal(got, wantProcess) {
 		t.Fatalf("estimated components = %#v, want %#v", got, wantProcess)

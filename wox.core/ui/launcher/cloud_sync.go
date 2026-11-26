@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
 	"wox/account"
+	"wox/cloudsync"
 	"wox/ui/contract"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
@@ -234,6 +236,15 @@ func cloudActionLabel(name string) string {
 	default:
 		return strings.Title(name)
 	}
+}
+
+func (c *cloudSettingsController) setCrossPlatformHotkeySync(enabled bool) {
+	c.runCloudAction("hotkeys", func(ctx context.Context) error {
+		if err := c.services.UpdateGeneralSetting(ctx, c.sessionID, cloudsync.CrossPlatformHotkeysSetting, strconv.FormatBool(enabled)); err != nil {
+			return err
+		}
+		return c.reloadSettings()
+	})
 }
 
 // openCloudBilling starts checkout or subscription management in the platform browser.

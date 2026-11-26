@@ -145,6 +145,18 @@ func (e *Engine) logInitSnapshotAsync(ctx context.Context) {
 	})
 }
 
+// CheckAfterWake schedules change-feed revalidation on the index worker.
+func (e *Engine) CheckAfterWake(_ context.Context) {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	if e.scanner != nil {
+		select {
+		case e.scanner.wakeCh <- struct{}{}:
+		default:
+		}
+	}
+}
+
 func (e *Engine) UpdatePolicy(policy Policy) {
 	if e == nil {
 		return

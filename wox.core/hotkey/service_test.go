@@ -20,6 +20,10 @@ func TestPluginHotkeysCannotReplaceOtherOwners(t *testing.T) {
 
 // TestQueryReleasePolicyIsEvaluatedAtTrigger keeps live routing changes out of registration snapshots.
 func TestQueryReleasePolicyIsEvaluatedAtTrigger(t *testing.T) {
+	// Selection hotkeys are unavailable on some Wayland compositors.
+	t.Setenv("XDG_SESSION_TYPE", "x11")
+	t.Setenv("WAYLAND_DISPLAY", "")
+	t.Setenv("WAYLAND_SOCKET", "")
 	allow := false
 	service := NewService(Callbacks{
 		QueryCanTriggerBeforeRelease: func(query setting.QueryHotkey) bool {
@@ -117,6 +121,37 @@ func TestResultBindingPersistenceFailureRollsBackCollector(t *testing.T) {
 	entries := service.Snapshot()
 	if len(entries) != 1 || entries[0].ID != "old" {
 		t.Fatalf("previous configuration not restored: %+v", entries)
+	}
+}
+
+func TestSyncedConfigSavesUnavailableChordAndDropsOldRegistration(t *testing.T) {
+	ctx := context.Background()
+	service := NewService(Callbacks{})
+	service.collectWoxConfig(ctx, WoxConfig{MainHotkey: "ctrl+j"})
+	service.registered = service.Snapshot()
+	incoming := WoxConfig{MainHotkey: "ctrl+invalid-key"}
+	var saved bool
+	err := service.ApplySyncedConfig(ctx, incoming, func() error {
+		saved = true
+		return nil
+	})
+	if !saved || !errors.Is(err, ErrHotkeyRegistrationConflict) {
+		t.Fatalf("expected successful persistence and a registration warning, saved=%t err=%v", saved, err)
+	}
+	if got := service.Snapshot(); len(got) != 1 || got[0].CombineKey != incoming.MainHotkey || service.IsRegistered(SourceMain, "main") {
+		t.Fatalf("expected shared chord without a fallback binding, got %+v", got)
+	}
+}
+
+func TestSyncedHotkeySpecsKeepsOtherShortcutsWhenOneChordConflicts(t *testing.T) {
+	press := func() {}
+	entries, specs := syncedHotkeySpecs([]Entry{
+		{Source: SourcePlugin, ID: "plugin", CombineKey: "ctrl+k", OnPress: press},
+		{Source: SourceMain, ID: "main", CombineKey: "ctrl+k", OnPress: press},
+		{Source: SourceQuery, ID: "query", CombineKey: "ctrl+j", OnPress: press},
+	})
+	if len(entries) != 2 || len(specs) != 2 || entries[0].Source != SourceMain || entries[1].Source != SourceQuery {
+		t.Fatalf("shared chord priority must preserve the unrelated shortcut, got %+v", entries)
 	}
 }
 

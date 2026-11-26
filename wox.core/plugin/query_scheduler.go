@@ -17,14 +17,19 @@ type queryScheduler struct {
 	debounceQueryTimer *util.HashMap[queryDebounceKey, *debounceTimer]
 	// Learn from result-producing jobs through channel delivery, not just plugin execution.
 	pluginResultDeliveryLatency *util.HashMap[string, *util.EWMA]
+	pluginQueryMetrics          *util.HashMap[string, pluginQueryMetricWindow]
+	pluginQueryLeases           *util.HashMap[queryDebounceKey, *pluginQueryLease]
+	pluginCircuits              *util.HashMap[string, pluginCircuitState]
 }
 
 // queryExecutionCallbacks keep query business rules outside the scheduler.
 // Every callback is required; Manager supplies them when starting a planned query.
 type queryExecutionCallbacks struct {
-	queryPlugin      func(context.Context, *Instance, Query) QueryResponse
+	queryPlugin      func(context.Context, *Instance, Query) (QueryResponse, bool)
 	onPluginResponse func(context.Context, Query, QueryResponse)
 	restoreAliases   func(context.Context, Query) QueryResponse
+	timeoutPlugin    func(context.Context, *Instance, Query) QueryResponse
+	onCircuitOpen    func(context.Context, *Instance, time.Duration)
 }
 
 // newQueryScheduler initializes the state shared by all executions of one Manager.
@@ -32,12 +37,16 @@ func newQueryScheduler() *queryScheduler {
 	return &queryScheduler{
 		debounceQueryTimer:          util.NewHashMap[queryDebounceKey, *debounceTimer](),
 		pluginResultDeliveryLatency: util.NewHashMap[string, *util.EWMA](),
+		pluginQueryMetrics:          util.NewHashMap[string, pluginQueryMetricWindow](),
+		pluginQueryLeases:           util.NewHashMap[queryDebounceKey, *pluginQueryLease](),
+		pluginCircuits:              util.NewHashMap[string, pluginCircuitState](),
 	}
 }
 
 type debounceTimer struct {
-	timer  *time.Timer
-	onStop func()
+	timer           *time.Timer
+	onStop          func()
+	stopCancelWatch func() bool
 }
 
 // queryDebounceKey keeps independent launcher windows from cancelling one another's searches.
@@ -165,6 +174,7 @@ func (e *queryExecution) startPluginJob(job queryPluginJob) {
 	}
 	e.scheduler.debounceQueryTimer.Compute(queryDebounceKey{e.query.SessionId, job.pluginInstance.Metadata.Id}, func(pending *debounceTimer, _ bool) (*debounceTimer, bool) {
 		if pending != nil && pending.timer.Stop() {
+			pending.stopCancelWatch()
 			pending.onStop()
 		}
 		return nil, false
@@ -187,12 +197,14 @@ func (e *queryExecution) replaceDebouncedJob(job queryPluginJob) {
 	key := queryDebounceKey{e.query.SessionId, pluginInstance.Metadata.Id}
 	e.scheduler.debounceQueryTimer.Compute(key, func(previous *debounceTimer, _ bool) (*debounceTimer, bool) {
 		if previous != nil && previous.timer.Stop() {
+			previous.stopCancelWatch()
 			previous.onStop()
 		}
 		pending := &debounceTimer{}
 		debounceScheduledAt := util.GetSystemTimestamp()
 		pending.timer = time.AfterFunc(time.Duration(job.intervalMs)*time.Millisecond, func() {
 			e.scheduler.debounceQueryTimer.Compute(key, func(current *debounceTimer, exists bool) (*debounceTimer, bool) {
+				pending.stopCancelWatch()
 				return current, exists && current != pending
 			})
 			if tracker := timetracking.New("debounce_fire"); tracker.Enabled() {
@@ -215,6 +227,15 @@ func (e *queryExecution) replaceDebouncedJob(job queryPluginJob) {
 			}
 			e.tracker.finishJob(job.blocksFallback)
 		}
+		pending.stopCancelWatch = context.AfterFunc(e.ctx, func() {
+			e.scheduler.debounceQueryTimer.Compute(key, func(current *debounceTimer, exists bool) (*debounceTimer, bool) {
+				if current == pending && pending.timer.Stop() {
+					pending.onStop()
+					return nil, false
+				}
+				return current, exists
+			})
+		})
 		return pending, true
 	})
 }
@@ -224,13 +245,36 @@ func (e *queryExecution) runPluginJob(job queryPluginJob) {
 	pluginInstance := job.pluginInstance
 	pluginLabel := queryDiagnosticPluginLabel(pluginInstance)
 	util.Go(e.ctx, fmt.Sprintf("[%s] parallel query", pluginInstance.GetName(e.ctx)), func() {
+		defer e.tracker.finishJob(job.blocksFallback)
 		jobStart := util.GetSystemTimestamp()
 		jobTimingStart := time.Now()
+		recorded := false
+		defer func() {
+			if !recorded {
+				e.scheduler.recordPluginQuery(pluginInstance.Metadata.Id, jobTimingStart, true)
+			}
+		}()
 		// QueryResponse keeps result rows and query-scoped UI metadata together.
 		// Sending one normalized response through the query pipeline prevents the
 		// UI from applying refinements or layout from a different query execution.
 		queryForPluginStart := util.GetSystemTimestamp()
-		queryResponse := e.callbacks.queryPlugin(e.ctx, pluginInstance, e.query)
+		isolated, err := e.queryPlugin(pluginInstance)
+		queryResponse, recovered := isolated.response, isolated.recovered
+		if err != nil {
+			recorded = true
+			if err == context.DeadlineExceeded && e.ctx.Err() == nil && e.callbacks.timeoutPlugin != nil {
+				e.scheduler.recordPluginQuery(pluginInstance.Metadata.Id, jobTimingStart, false)
+				timedOut := e.callbacks.timeoutPlugin(e.ctx, pluginInstance, e.query)
+				if len(timedOut.Results) > 0 {
+					e.resultsChan <- timedOut.ToUI()
+				}
+			}
+			return
+		}
+		if e.ctx.Err() != nil {
+			recorded = true
+			return
+		}
 		queryForPluginCost := util.GetSystemTimestamp() - queryForPluginStart
 		e.callbacks.onPluginResponse(e.ctx, e.query, queryResponse)
 		if tracker := timetracking.New("query_for_plugin_done"); tracker.Enabled() && (len(queryResponse.Results) > 0 || queryForPluginCost >= 5) {
@@ -277,18 +321,8 @@ func (e *queryExecution) runPluginJob(job queryPluginJob) {
 			tracker.SetInt64("elapsedSinceJobStartUs", deliveryElapsedUs)
 			tracker.Log(e.ctx)
 		}
-		finishStart := util.GetSystemTimestamp()
-		e.tracker.finishJob(job.blocksFallback)
-		finishCost := util.GetSystemTimestamp() - finishStart
-		if tracker := timetracking.New("tracker_finish_job"); tracker.Enabled() && len(queryResponseUI.Results) > 0 {
-			tracker.SetRawString("queryId", e.query.Id)
-			tracker.SetRawString("plugin", pluginLabel)
-			tracker.SetBool("blocksFallback", job.blocksFallback)
-			tracker.SetInt("remaining", int(e.tracker.remaining.Load()))
-			tracker.SetInt("fallbackRemaining", int(e.tracker.fallbackRemaining.Load()))
-			tracker.SetInt64("costMs", finishCost)
-			tracker.Log(e.ctx)
-		}
+		e.scheduler.recordPluginQuery(pluginInstance.Metadata.Id, jobTimingStart, recovered)
+		recorded = true
 	}, func() {
 		util.GetLogger().Warn(e.ctx, fmt.Sprintf("<%s> query goroutine recovered, force finishing tracker", pluginInstance.GetName(e.ctx)))
 		if tracker := timetracking.New("plugin_job_recovered"); tracker.Enabled() {
@@ -296,7 +330,6 @@ func (e *queryExecution) runPluginJob(job queryPluginJob) {
 			tracker.SetRawString("plugin", pluginLabel)
 			tracker.Log(e.ctx)
 		}
-		e.tracker.finishJob(job.blocksFallback)
 	})
 }
 

@@ -78,7 +78,10 @@ func (s *WoxSettingStore) SetWithSync(key string, value interface{}, syncable bo
 				if !syncable {
 					return nil
 				}
-				return txStore.logOplog(key, value, cloudsync.OpUpsert)
+				if err := txStore.logOplog(key, value, cloudsync.OpUpsert); err != nil {
+					return err
+				}
+				return txStore.enqueueSharedHotkeyChange(key, value)
 			})
 		})
 	})

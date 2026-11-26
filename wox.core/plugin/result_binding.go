@@ -735,7 +735,7 @@ func (m *Manager) ExecuteResultBindingHotkey(ctx context.Context, binding settin
 	queryCtx := util.WithQueryIdContext(util.WithSessionContext(ctx, sessionID), queryID)
 	query := Query{Id: queryID, SessionId: sessionID, Type: QueryTypeInput}
 	m.fillResultBindingQueryEnv(queryCtx, &query)
-	m.resultStore.startQuery(query)
+	m.resultStore.startQuery(ctx, query)
 	queryCtx = m.resultStore.withQueryResultLifetime(queryCtx, sessionID, queryID)
 	// Silent restores can still register image tokens; release them with the temporary results.
 	defer m.resultStore.clearSession(sessionID)

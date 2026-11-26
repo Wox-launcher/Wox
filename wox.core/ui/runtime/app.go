@@ -16,5 +16,8 @@ func Call(fn func()) error { return window.Call(fn) }
 // Native callbacks can use it to defer teardown until their current dispatch returns.
 func Post(fn func()) error { return window.Post(fn) }
 
+// SetSystemWakeHandler routes native resume messages to the application.
+func SetSystemWakeHandler(handler func()) { window.SetSystemWakeHandler(handler) }
+
 // SetProtocolURLHandler installs the application-level handler and drains URLs received before startup finished.
 func SetProtocolURLHandler(handler func(string)) { window.SetProtocolURLHandler(handler) }

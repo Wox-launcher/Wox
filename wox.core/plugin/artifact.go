@@ -125,18 +125,18 @@ func ValidateStorePluginManifest(manifest StorePluginManifest) error {
 	return nil
 }
 
-// ValidateSingleFileHeaderMatchesManifest checks ID, runtime, and version agreement.
-func ValidateSingleFileHeaderMatchesManifest(header Metadata, manifest StorePluginManifest) error {
-	if !strings.EqualFold(header.Id, manifest.Id) {
-		return fmt.Errorf("single-file plugin header Id %s does not match store manifest Id %s", header.Id, manifest.Id)
+// validateArtifactMetadataMatchesManifest checks ID, runtime, and version agreement.
+func validateArtifactMetadataMatchesManifest(metadata Metadata, manifest StorePluginManifest) error {
+	if !strings.EqualFold(metadata.Id, manifest.Id) {
+		return fmt.Errorf("plugin metadata Id %s does not match store manifest Id %s", metadata.Id, manifest.Id)
 	}
-	if ConvertToRuntime(header.Runtime) != ConvertToRuntime(string(manifest.Runtime)) {
-		return fmt.Errorf("single-file plugin header Runtime %s does not match store manifest Runtime %s", header.Runtime, manifest.Runtime)
+	if ConvertToRuntime(metadata.Runtime) != ConvertToRuntime(string(manifest.Runtime)) {
+		return fmt.Errorf("plugin metadata Runtime %s does not match store manifest Runtime %s", metadata.Runtime, manifest.Runtime)
 	}
-	headerVersion, headerErr := semver.NewVersion(header.Version)
+	metadataVersion, metadataErr := semver.NewVersion(metadata.Version)
 	manifestVersion, manifestErr := semver.NewVersion(manifest.Version)
-	if headerErr != nil || manifestErr != nil || headerVersion == nil || manifestVersion == nil || !headerVersion.Equal(manifestVersion) {
-		return fmt.Errorf("single-file plugin header Version %s does not match store manifest Version %s", header.Version, manifest.Version)
+	if metadataErr != nil || manifestErr != nil || !metadataVersion.Equal(manifestVersion) {
+		return fmt.Errorf("plugin metadata Version %s does not match store manifest Version %s", metadata.Version, manifest.Version)
 	}
 	return nil
 }

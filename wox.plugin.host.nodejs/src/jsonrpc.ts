@@ -82,6 +82,12 @@ function normalizeQueryResponse(ctx: Context, pluginName: string, rawResponse: Q
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
 export async function handleRequestFromWox(ctx: Context, request: PluginJsonRpcRequest, ws: WebSocket): unknown {
+  if (request.Method === "ping") return true
+  if (request.Method === "cancelQuery") {
+    activeQueries.get(request.Params.RequestId)?.abort()
+    pluginInstances.get(request.PluginId)?.ResultActions.release(request.SessionId ?? "", request.QueryId ?? "")
+    return
+  }
   if (request.SessionId) ctx.Values.SessionId = request.SessionId
   if (request.QueryId) ctx.Values.QueryId = request.QueryId
   if (request.Method === "releaseQueryResults") {
@@ -102,7 +108,7 @@ export async function handleRequestFromWox(ctx: Context, request: PluginJsonRpcR
     case "init":
       return initPlugin(ctx, request, ws)
     case "query":
-      return query(ctx, request)
+      return runQuery(ctx, request)
     case "action":
       return action(ctx, request)
     case "formAction":
@@ -405,6 +411,30 @@ async function onLLMStream(ctx: Context, request: PluginJsonRpcRequest) {
   })
 }
 
+const activeQueries = new Map<string, AbortController>()
+const activeQuerySlots = new Set<string>()
+
+// Keep the slot occupied until the plugin settles, even if it ignores cancellation.
+async function runQuery(ctx: Context, request: PluginJsonRpcRequest) {
+  const key = JSON.stringify([request.PluginId, request.SessionId ?? request.Params.SessionId ?? ""])
+  // A cooperative abort may still be unwinding its promise from the preceding RPC.
+  if (activeQuerySlots.has(key)) await new Promise<void>(resolve => setImmediate(resolve))
+  if (activeQuerySlots.has(key)) return { Results: [], QuerySkipped: true }
+  const controller = new AbortController()
+  activeQueries.set(request.Id, controller)
+  activeQuerySlots.add(key)
+  ctx.Signal = controller.signal
+  try {
+    return await query(ctx, request)
+  } catch (error) {
+    if (!controller.signal.aborted) throw error
+    return { Results: [] }
+  } finally {
+    activeQueries.delete(request.Id)
+    activeQuerySlots.delete(key)
+  }
+}
+
 async function query(ctx: Context, request: PluginJsonRpcRequest) {
   const plugin = pluginInstances.get(request.PluginId)
   if (plugin === undefined || plugin === null) {
@@ -443,6 +473,7 @@ async function query(ctx: Context, request: PluginJsonRpcRequest) {
     callbacks.cache(result, false, ctx, plugin.API)
   })
   if (response.PluginPreview) plugin.ResultActions.stagePluginPreview(sessionId, queryId, `plugin-preview:${request.PluginId}`, response.PluginPreview)
+  if (ctx.Signal?.aborted) return { Results: [] }
 
   return response
 }

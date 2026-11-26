@@ -25,12 +25,12 @@ export class QueryActions {
 
   // Replace one result atomically, including removed actions and execute/form type changes.
   cache(result: { Id?: string; Actions?: ResultAction[]; Preview?: unknown }, preserveCallbacks = false, ctx?: Context, api?: PublicAPI, deferPreviewRelease = false): void {
-    if (!result.Id) result.Id = randomUUID()
     const preview = result.Preview as Preview | undefined
     if (!this.active) {
       preview?.[Symbol.for("wox.preview.binding")]?.release()
       return
     }
+    if (!result.Id) result.Id = randomUUID()
     if (preview !== undefined) {
       const previous = this.previews.get(result.Id)
       if (previous && (previous.id !== preview?.WoxViewID || (!preserveCallbacks && !preview?.OnWoxViewEvent))) {
@@ -126,7 +126,9 @@ export class ResultActions {
     const active = this.pluginPreviews.get(session) ?? []
     const binding = preview?.[Symbol.for("wox.preview.binding")]
     if (active.some(item => (binding && binding === item.preview.binding) || (preview?.WoxViewID === item.preview.id && preview?.OnWoxViewEvent === item.preview.callback))) return
-    this.find(session, query, result)?.stagePluginPreview(result, value)
+    const bucket = this.find(session, query, result)
+    if (bucket) bucket.stagePluginPreview(result, value)
+    else binding?.release()
   }
 
   // A shown document is promoted out of the query bucket until Core releases it.

@@ -269,6 +269,8 @@ type platformWindow struct {
 	webViewActionHotkey   string
 	inputHighSurrogate    uint16
 	inputComposing        bool
+	imeCompositionOpen    bool
+	imeEscape             imeEscapeGuard
 	pointerInside         bool
 	pointerPosition       Point
 	pointerScreen         Point
@@ -1331,6 +1333,13 @@ func windowProcedure(hwnd win.HWND, message uint32, wParam, lParam uintptr) uint
 	}
 
 	switch message {
+	case 0x0218: // WM_POWERBROADCAST
+		const resumeSuspend, resumeAutomatic = 0x0007, 0x0012
+		if wParam == resumeSuspend || wParam == resumeAutomatic {
+			if handler := systemWakeHandler.Load(); handler != nil && *handler != nil {
+				(*handler)()
+			}
+		}
 	case wmGetObject:
 		if result := windowsAccessibilityObject(uintptr(hwnd), wParam, lParam); result != 0 {
 			return result
@@ -1530,10 +1539,20 @@ func windowProcedure(hwnd win.HWND, message uint32, wParam, lParam uintptr) uint
 		window.emitPointer(PointerEvent{Kind: PointerScroll, Position: window.logicalPoint(position), Scroll: scroll, Modifiers: windowsKeyModifiers()})
 		return 0
 	case win.WM_KEYDOWN, win.WM_SYSKEYDOWN:
-		if window.emitKey(wParam, true, lParam&(1<<30) != 0) {
+		repeat := lParam&(1<<30) != 0
+		if wParam == win.VK_ESCAPE && window.imeEscape.consume(true, repeat, window.imeCompositionOpen, time.Now()) {
+			break // Let IMM handle the key without forwarding it to the launcher.
+		}
+		if wParam != win.VK_ESCAPE {
+			window.imeEscape.compositionEnded = time.Time{}
+		}
+		if window.emitKey(wParam, true, repeat) {
 			return 0
 		}
 	case win.WM_KEYUP, win.WM_SYSKEYUP:
+		if wParam == win.VK_ESCAPE && window.imeEscape.consume(false, false, false, time.Now()) {
+			break
+		}
 		if window.emitKey(wParam, false, false) {
 			return 0
 		}
@@ -1550,6 +1569,8 @@ func windowProcedure(hwnd win.HWND, message uint32, wParam, lParam uintptr) uint
 		}
 	case wmIMEStartComposition:
 		if window.textInputEnabled() {
+			window.imeCompositionOpen = true
+			window.imeEscape.compositionEnded = time.Time{}
 			window.inputComposing = true
 			window.updateIMECandidatePosition(hwnd)
 			return 0
@@ -1561,6 +1582,10 @@ func windowProcedure(hwnd win.HWND, message uint32, wParam, lParam uintptr) uint
 		}
 	case wmIMEEndComposition:
 		if window.textInputEnabled() {
+			if window.imeCompositionOpen && !window.imeEscape.held {
+				window.imeEscape.compositionEnded = time.Now()
+			}
+			window.imeCompositionOpen = false
 			window.endIMEComposition()
 			return 0
 		}
@@ -1598,6 +1623,9 @@ func windowProcedure(hwnd win.HWND, message uint32, wParam, lParam uintptr) uint
 		window.confirmActivation()
 		return 0
 	case win.WM_KILLFOCUS:
+		window.imeEscape = imeEscapeGuard{}
+		window.imeCompositionOpen = false
+		window.endIMEComposition()
 		window.handleBlur(win.HWND(wParam))
 		return 0
 	case win.WM_CLOSE:
@@ -1705,6 +1733,7 @@ func (w *platformWindow) emitCommittedText(text string) bool {
 		return false
 	}
 	w.inputComposing = false
+	w.imeCompositionOpen = false
 	return w.emitTextInput(TextInputCommit, text)
 }
 
@@ -1744,6 +1773,7 @@ func (w *platformWindow) handleIMEComposition(hwnd win.HWND, flags uintptr) bool
 	if flags&gcsCompositionString != 0 {
 		if text, ok := readIMEString(hwnd, gcsCompositionString); ok {
 			w.inputComposing = text != ""
+			w.imeCompositionOpen = w.imeCompositionOpen || w.inputComposing
 			handled = w.emitTextInput(TextInputCompose, text) || handled
 		}
 	}
@@ -2323,6 +2353,8 @@ func (w *platformWindow) showNative() (FocusEpoch, error) {
 	if w.renderer == nil {
 		return w.focus.epoch, errors.New("window is closed")
 	}
+	warmUtilityShow := !w.focus.visible && w.focus.epoch != 0 && w.options.Role == WindowRoleUtility &&
+		!w.options.Nonactivating && w.renderer.handle != nil
 	if w.renderer.handle == nil {
 		if err := w.renderer.recreate(); err != nil {
 			return w.focus.epoch, fmt.Errorf("restore renderer: %w", err)
@@ -2350,15 +2382,19 @@ func (w *platformWindow) showNative() (FocusEpoch, error) {
 	}
 	w.syncScaleFromNativeWindow()
 	var client win.RECT
+	var frameID uint64
 	if win.GetClientRect(w.hwnd, &client) {
 		// A monitor move can recreate the swap chain before this call. Render every
 		// window before DWM exposes it so the launcher does not reveal an empty frame.
-		w.drawFrame(w.hwnd, client)
+		frameID = w.drawFrame(w.hwnd, client)
 	}
-	if w.options.Role == WindowRoleScreenshot && dwmFlush.Find() == nil {
+	if (warmUtilityShow || w.options.Role == WindowRoleScreenshot) && dwmFlush.Find() == nil {
 		// Present1 only queues the first frame. Waiting for DWM prevents the hidden
 		// composition surface from becoming visible one refresh before its content.
-		_, _, _ = dwmFlush.Call()
+		result, _, _ := dwmFlush.Call()
+		if warmUtilityShow && int32(result) >= 0 {
+			w.options.frameMetrics.markPreparedWindowShow(frameID)
+		}
 	}
 	if w.options.Nonactivating {
 		win.ShowWindow(w.hwnd, win.SW_SHOWNOACTIVATE)
@@ -2372,6 +2408,9 @@ func (w *platformWindow) showNative() (FocusEpoch, error) {
 		win.SetWindowPos(w.hwnd, windowsHWNDTopmost, 0, 0, 0, 0, windowsTopmostShowFlags(w.options.Nonactivating))
 	}
 	if w.isWithinFocusDomain(win.GetForegroundWindow()) {
+		if !w.options.Nonactivating && !w.isWithinFocusDomain(win.GetFocus()) {
+			win.SetFocus(w.hwnd)
+		}
 		w.confirmActivation()
 	} else if !w.options.Nonactivating {
 		// Re-Show of an already visible launcher after Settings close often skips
@@ -2655,14 +2694,14 @@ func activateWindow(hwnd win.HWND) bool {
 }
 
 // drawFrame rebuilds the minimal display list only when Windows requests a paint.
-func (w *platformWindow) drawFrame(hwnd win.HWND, paint win.RECT) {
+func (w *platformWindow) drawFrame(hwnd win.HWND, paint win.RECT) uint64 {
 	if w.renderer == nil || w.renderer.handle == nil || win.IsIconic(hwnd) {
-		return
+		return 0
 	}
 
 	var client win.RECT
 	if !win.GetClientRect(hwnd, &client) {
-		return
+		return 0
 	}
 	pixelSize := PixelSize{
 		Width:  int(client.Right - client.Left),
@@ -2689,11 +2728,13 @@ func (w *platformWindow) drawFrame(hwnd win.HWND, paint win.RECT) {
 	if err != nil {
 		w.setRunError(err)
 		win.PostMessage(hwnd, windowForceCloseMessage, 0, 0)
+		return 0
 	} else if w.options.PassThroughTransparent {
 		if err := w.updateTransparentInputRegion(&displayList, pixelSize, scale); err != nil {
 			util.GetLogger().Warn(context.Background(), fmt.Sprintf("update transparent input region: %v", err))
 		}
 	}
+	return displayList.frameID
 }
 
 // recoverWindowsRenderer replaces device-bound resources after a recoverable GPU failure.
@@ -2714,15 +2755,13 @@ func (w *platformWindow) recoverWindowsRenderer(cause error) error {
 // buildWindowsDisplayList rebuilds a frame so device recovery can retry with full damage.
 func (w *platformWindow) buildWindowsDisplayList(pixelSize PixelSize, scale float32, damage Rect) DisplayList {
 	displayList := DisplayList{}
+	size := Size{Width: float32(pixelSize.Width) / scale, Height: float32(pixelSize.Height) / scale}
 	if w.options.frameMetrics != nil {
-		displayList.frameID = w.options.frameMetrics.beginFrame()
+		displayList.frameID = w.options.frameMetrics.beginFrame(size)
 	}
 	if w.options.OnFrame != nil {
 		w.options.OnFrame(&displayList, FrameInfo{
-			Size: Size{
-				Width:  float32(pixelSize.Width) / scale,
-				Height: float32(pixelSize.Height) / scale,
-			},
+			Size:      size,
 			PixelSize: pixelSize,
 			Scale:     scale,
 			Damage:    damage,
@@ -2734,10 +2773,15 @@ func (w *platformWindow) buildWindowsDisplayList(pixelSize PixelSize, scale floa
 func (w *platformWindow) renderWindowsDisplayList(displayList *DisplayList, scale float32) error {
 	nativeStart := time.Now()
 	err := w.renderer.render(displayList, scale)
+	presentCost := w.renderer.lastPresentCost
+	encodeCost := time.Since(nativeStart)
+	if presentCost >= 0 {
+		encodeCost = max(0, encodeCost-presentCost)
+	}
 	if w.options.frameMetrics != nil {
 		resources := w.renderer.resourceStats()
 		w.options.frameMetrics.recordRendererResources(displayList.frameID, resources)
-		w.options.frameMetrics.finishNativeFrame(displayList.frameID, time.Since(nativeStart), -1, err == nil)
+		w.options.frameMetrics.finishNativeFrame(displayList.frameID, encodeCost, presentCost, err == nil)
 	}
 	return err
 }

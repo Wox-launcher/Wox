@@ -140,6 +140,12 @@ type FileSearchPlugin struct {
 	rootsSyncGeneration      atomic.Int64
 }
 
+func (c *FileSearchPlugin) CheckAfterWake(ctx context.Context) {
+	if c.engine != nil {
+		c.engine.CheckAfterWake(ctx)
+	}
+}
+
 // ReleasePreparedSearchText uses the shared long-hide lifecycle to return clean
 // index pages. Query columns stay mapped and incur no heap rebuild on next use.
 func (c *FileSearchPlugin) ReleasePreparedSearchText() {
@@ -1010,6 +1016,10 @@ func (c *FileSearchPlugin) Query(ctx context.Context, query plugin.Query) plugin
 	searchStartedAt := util.GetSystemTimestamp()
 	selectedType := selectedFileSearchType(query)
 	results, err := c.searchFileQuery(ctx, query, selectedType)
+	// A superseded search can finish after the next keystroke has started a query.
+	if ctx.Err() != nil || errors.Is(err, context.Canceled) {
+		return plugin.QueryResponse{}
+	}
 	diagnostics.searchElapsedMs = util.GetSystemTimestamp() - searchStartedAt
 	if err != nil {
 		c.logQueryDiagnostics(ctx, query.Search, diagnostics, 0, util.GetSystemTimestamp()-queryStartedAt)

@@ -9,6 +9,7 @@ import (
 
 	"wox/test/automationdriver"
 	"wox/test/smoke"
+	"wox/test/smokeperf"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 )
@@ -41,7 +42,7 @@ func Test004ChatStreamWork(t *testing.T) {
 				time.Sleep(120 * time.Millisecond)
 			}
 		}
-		streamSamples := collectPresentedSamples(t, ctx, client)
+		streamSamples := collectPresentedSamples(t, ctx, client, smokeperf.ScenarioChatActive)
 		assertFrameWork(t, streamSamples)
 		assertUnexpectedDroppedFramesAtMost(t, ctx, client, 0)
 
@@ -53,8 +54,8 @@ func Test004ChatStreamWork(t *testing.T) {
 			t.Fatalf("wait for chat stream completion: %v", err)
 		}
 		waitForSnapshotQuiet(t, ctx, client, 350*time.Millisecond)
-		steadySamples := collectPresentedSamples(t, ctx, client)
-		assertSettledWork(t, steadySamples)
+		steadySamples := collectPresentedSamples(t, ctx, client, smokeperf.ScenarioChatSettled)
+		assertSettledWork(t, smokeperf.ScenarioChatSettled, steadySamples)
 		assertUnexpectedDroppedFramesAtMost(t, ctx, client, 0)
 
 		snapshot, err := client.Snapshot(ctx)
@@ -72,7 +73,11 @@ func Test004ChatStreamWork(t *testing.T) {
 			}); err != nil {
 				t.Fatalf("scroll historical messages: %v", err)
 			}
-			assertSettledWork(t, waitForPresentedSamples(t, ctx, client))
+			scenario := smokeperf.ScenarioChatScrollUp
+			if delta > 0 {
+				scenario = smokeperf.ScenarioChatScrollDown
+			}
+			assertSettledWork(t, scenario, waitForPresentedSamples(t, ctx, client, scenario))
 		}
 	})
 }

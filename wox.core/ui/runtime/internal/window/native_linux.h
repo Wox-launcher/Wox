@@ -10,6 +10,7 @@ typedef struct WoxLinuxWindow WoxLinuxWindow;
 int32_t wox_linux_webview_evaluate(WoxLinuxWindow *target, const char *script, uint64_t callback);
 uintptr_t wox_linux_window_display(WoxLinuxWindow *window);
 uintptr_t wox_linux_window_handle(WoxLinuxWindow *window);
+int32_t wox_linux_window_software_rendering(WoxLinuxWindow *window);
 
 int32_t wox_linux_enable_software_rendering(void);
 int32_t wox_linux_run(uintptr_t context);

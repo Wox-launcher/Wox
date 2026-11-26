@@ -9,8 +9,8 @@ import (
 	"strings"
 
 	"wox/ai"
+	"wox/cloudsync"
 	"wox/common"
-	corehotkey "wox/hotkey"
 	"wox/i18n"
 	"wox/plugin"
 	pluginhost "wox/plugin/host"
@@ -91,6 +91,7 @@ func (s *CoreServices) GeneralSettings(ctx context.Context, sessionID string) (c
 		CustomNodejsPath:                   woxSetting.CustomNodejsPath.Get(),
 		CloudSyncServerURL:                 woxSetting.CloudSyncServerUrl.Get(),
 		CloudSyncDisabledPlugins:           append([]string(nil), woxSetting.CloudSyncDisabledPlugins.Get()...),
+		CloudSyncCrossPlatformHotkeys:      woxSetting.CloudSyncCrossPlatformHotkeys.Get(),
 		HiddenPluginStores:                 append([]string(nil), woxSetting.HiddenPluginStores.Get()...),
 		AppWidth:                           woxSetting.AppWidth.Get(),
 		MaxResultCount:                     woxSetting.MaxResultCount.Get(),
@@ -171,53 +172,22 @@ func (s *CoreServices) UpdateGeneralSetting(ctx context.Context, sessionID strin
 	floatValue, _ := strconv.ParseFloat(value, 64)
 	updatedValue := value
 
-	// Register hotkeys before persistence so a failed system bind cannot leave settings ahead of the OS state.
-	switch key {
-	case "MainHotkey":
-		if value != woxSetting.MainHotkey.Get() {
-			if err := GetUIManager().RegisterMainHotkey(ctx, value); err != nil {
-				return err
-			}
-		}
-		woxSetting.MainHotkey.Set(value)
-		return privacy.RefreshPreservedSettings(woxSetting)
-	case "SelectionHotkey":
-		if value != woxSetting.SelectionHotkey.Get() {
-			if err := GetUIManager().RegisterSelectionHotkey(ctx, value); err != nil {
-				return err
-			}
-		}
-		woxSetting.SelectionHotkey.Set(value)
-		return privacy.RefreshPreservedSettings(woxSetting)
-	case "RefinementHotkey":
-		if err := woxSetting.RefinementHotkey.Set(value); err != nil {
-			return err
-		}
-		return privacy.RefreshPreservedSettings(woxSetting)
-	case "ActionPanelHotkey":
-		woxSetting.ActionPanelHotkey.Set(value)
-		return privacy.RefreshPreservedSettings(woxSetting)
-	case "QueryHotkeys":
-		queryHotkeys, err := parseQueryHotkeysSettingValue(value)
+	if cloudsync.SharedHotkeyKey(key) != "" {
+		return cloudsync.WithLocalSyncMutation(func() error {
+			return updateLocalHotkeySetting(ctx, woxSetting, key, value)
+		})
+	}
+	if key == cloudsync.CrossPlatformHotkeysSetting {
+		enabled, err := strconv.ParseBool(value)
 		if err != nil {
 			return err
 		}
-		if err := plugin.ValidateQueryHotkeysAgainstBindings(queryHotkeys, resultBindingsFromWoxSetting(woxSetting)); err != nil {
-			return err
-		}
-		config := corehotkey.WoxConfigFromSetting(woxSetting)
-		config.QueryHotkeys = queryHotkeys
-		if err := GetUIManager().registerWoxHotkeys(ctx, config, true); err != nil {
-			return err
-		}
-		woxSetting.QueryHotkeys.Set(queryHotkeys)
-		return nil
-	case "ResultBindings":
-		bindings, err := parseResultBindingsSettingValue(value)
-		if err != nil {
-			return err
-		}
-		return GetUIManager().applyResultBindings(ctx, bindings)
+		return cloudsync.WithLocalSyncMutation(func() error {
+			if enabled == woxSetting.CloudSyncCrossPlatformHotkeys.Get() {
+				return nil
+			}
+			return woxSetting.CloudSyncCrossPlatformHotkeys.Set(enabled)
+		})
 	}
 
 	switch key {

@@ -75,25 +75,28 @@ type QueryResultCache struct {
 type QueryResultSet struct {
 	lifetime *queryResultLifetime
 	// storeMu makes alias precedence atomic when plugin responses arrive concurrently.
-	storeMu   sync.Mutex
-	Query     Query
-	StartedAt int64
-	Results   *util.HashMap[string, *QueryResultCache]
+	storeMu         sync.Mutex
+	Query           Query
+	StartedAt       int64
+	Results         *util.HashMap[string, *QueryResultCache]
+	timedOutPlugins *util.HashMap[string, bool]
+	queryDone       <-chan struct{}
 }
 
 // newQueryResultSet creates the per-query result map and records its retention age.
 func newQueryResultSet(query Query) *QueryResultSet {
 	set := &QueryResultSet{
-		lifetime:  &queryResultLifetime{},
-		Query:     query,
-		StartedAt: util.GetSystemTimestamp(),
-		Results:   util.NewHashMap[string, *QueryResultCache](),
+		lifetime:        &queryResultLifetime{},
+		Query:           query,
+		StartedAt:       util.GetSystemTimestamp(),
+		Results:         util.NewHashMap[string, *QueryResultCache](),
+		timedOutPlugins: util.NewHashMap[string, bool](),
 	}
 	return set
 }
 
 // startQuery publishes a separate result set before expiring older image tokens.
-func (s *queryResultStore) startQuery(query Query) {
+func (s *queryResultStore) startQuery(ctx context.Context, query Query) {
 	if query.Id == "" {
 		return
 	}
@@ -106,6 +109,9 @@ func (s *queryResultStore) startQuery(query Query) {
 			set.lifetime.release()
 		}
 	}()
+	if ctx.Err() != nil {
+		return
+	}
 	sessionQueries, _ := s.sessions.LoadOrStore(query.SessionId, util.NewHashMap[string, *QueryResultSet]())
 	if previous, ok := sessionQueries.Load(query.Id); ok {
 		released = append(released, previous)
@@ -115,7 +121,9 @@ func (s *queryResultStore) startQuery(query Query) {
 	// requests and plugin responses are handled concurrently.
 	// Store every query under its own query id so a late old query cannot erase
 	// the result cache required to send the newer query's final response.
-	sessionQueries.Store(query.Id, newQueryResultSet(query))
+	set := newQueryResultSet(query)
+	set.queryDone = ctx.Done()
+	sessionQueries.Store(query.Id, set)
 	s.clearLazyIconsExcept(query.SessionId, query.Id)
 	released = append(released, s.pruneQueries(sessionQueries, query.Id)...)
 }

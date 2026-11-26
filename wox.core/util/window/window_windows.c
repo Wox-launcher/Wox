@@ -882,7 +882,7 @@ int isBrowseForFolderDialogByWindowId(const char *windowId, int pid)
     return woxIsBrowseForFolderWindow(hwnd);
 }
 
-static int activateWindowForManagementHwnd(HWND hwnd);
+static int activateWindowForManagementHwnd(HWND hwnd, BOOL confirmForeground);
 
 // Resolves the captured dialog HWND and rejects stale or cross-process handles.
 static HWND fileDialogWindowById(const char *windowId, int pid)
@@ -2266,7 +2266,7 @@ static int navigateFileDialogWindow(HWND hwnd, const char *path, FileDialogNavig
         return ok;
     }
 
-    if (!activateWindowForManagementHwnd(hwnd))
+    if (!activateWindowForManagementHwnd(hwnd, TRUE))
     {
         if (diagnostic)
             diagnostic->totalElapsedMs = GetTickCount64() - startedAt;
@@ -2351,7 +2351,7 @@ static int setFileDialogFileName(HWND hwnd, const char *path)
 		return 0;
 	}
 
-	if (!activateWindowForManagementHwnd(hwnd))
+	if (!activateWindowForManagementHwnd(hwnd, TRUE))
 	{
 		return 0;
 	}
@@ -2438,8 +2438,8 @@ typedef struct
     HWND foundWindow;
 } FindWindowData;
 
-// Raises one exact top-level window and reports whether Windows accepted it as foreground.
-static int activateWindowForManagementHwnd(HWND hwnd)
+// Raises one exact top-level window. A foreground request can complete asynchronously.
+static int activateWindowForManagementHwnd(HWND hwnd, BOOL confirmForeground)
 {
     if (!hwnd || !IsWindow(hwnd))
     {
@@ -2459,7 +2459,7 @@ static int activateWindowForManagementHwnd(HWND hwnd)
     WoxWindowThreadInputAttachment attachment = wox_window_attach_thread_input((uintptr_t)hwnd, WOX_THREAD_INPUT_CURRENT_TO_QUEUES);
 
     SetWindowPos(hwnd, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
-    SetForegroundWindow(hwnd);
+    BOOL requested = SetForegroundWindow(hwnd);
     BringWindowToTop(hwnd);
     SetActiveWindow(hwnd);
     // Activation lets the application restore its editor focus. Focusing the
@@ -2468,7 +2468,8 @@ static int activateWindowForManagementHwnd(HWND hwnd)
     wox_window_detach_thread_input(&attachment);
 
     HWND actualForeground = GetForegroundWindow();
-    return actualForeground && rootWindowForManagement(actualForeground) == hwnd;
+    return (!confirmForeground && requested) ||
+           (actualForeground && rootWindowForManagement(actualForeground) == hwnd);
 }
 
 BOOL CALLBACK EnumWindowsProc(HWND hwnd, LPARAM lParam)
@@ -2507,7 +2508,7 @@ BOOL CALLBACK EnumWindowsProc(HWND hwnd, LPARAM lParam)
     return TRUE; // Continue enumeration
 }
 
-int activateWindowByPid(int pid)
+static int activateWindowByPidWithConfirmation(int pid, BOOL confirmForeground)
 {
     if (pid <= 0)
     {
@@ -2526,13 +2527,36 @@ int activateWindowByPid(int pid)
         return 0; // Window not found
     }
 
-    return activateWindowForManagementHwnd(data.foundWindow);
+    return activateWindowForManagementHwnd(data.foundWindow, confirmForeground);
+}
+
+int activateWindowByPid(int pid)
+{
+    return activateWindowByPidWithConfirmation(pid, TRUE);
+}
+
+static int activateWindowForManagementWithConfirmation(const char *windowId, int pid, BOOL confirmForeground)
+{
+    if (!windowId || !*windowId)
+    {
+        return activateWindowByPidWithConfirmation(pid, confirmForeground);
+    }
+    HWND hwnd = parseWindowIdForManagement(windowId);
+    if (!isManageableWindowForManagement(hwnd) || (pid > 0 && getWindowPidForManagement(hwnd) != (DWORD)pid))
+    {
+        return 0;
+    }
+    return activateWindowForManagementHwnd(hwnd, confirmForeground);
 }
 
 int activateWindowForManagement(const char *windowId, int pid)
 {
-    HWND hwnd = resolveWindowForManagement(windowId, pid);
-    return activateWindowForManagementHwnd(hwnd);
+    return activateWindowForManagementWithConfirmation(windowId, pid, TRUE);
+}
+
+int requestCapturedWindowActivation(const char *windowId, int pid)
+{
+    return activateWindowForManagementWithConfirmation(windowId, pid, FALSE);
 }
 
 typedef struct

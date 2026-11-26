@@ -46,22 +46,24 @@ type CloudSyncDependencies struct {
 	ExclusionProvider CloudSyncPluginExclusionProvider
 	SettingReloader   CloudSyncSettingReloader
 	HistoryStore      CloudSyncHistoryStore
+	ConflictPreserver ConflictPreserver
 	AutoSyncAllowed   func(ctx context.Context) bool
 }
 
 type CloudSyncManager struct {
-	config           CloudSyncConfig
-	client           CloudSyncClient
-	crypto           CloudSyncCrypto
-	deviceProvider   CloudSyncDeviceProvider
-	applier          CloudSyncApplier
-	oplogStore       CloudSyncOplogStore
-	snapshotter      CloudSyncLocalSnapshotter
-	progressNotifier CloudSyncProgressNotifier
-	exclusions       CloudSyncPluginExclusionProvider
-	settingReloader  CloudSyncSettingReloader
-	historyStore     CloudSyncHistoryStore
-	autoSyncAllowed  func(ctx context.Context) bool
+	config            CloudSyncConfig
+	client            CloudSyncClient
+	crypto            CloudSyncCrypto
+	deviceProvider    CloudSyncDeviceProvider
+	applier           CloudSyncApplier
+	oplogStore        CloudSyncOplogStore
+	snapshotter       CloudSyncLocalSnapshotter
+	progressNotifier  CloudSyncProgressNotifier
+	exclusions        CloudSyncPluginExclusionProvider
+	settingReloader   CloudSyncSettingReloader
+	historyStore      CloudSyncHistoryStore
+	conflictPreserver ConflictPreserver
+	autoSyncAllowed   func(ctx context.Context) bool
 
 	mu         sync.Mutex
 	pushMu     sync.Mutex
@@ -77,19 +79,20 @@ type CloudSyncManager struct {
 func NewCloudSyncManager(config CloudSyncConfig, deps CloudSyncDependencies) *CloudSyncManager {
 	normalized := normalizeCloudSyncConfig(config)
 	return &CloudSyncManager{
-		config:           normalized,
-		client:           deps.Client,
-		crypto:           deps.Crypto,
-		deviceProvider:   deps.DeviceProvider,
-		applier:          deps.Applier,
-		oplogStore:       deps.OplogStore,
-		snapshotter:      deps.Snapshotter,
-		progressNotifier: deps.ProgressNotifier,
-		exclusions:       deps.ExclusionProvider,
-		rand:             rand.New(rand.NewSource(time.Now().UnixNano())),
-		settingReloader:  deps.SettingReloader,
-		historyStore:     deps.HistoryStore,
-		autoSyncAllowed:  deps.AutoSyncAllowed,
+		config:            normalized,
+		client:            deps.Client,
+		crypto:            deps.Crypto,
+		deviceProvider:    deps.DeviceProvider,
+		applier:           deps.Applier,
+		oplogStore:        deps.OplogStore,
+		snapshotter:       deps.Snapshotter,
+		progressNotifier:  deps.ProgressNotifier,
+		exclusions:        deps.ExclusionProvider,
+		rand:              rand.New(rand.NewSource(time.Now().UnixNano())),
+		settingReloader:   deps.SettingReloader,
+		historyStore:      deps.HistoryStore,
+		conflictPreserver: deps.ConflictPreserver,
+		autoSyncAllowed:   deps.AutoSyncAllowed,
 	}
 }
 
@@ -608,6 +611,7 @@ func (m *CloudSyncManager) RestoreSnapshot(ctx context.Context) error {
 	cursor := ""
 	defer m.clearProgress(CloudSyncProgressOperationRestore)
 	restored := 0
+	var deferredHotkeys []CloudSyncRecord
 	m.setProgress(CloudSyncProgress{Operation: CloudSyncProgressOperationRestore, Current: restored})
 	for {
 		if ctx.Err() != nil {
@@ -624,7 +628,15 @@ func (m *CloudSyncManager) RestoreSnapshot(ctx context.Context) error {
 		}
 		if len(resp.Records) > 0 {
 			progressBase := restored
-			result := m.applyRecordsWithDetails(ctx, resp.Records, &cloudSyncApplyProgress{
+			records := make([]CloudSyncRecord, 0, len(resp.Records))
+			for _, record := range resp.Records {
+				if isHotkeySyncRecord(record) {
+					deferredHotkeys = append(deferredHotkeys, record)
+				} else {
+					records = append(records, record)
+				}
+			}
+			result := m.applyRecordsWithDetails(ctx, records, &cloudSyncApplyProgress{
 				Operation: CloudSyncProgressOperationRestore,
 				Base:      progressBase,
 				Total:     0,
@@ -645,9 +657,14 @@ func (m *CloudSyncManager) RestoreSnapshot(ctx context.Context) error {
 			break
 		}
 	}
-
 	if err := ctx.Err(); err != nil {
 		return err
+	}
+	// Snapshot pages may carry shortcuts before the account switch.
+	if len(deferredHotkeys) > 0 {
+		if result := m.applyRecordsWithDetails(ctx, deferredHotkeys, nil, true); result.restoreErr != nil {
+			return fmt.Errorf("failed to apply remote shortcuts: %w", result.restoreErr)
+		}
 	}
 	_, err = UpdateCloudSyncState(ctx, func(s *database.CloudSyncState) {
 		s.LastPullTs = util.GetSystemTimestamp()
@@ -714,8 +731,13 @@ func (r *cloudSyncApplyRecordsResult) addFailed(record CloudSyncRecord, err erro
 
 // applyUnderSyncMutation compares, applies, and retires conflicting oplogs while holding
 // the sync lock. A local write either happens before the comparison or after cleanup.
-func (m *CloudSyncManager) applyUnderSyncMutation(apply func() error, record CloudSyncRecord, restore bool) (skipped bool, localTs int64, applyErr error, noteErr error) {
+func (m *CloudSyncManager) applyUnderSyncMutation(ctx context.Context, apply func() error, record CloudSyncRecord, raw string, restore bool) (skipped bool, localTs int64, applyErr error, noteErr error) {
+	var notify func()
 	_ = WithLocalSyncMutation(func() error {
+		if !m.shouldApplyHotkeyRecord(record) {
+			applyErr = errSkippedHotkeyPolicy
+			return nil
+		}
 		if !restore {
 			var older bool
 			older, localTs = remoteChangeIsOlder(record)
@@ -729,13 +751,24 @@ func (m *CloudSyncManager) applyUnderSyncMutation(apply func() error, record Clo
 			noteErr = err
 			return nil
 		}
+		if m.conflictPreserver != nil {
+			if conflict, found := findConflict(record, raw, preexisting); found {
+				notify, noteErr = m.conflictPreserver.PreserveConflict(ctx, conflict)
+				if noteErr != nil {
+					return nil
+				}
+			}
+		}
 		applyErr = apply()
-		if applyErr != nil {
+		if applyErr != nil && !errors.Is(applyErr, ErrSyncedHotkeyUnavailable) {
 			return nil
 		}
 		noteErr = noteRemoteChangeForApply(record, restore, preexisting)
 		return nil
 	})
+	if notify != nil {
+		notify()
+	}
 	return skipped, localTs, applyErr, noteErr
 }
 
@@ -789,13 +822,13 @@ func (m *CloudSyncManager) deliverDeferredPluginSettingNotification(ctx context.
 // finishRemoteApply runs one record through compare, apply, and oplog cleanup.
 // applied is false when the remote change lost last-write-wins or the value itself failed.
 // lockAroundApply is false for install records so the download does not hold the sync lock.
-func (m *CloudSyncManager) finishRemoteApply(ctx context.Context, result *cloudSyncApplyRecordsResult, record CloudSyncRecord, restore bool, blocksRestore bool, lockAroundApply bool, apply func() error) (halt bool, applied bool) {
+func (m *CloudSyncManager) finishRemoteApply(ctx context.Context, result *cloudSyncApplyRecordsResult, record CloudSyncRecord, raw string, restore bool, blocksRestore bool, lockAroundApply bool, apply func() error) (halt bool, applied bool) {
 	var skipped bool
 	var localTs int64
 	var applyErr error
 	var noteErr error
 	if lockAroundApply {
-		skipped, localTs, applyErr, noteErr = m.applyUnderSyncMutation(apply, record, restore)
+		skipped, localTs, applyErr, noteErr = m.applyUnderSyncMutation(ctx, apply, record, raw, restore)
 	} else {
 		skipped, localTs, applyErr, noteErr = m.applyInstallRecord(apply, record, restore)
 	}
@@ -804,14 +837,26 @@ func (m *CloudSyncManager) finishRemoteApply(ctx context.Context, result *cloudS
 		result.addSucceeded(record)
 		return false, false
 	}
-	if applyErr != nil {
-		result.addFailed(record, applyErr, blocksRestore)
-		return false, false
-	}
 	if noteErr != nil {
 		result.addFailed(record, noteErr, true)
 		result.haltErr = noteErr
 		return true, false
+	}
+	if applyErr != nil {
+		if errors.Is(applyErr, errSkippedHotkeyPolicy) {
+			return false, false
+		}
+		if errors.Is(applyErr, ErrSkippedUnsupportedOS) {
+			result.Details = append(result.Details, cloudSyncHistoryDetailFromRecord(record, CloudSyncHistoryStatusSkippedUnsupportedOS, ""))
+			return false, false
+		}
+		if errors.Is(applyErr, ErrSyncedHotkeyUnavailable) {
+			result.Succeeded++
+			result.Details = append(result.Details, cloudSyncHistoryDetailFromRecord(record, CloudSyncHistoryStatusHotkeyUnavailable, ""))
+			return false, true
+		}
+		result.addFailed(record, applyErr, blocksRestore)
+		return false, false
 	}
 	result.addSucceeded(record)
 	return false, true
@@ -832,7 +877,7 @@ func (m *CloudSyncManager) applyRecordsWithDetails(ctx context.Context, records 
 	themeSettingChanged := false
 	result := cloudSyncApplyRecordsResult{}
 records:
-	for index, record := range records {
+	for index, record := range orderHotkeyPolicy(records) {
 		if progress != nil {
 			// Include the current item in the count so long installs still show movement.
 			m.setProgressFromRecord(progress.Operation, record, progress.Base+index+1, progress.Total)
@@ -846,7 +891,7 @@ records:
 				continue
 			}
 		}
-		if !isSyncRecordForCurrentPlatform(record) {
+		if !isSyncRecordForCurrentPlatform(record) || !m.shouldApplyHotkeyRecord(record) {
 			continue
 		}
 
@@ -871,7 +916,7 @@ records:
 		switch record.EntityType {
 		case EntityWoxSetting:
 			willChangeCurrentTheme := themeSettingWillChange(record, rawValue)
-			halt, applied := m.finishRemoteApply(ctx, &result, record, restore, true, true, func() error {
+			halt, applied := m.finishRemoteApply(ctx, &result, record, rawValue, restore, true, true, func() error {
 				return m.applier.ApplyWoxSetting(ctx, record.Key, record.Op, rawValue)
 			})
 			if halt {
@@ -883,7 +928,7 @@ records:
 			appliedWoxSetting = true
 			themeSettingChanged = themeSettingChanged || willChangeCurrentTheme
 		case EntityPluginSetting:
-			halt, applied := m.finishRemoteApply(ctx, &result, record, restore, true, true, func() error {
+			halt, applied := m.finishRemoteApply(ctx, &result, record, rawValue, restore, true, true, func() error {
 				return m.applier.ApplyPluginSetting(ctx, record.PluginID, record.Key, record.Op, rawValue)
 			})
 			if halt {
@@ -902,7 +947,7 @@ records:
 			}
 			m.deliverDeferredPluginSettingNotification(ctx, record.PluginID, record.Key, notifyValue)
 		case EntityInstalledPlugin:
-			halt, applied := m.finishRemoteApply(ctx, &result, record, restore, record.Op != OpUpsert, false, func() error {
+			halt, applied := m.finishRemoteApply(ctx, &result, record, rawValue, restore, record.Op != OpUpsert, false, func() error {
 				return m.applier.ApplyInstalledPlugin(ctx, record.Key, record.Op, rawValue)
 			})
 			if halt {
@@ -913,7 +958,7 @@ records:
 			}
 			appliedInstalledPlugin = true
 		case EntityInstalledTheme:
-			halt, applied := m.finishRemoteApply(ctx, &result, record, restore, record.Op != OpUpsert, false, func() error {
+			halt, applied := m.finishRemoteApply(ctx, &result, record, rawValue, restore, record.Op != OpUpsert, false, func() error {
 				return m.applier.ApplyInstalledTheme(ctx, record.Key, record.Op, rawValue)
 			})
 			if halt {

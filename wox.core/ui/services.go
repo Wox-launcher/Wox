@@ -14,6 +14,8 @@ import (
 	"wox/updater"
 	"wox/util"
 	"wox/util/window"
+
+	"github.com/google/uuid"
 )
 
 // CoreServices implements the typed services consumed by the embedded UI.
@@ -158,12 +160,10 @@ func (s *CoreServices) Hidden(ctx context.Context, sessionID string) error {
 // RestoreActiveWindow reactivates the exact source window captured for a transient launcher.
 func (s *CoreServices) RestoreActiveWindow(_ context.Context, _ string, snapshot common.ActiveWindowSnapshot) error {
 	if snapshot.WindowId != "" {
-		managedWindow, err := window.GetManagedWindow(snapshot.WindowId, snapshot.Pid, snapshot.Name)
-		if err == nil && window.ActivateWindow(managedWindow) {
+		if window.ActivateWindow(window.ManagedWindow{Id: snapshot.WindowId, Pid: snapshot.Pid}) {
 			return nil
 		}
-	}
-	if snapshot.Pid > 0 && window.ActivateWindowByPid(snapshot.Pid) {
+	} else if snapshot.Pid > 0 && window.ActivateWindowByPid(snapshot.Pid) {
 		return nil
 	}
 	return fmt.Errorf("source window could not be activated: windowId=%q pid=%d", snapshot.WindowId, snapshot.Pid)
@@ -205,8 +205,7 @@ func (s *CoreServices) StartQuery(ctx context.Context, request contract.QueryReq
 	if request.SessionID == "" || request.Query.QueryId == "" {
 		return errors.New("query session and query id are required")
 	}
-	ctx = util.WithQueryIdContext(uiServiceContext(ctx, request.SessionID), request.Query.QueryId)
-	plugin.GetPluginManager().BeginSessionQuery(request.SessionID, request.Query.QueryId)
+	ctx = s.BeginSessionQuery(ctx, request.SessionID, request.Query.QueryId)
 	util.Go(ctx, "handle typed UI query", func() {
 		runUIQuery(ctx, request, view)
 	})
@@ -216,6 +215,9 @@ func (s *CoreServices) StartQuery(ctx context.Context, request contract.QueryReq
 // QueryMRU restores typed results for the current launcher session.
 func (s *CoreServices) QueryMRU(ctx context.Context, sessionID string, queryID string) ([]plugin.QueryResultUI, error) {
 	ctx = util.WithQueryIdContext(uiServiceContext(ctx, sessionID), queryID)
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
 	results := plugin.GetPluginManager().QueryMRU(ctx, sessionID, queryID)
 	logger.Info(ctx, fmt.Sprintf("found %d MRU results from UI", len(results)))
 	return results, nil
@@ -331,7 +333,11 @@ func (s *CoreServices) SelectedResultChanged(ctx context.Context, sessionID, que
 	plugin.GetPluginManager().SelectResultContext(uiServiceContext(ctx, sessionID), sessionID, queryID, resultID)
 }
 
-// BeginSessionQuery invalidates stale results before asynchronous MRU restoration starts.
-func (s *CoreServices) BeginSessionQuery(_ context.Context, sessionID, queryID string) {
-	plugin.GetPluginManager().BeginSessionQuery(sessionID, queryID)
+// BeginSessionQuery invalidates stale results before background query work starts.
+func (s *CoreServices) BeginSessionQuery(ctx context.Context, sessionID, queryID string) context.Context {
+	if ctx != nil && util.GetContextTraceId(ctx) == "" {
+		ctx = context.WithValue(ctx, util.ContextKeyTraceId, uuid.NewString())
+	}
+	ctx = util.WithQueryIdContext(uiServiceContext(ctx, sessionID), queryID)
+	return GetUIManager().replaceSessionQuery(ctx, sessionID, queryID)
 }

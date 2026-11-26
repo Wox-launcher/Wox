@@ -1,6 +1,7 @@
 package setting
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -81,6 +82,9 @@ func waitForAutoBackup(ctx context.Context, wait time.Duration) bool {
 // backupIfDue creates today's automatic backup when the setting is on and today does not have one yet.
 // It returns true when the attempt failed and should be retried before the next midnight.
 func (m *Manager) backupIfDue(ctx context.Context) bool {
+	if report := database.GetIntegrityReport(); report.Ran && !report.QuickCheckOK {
+		return true
+	}
 	settings := m.GetWoxSetting(ctx)
 	if settings == nil {
 		logger.Error(ctx, "failed to get settings: settings is nil")
@@ -227,6 +231,17 @@ func (m *Manager) Backup(ctx context.Context, backupType BackupType) (err error)
 	logger.Info(ctx, fmt.Sprintf("backup path: %s", backupPath))
 
 	err = database.WithFileMaintenance(func() error {
+		db := database.GetDB()
+		if db == nil {
+			return fmt.Errorf("database not initialized")
+		}
+		source, err := db.DB()
+		if err != nil {
+			return err
+		}
+		if err := database.CheckDatabase(ctx, source); err != nil {
+			return err
+		}
 		// Incomplete directories have no backup.json, so the daily check keeps
 		// retrying and leaving another copy. Remove them before this attempt.
 		removed, cleanErr := removeIncompleteBackups(backupRoot)
@@ -238,6 +253,9 @@ func (m *Manager) Backup(ctx context.Context, backupType BackupType) (err error)
 		}
 		if copyErr := copyUserDataForBackup(ctx, userDataDir, backupPath); copyErr != nil {
 			return copyErr
+		}
+		if err := database.SnapshotDatabase(ctx, source, filepath.Join(backupPath, database.FileName)); err != nil {
+			return err
 		}
 		// backup.json is written before this lock is released. A later backup
 		// treats a timestamp directory without it as incomplete and deletes it.
@@ -279,6 +297,13 @@ func copyUserDataForBackup(ctx context.Context, userDataDir, backupPath string) 
 	return cp.Copy(userDataDir, backupPath, cp.Options{
 		OnSymlink: func(string) cp.SymlinkAction { return cp.Skip },
 		Skip: func(info os.FileInfo, srcPath, _ string) (bool, error) {
+			if filepath.Dir(srcPath) == filepath.Clean(userDataDir) {
+				name := info.Name()
+				if name == database.FileName || strings.HasPrefix(name, database.FileName+"-") ||
+					strings.HasPrefix(name, ".wox-plugin-staging-") || strings.HasPrefix(name, ".wox-plugin-upgrade-") {
+					return true, nil
+				}
+			}
 			if !backupEntrySkipped(info) {
 				return false, nil
 			}
@@ -401,17 +426,42 @@ const (
 // runs this only after Wox has exited. The rename is retried briefly because
 // plugin processes can disappear a moment after the main process.
 func RestoreUserDataDirectory(ctx context.Context, backupPath string, userDataDir string) error {
-	backupPath = filepath.Clean(backupPath)
-	userDataDir = filepath.Clean(userDataDir)
-	if backupPath == "" || userDataDir == "" {
+	if strings.TrimSpace(backupPath) == "" || strings.TrimSpace(userDataDir) == "" {
 		return fmt.Errorf("backup path and user data directory are required")
 	}
+	backupPath = filepath.Clean(backupPath)
+	userDataDir = filepath.Clean(userDataDir)
 	if backupPath == userDataDir {
 		return fmt.Errorf("backup path and user data directory are the same")
 	}
 	if _, statErr := os.Stat(backupPath); statErr != nil {
 		logRestore(ctx, fmt.Sprintf("failed to stat backup directory: %s", statErr.Error()))
 		return statErr
+	}
+	var marker Backup
+	payload, err := os.ReadFile(filepath.Join(backupPath, "backup.json"))
+	if err != nil {
+		return fmt.Errorf("read backup metadata: %w", err)
+	}
+	if err := json.Unmarshal(payload, &marker); err != nil || marker.Id == "" || marker.Timestamp <= 0 {
+		return errors.New("invalid backup metadata")
+	}
+	if err := database.CheckDatabaseFile(ctx, filepath.Join(backupPath, database.FileName)); err != nil {
+		return fmt.Errorf("backup database check failed: %w", err)
+	}
+	staging, err := os.MkdirTemp(filepath.Dir(userDataDir), ".wox-restore-")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(staging)
+	if err := cp.Copy(backupPath, staging); err != nil {
+		return err
+	}
+	if err := database.CheckDatabaseFile(ctx, filepath.Join(staging, database.FileName)); err != nil {
+		return fmt.Errorf("staged backup database check failed: %w", err)
+	}
+	if err := os.Remove(filepath.Join(staging, "backup.json")); err != nil {
+		return err
 	}
 
 	var userDataBackupDir string
@@ -428,19 +478,11 @@ func RestoreUserDataDirectory(ctx context.Context, backupPath string, userDataDi
 		return statErr
 	}
 
-	if cpErr := cp.Copy(backupPath, userDataDir); cpErr != nil {
-		logRestore(ctx, fmt.Sprintf("failed to restore backup data to user data directory: %s", cpErr.Error()))
+	if err := renameForRestore(staging, userDataDir); err != nil {
 		if userDataBackupDir != "" {
-			_ = os.RemoveAll(userDataDir)
-			_ = os.Rename(userDataBackupDir, userDataDir)
+			return errors.Join(err, renameForRestore(userDataBackupDir, userDataDir))
 		}
-		return cpErr
-	}
-
-	backupInfoPath := filepath.Join(userDataDir, "backup.json")
-	if rmErr := os.Remove(backupInfoPath); rmErr != nil && !os.IsNotExist(rmErr) {
-		logRestore(ctx, fmt.Sprintf("failed to remove restored backup info: %s", rmErr.Error()))
-		return rmErr
+		return err
 	}
 
 	logRestore(ctx, "backup data restored successfully")
@@ -542,15 +584,20 @@ func (m *Manager) cleanBackups(ctx context.Context) error {
 		return nil
 	}
 
-	// sort backups by timestamp
-	slices.SortFunc(backups, func(i, j Backup) int {
-		return int(i.Timestamp - j.Timestamp)
-	})
+	// Count only healthy recovery points toward the retained history.
+	slices.SortFunc(backups, func(i, j Backup) int { return cmp.Compare(j.Timestamp, i.Timestamp) })
 
 	// remove old backups
 	removedCount := 0
-	for i := 0; i < len(backups)-maxBackups; i++ {
-		backup := backups[i]
+	kept := 0
+	for _, backup := range backups {
+		if err := database.CheckDatabaseFile(ctx, filepath.Join(backup.Path, database.FileName)); err != nil {
+			continue
+		}
+		if kept < maxBackups {
+			kept++
+			continue
+		}
 		rmErr := deleteBackupDirectory(util.GetLocation().GetBackupDirectory(), backup)
 		if rmErr != nil {
 			logger.Error(ctx, fmt.Sprintf("failed to remove backup: %s", rmErr.Error()))

@@ -177,7 +177,17 @@ func simulateCopy() error {
 }
 
 func simulatePaste() error {
+	return SimulatePasteAfterFocus(nil)
+}
+
+// SimulatePasteAfterFocus confirms the target after releasing blocking modifiers.
+func SimulatePasteAfterFocus(focus func() error) error {
 	waitModifiersRelease()
+	if focus != nil {
+		if err := focus(); err != nil {
+			return err
+		}
+	}
 
 	err := C.simulateCtrlV()
 	if err != nil {

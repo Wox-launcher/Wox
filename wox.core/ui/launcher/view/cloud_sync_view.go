@@ -2,6 +2,7 @@ package view
 
 import (
 	"fmt"
+	"strconv"
 	woxcomponent "wox/ui/launcher/component"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
@@ -17,7 +18,7 @@ type CloudSettingsPageProps struct {
 	Account      CloudAccountProps
 	Sync         CloudSyncProps
 	Devices      CloudDevicesProps
-	Plugins      CloudPluginExclusionsProps
+	Options      CloudSyncOptionsProps
 	ConfigNotes  CloudConfigNotesProps
 	Message      string
 	MessageColor woxui.Color
@@ -93,6 +94,16 @@ type CloudSyncProps struct {
 	ButtonLabel   string
 	ButtonEnabled bool
 	OnSync        func()
+}
+
+// CloudSyncOptionsProps contains the settings that control what Cloud Sync shares.
+type CloudSyncOptionsProps struct {
+	SectionLabel       string
+	HotkeysLabel       string
+	HotkeysDescription string
+	SyncHotkeys        bool
+	OnSyncHotkeys      func(bool)
+	Plugins            CloudPluginExclusionsProps
 }
 
 // CloudDevicesProps contains device rows and refresh state.
@@ -228,10 +239,7 @@ func CloudSettingsPage(props CloudSettingsPageProps) woxwidget.Widget {
 		appendChild(cloudSyncCard(props.Sync, contentWidth, props.Theme))
 		appendChild(cloudDeviceHeader(props.Devices, contentWidth, props.Theme))
 		appendChild(cloudDeviceCard(props.Devices, contentWidth, props.Theme))
-		pluginHeight := FormTableFieldHeight(true, props.Plugins.Tips, len(props.Plugins.Items), 260)
-		// Flutter wraps built-in setting tables in a 24px outer bottom gap so
-		// adjacent tables keep the same breathing room as the settings form.
-		appendChild(woxwidget.Container{Width: contentWidth, Padding: woxwidget.Insets{Bottom: 24}, Child: cloudPluginExclusionsCard(props.Plugins, contentWidth, pluginHeight, props.Theme)})
+		appendChild(cloudSyncOptions(props.Options, contentWidth, props.Theme))
 		configHeight := FormTableFieldHeight(true, props.ConfigNotes.Tips, len(props.ConfigNotes.Items), 720)
 		appendChild(cloudConfigNotesCard(props.ConfigNotes, contentWidth, configHeight, props.Theme))
 	}
@@ -549,6 +557,26 @@ func cloudDeviceCard(props CloudDevicesProps, width float32, theme woxcomponent.
 		rows = append(rows, woxwidget.Container{Width: width, Padding: woxwidget.UniformInsets(theme.Scaled(12)), Child: woxwidget.Text{Value: props.EmptyLabel, Style: woxui.TextStyle{Size: theme.Scaled(woxcomponent.SettingsSecondaryFontSize)}, Color: theme.TextSecondary}})
 	}
 	return woxwidget.Container{Width: width, Child: woxwidget.Flex{Axis: woxwidget.Vertical, Children: rows}}
+}
+
+// cloudSyncOptions groups the shortcut policy and plugin exclusion settings.
+func cloudSyncOptions(props CloudSyncOptionsProps, width float32, theme woxcomponent.ControlTheme) woxwidget.Widget {
+	var toggle func()
+	if props.OnSyncHotkeys != nil {
+		toggle = func() { props.OnSyncHotkeys(!props.SyncHotkeys) }
+	}
+	pluginHeight := FormTableFieldHeight(true, props.Plugins.Tips, len(props.Plugins.Items), 260)
+	return woxwidget.Container{Width: width, Padding: woxwidget.Insets{Bottom: theme.Scaled(24)}, Child: woxwidget.Flex{
+		Axis: woxwidget.Vertical, Gap: theme.Scaled(4), Children: []woxwidget.Widget{
+			woxcomponent.WoxSectionHeader(woxcomponent.SectionHeaderProps{Label: props.SectionLabel, Width: width, Theme: theme}),
+			SettingRow(SettingRowProps{
+				ID: "cloud-sync-cross-platform-hotkeys", Title: props.HotkeysLabel, Description: props.HotkeysDescription,
+				Kind: "bool", Value: strconv.FormatBool(props.SyncHotkeys), Disabled: toggle == nil, OnTap: toggle,
+				Width: width, Theme: theme,
+			}),
+			cloudPluginExclusionsCard(props.Plugins, width, pluginHeight, theme),
+		},
+	}}
 }
 
 // cloudPluginExclusionsCard owns the bounded exclusion list and its scroll surface.

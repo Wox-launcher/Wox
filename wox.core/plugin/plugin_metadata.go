@@ -88,7 +88,7 @@ func (l *pluginLifecycle) validateAndSetScriptMetadataDefaults(metadata Metadata
 
 	// Set supported OS to all platforms by default
 	if len(metadata.SupportedOS) == 0 {
-		metadata.SupportedOS = []string{"Windows", "Linux", "Macos"}
+		metadata.SupportedOS = []string{string(PLUGIN_OS_WINDOWS), string(PLUGIN_OS_LINUX), string(PLUGIN_OS_DARWIN)}
 	}
 
 	return metadata, nil

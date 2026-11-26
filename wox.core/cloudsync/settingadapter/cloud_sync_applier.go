@@ -32,9 +32,15 @@ func NewLocalSettingApplier() *LocalSettingApplier {
 }
 
 func (a *LocalSettingApplier) ApplyWoxSetting(ctx context.Context, key string, op string, rawValue string) error {
+	if base := cloudsync.SharedHotkeyBase(key); base != "" {
+		return a.applySharedHotkey(ctx, base, op, rawValue)
+	}
 	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
 	if woxSetting == nil {
 		return fmt.Errorf("wox setting not initialized")
+	}
+	if key == woxSetting.ResultBindings.Key() && woxSetting.CloudSyncCrossPlatformHotkeys.Get() {
+		return applySyncedResultAliases(woxSetting, op, rawValue)
 	}
 
 	store := setting.NewWoxSettingStore(database.GetDB())
@@ -149,7 +155,7 @@ func (a *LocalSettingApplier) ApplyInstalledPlugin(ctx context.Context, pluginID
 		}
 		if !plugin.IsAnySupportedInCurrentOS(manifest.SupportedOS) {
 			util.GetLogger().Info(ctx, fmt.Sprintf("skip installed plugin sync for %s: unsupported on current OS", manifest.Id))
-			return nil
+			return cloudsync.ErrSkippedUnsupportedOS
 		}
 		if shouldSkipPluginInstall(ctx, manifest) {
 			return nil

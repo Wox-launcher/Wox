@@ -33,6 +33,8 @@ from .plugin_manager import PluginInstance, plugin_instances
 from .single_file import load_single_file_module
 
 legacy_query_return_warnings: set[str] = set()
+active_query_tasks: dict[str, asyncio.Task[Any]] = {}
+active_query_slots: set[tuple[str, str]] = set()
 
 
 def _parse_context_data(raw: Optional[Union[str, Dict[str, Any]]]) -> Dict[str, str]:
@@ -60,6 +62,16 @@ async def handle_request_from_wox(ctx: Context, request: Dict[str, Any], ws: Ser
     method = request.get("Method")
     plugin_name = request.get("PluginName")
 
+    if method == "ping":
+        return True
+    if method == "cancelQuery":
+        task = active_query_tasks.pop(request.get("Params", {}).get("RequestId", ""), None)
+        if task:
+            task.cancel()
+        instance = plugin_instances.get(request.get("PluginId", ""))
+        if instance:
+            instance.result_actions.release(request.get("SessionId", ""), request.get("QueryId", ""))
+        return None
     # Acquire query buckets before any await so a later release cannot overtake startup.
     if method == "releaseQueryResults":
         for loaded_instance in plugin_instances.values():
@@ -71,7 +83,7 @@ async def handle_request_from_wox(ctx: Context, request: Dict[str, Any], ws: Ser
             instance.toolbar_msg_actions.pop(request.get("Params", {}).get("HostSnapshotId", ""), None)
         return None
     if method == "query":
-        return await query(ctx, request)
+        return await _run_query(ctx, request)
     if method == "onMRURestore":
         return await on_mru_restore(ctx, request)
     if method == "action":
@@ -334,7 +346,28 @@ async def _normalize_query_response(ctx: Context, plugin_name: str, raw_response
     }
 
 
-async def query(ctx: Context, request: Dict[str, Any]) -> Dict[str, Any]:
+async def _run_query(ctx: Context, request: Dict[str, Any]) -> Dict[str, Any]:
+    """Hold one execution slot until the coroutine actually settles."""
+    request_id = request["Id"]
+    slot = (request.get("PluginId", ""), request.get("SessionId", request.get("Params", {}).get("SessionId", "")))
+    if slot in active_query_slots:
+        await asyncio.sleep(0)
+    if slot in active_query_slots:
+        return {"Results": [], "QuerySkipped": True}
+    task = asyncio.current_task()
+    if task is not None:
+        active_query_tasks[request_id] = task
+    active_query_slots.add(slot)
+    try:
+        return await query(ctx, request, track_cancellation=True)
+    except asyncio.CancelledError:
+        return {"Results": []}
+    finally:
+        active_query_slots.discard(slot)
+        active_query_tasks.pop(request_id, None)
+
+
+async def query(ctx: Context, request: Dict[str, Any], track_cancellation: bool = False) -> Dict[str, Any]:
     """Handle query request"""
     plugin_id = request.get("PluginId", "")
     plugin_name = request.get("PluginName", "")
@@ -352,8 +385,6 @@ async def query(ctx: Context, request: Dict[str, Any]) -> Dict[str, Any]:
         callbacks = plugin_instance.result_actions.begin(session_id, query_id, request.get("ManagedQuery", False))
         await logger.info(ctx.get_trace_id(), f"invoke <{plugin_name}> method: query")
         raw_response = await plugin_instance.plugin.query(ctx, Query.from_json(json.dumps(params)))
-        response = await _normalize_query_response(ctx, plugin_name, raw_response)
-
         preview_source = (
             raw_response.plugin_preview if isinstance(raw_response, QueryResponse) else getattr(raw_response, "plugin_preview", None)
         )
@@ -374,6 +405,10 @@ async def query(ctx: Context, request: Dict[str, Any]) -> Dict[str, Any]:
         if results_source:
             for result in results_source:
                 callbacks.cache(result, ctx=ctx, api=plugin_instance.api)
+
+        if track_cancellation and request["Id"] not in active_query_tasks:
+            return {"Results": []}
+        response = await _normalize_query_response(ctx, plugin_name, raw_response)
 
         # Re-serialize after caching so generated result/action IDs are included
         # in the object that Go core receives and later sends back for actions.

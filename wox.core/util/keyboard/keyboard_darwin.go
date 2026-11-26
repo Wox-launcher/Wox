@@ -223,6 +223,14 @@ func simulatePaste() error {
 	return nil
 }
 
+// SimulatePasteAfterFocus confirms the target immediately before posting Cmd+V.
+func SimulatePasteAfterFocus(focus func() error) error {
+	if err := focus(); err != nil {
+		return err
+	}
+	return simulatePaste()
+}
+
 // simulateBackspace is a no-op on macOS: the CGEventTap consumes CapsLock
 // combo events before the system sees them, so no stray character is typed
 // and no backspace is needed.

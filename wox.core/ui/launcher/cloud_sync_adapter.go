@@ -49,7 +49,7 @@ func (c *cloudSettingsController) buildCloudSettingsPage(snapshot settingsSnapsh
 		Account:      account,
 		Sync:         sync,
 		Devices:      devices,
-		Plugins:      c.cloudPluginExclusionsViewProps(snapshot, imageScale),
+		Options:      c.cloudSyncOptionsViewProps(snapshot, imageScale),
 		ConfigNotes:  c.cloudConfigNotesViewProps(snapshot, imageScale),
 		Message:      message,
 		MessageColor: messageColor,
@@ -252,6 +252,23 @@ func (c *cloudSettingsController) cloudSyncViewProps(snapshot settingsSnapshot, 
 		ButtonLabel:   cloudBusyLabel(snapshot, "sync", buttonLabel),
 		ButtonEnabled: snapshot.cloud.Busy == "" && !snapshot.cloud.Loading && !snapshot.cloud.Account.SessionExpired && snapshot.cloud.Account.SyncEligible,
 		OnSync:        buttonAction,
+	}
+}
+
+// cloudSyncOptionsViewProps prepares the shortcut switch and the existing exclusion table.
+func (c *cloudSettingsController) cloudSyncOptionsViewProps(snapshot settingsSnapshot, imageScale float32) launcherview.CloudSyncOptionsProps {
+	var toggleHotkeys func(bool)
+	if cloudSyncReady(snapshot) && snapshot.cloud.Account.SyncEnabled && snapshot.cloud.Sync.Enabled &&
+		snapshot.cloud.Busy == "" && !snapshot.cloud.Loading && !snapshot.cloud.Account.SessionExpired && !cloudCurrentDeviceRevoked(snapshot.cloud.Devices) {
+		toggleHotkeys = c.setCrossPlatformHotkeySync
+	}
+	return launcherview.CloudSyncOptionsProps{
+		SectionLabel:       c.language.translate("i18n:ui_cloud_sync_options"),
+		HotkeysLabel:       c.language.translate("i18n:ui_cloud_sync_hotkeys"),
+		HotkeysDescription: c.language.translate("i18n:ui_cloud_sync_hotkeys_help"),
+		SyncHotkeys:        snapshot.general.Data.CloudSyncCrossPlatformHotkeys,
+		OnSyncHotkeys:      toggleHotkeys,
+		Plugins:            c.cloudPluginExclusionsViewProps(snapshot, imageScale),
 	}
 }
 
@@ -587,10 +604,16 @@ func (c *cloudSettingsController) cloudConfigNotesViewProps(snapshot settingsSna
 	}
 	items := make([]launcherview.CloudConfigNoteProps, 0, len(notes))
 	for _, note := range notes {
+		mode := note[1]
+		tooltip := "ui_cloud_sync_config_note_" + note[2] + "_tips"
+		if snapshot.general.Data.CloudSyncCrossPlatformHotkeys && (note[0] == "query_hotkeys" || note[0] == "launch_hotkeys") {
+			mode = "synced"
+			tooltip = "ui_cloud_sync_hotkeys_help"
+		}
 		items = append(items, launcherview.CloudConfigNoteProps{
 			Item:    c.language.translate("i18n:ui_cloud_sync_config_note_" + note[0]),
-			Mode:    c.language.translate("i18n:ui_cloud_sync_config_notes_mode_" + note[1]),
-			Tooltip: c.language.translate("i18n:ui_cloud_sync_config_note_" + note[2] + "_tips"),
+			Mode:    c.language.translate("i18n:ui_cloud_sync_config_notes_mode_" + mode),
+			Tooltip: c.language.translate("i18n:" + tooltip),
 		})
 	}
 	return launcherview.CloudConfigNotesProps{

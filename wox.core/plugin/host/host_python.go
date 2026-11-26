@@ -35,6 +35,8 @@ type PythonHost struct {
 	websocketHost *WebsocketHost
 }
 
+func (n *PythonHost) Ping(ctx context.Context) error { return n.websocketHost.ping(ctx) }
+
 func (n *PythonHost) ProcessID() int {
 	return n.websocketHost.ProcessID()
 }

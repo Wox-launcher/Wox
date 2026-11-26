@@ -254,13 +254,18 @@ func (w *WebsocketHost) UnloadPlugin(ctx context.Context, metadata plugin.Metada
 func (w *WebsocketHost) invokeMethod(ctx context.Context, metadata plugin.Metadata, method string, params map[string]string) (result any, err error) {
 	// Releasing host-owned callbacks is local housekeeping and never invokes plugin
 	// code. It must still run while offline mode blocks ordinary plugin calls.
-	if !(method == "windowEvent" && params["Release"] == "true") && !(method == "woxviewPreviewEvent" && params["Lifecycle"] == "true") && method != "releaseQueryResults" && method != "releasePluginPreview" && method != "retireToolbarSnapshot" && !(method == "toastMsgAction" && params["Invoke"] == "false") {
+	if method != "ping" && !(method == "windowEvent" && params["Release"] == "true") && !(method == "woxviewPreviewEvent" && params["Lifecycle"] == "true") && method != "releaseQueryResults" && method != "releasePluginPreview" && method != "retireToolbarSnapshot" && !(method == "toastMsgAction" && params["Invoke"] == "false") {
 		var release func()
 		ctx, release, err = network.Default.Begin(ctx)
 		if err != nil {
 			return nil, err
 		}
 		defer release()
+	}
+	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, 30*time.Second)
+		defer cancel()
 	}
 	client := w.websocketClient()
 	if client == nil || !client.IsConnected() {
@@ -317,14 +322,22 @@ func (w *WebsocketHost) invokeMethod(ctx context.Context, metadata plugin.Metada
 		return "", sendErr
 	}
 
-	timer := time.NewTimer(time.Second * 30)
-	defer timer.Stop()
 	select {
 	case <-ctx.Done():
+		if method == "query" {
+			notification := request
+			notification.Id = uuid.NewString()
+			notification.Method = "cancelQuery"
+			notification.Params = map[string]string{"RequestId": request.Id}
+			if data, err := json.Marshal(notification); err == nil {
+				util.Go(ctx, "cancel host query", func() {
+					notifyCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 50*time.Millisecond)
+					defer cancel()
+					_ = client.Send(notifyCtx, data)
+				})
+			}
+		}
 		return "", fmt.Errorf("request canceled, request id: %s: %w", request.Id, context.Cause(ctx))
-	case <-timer.C:
-		util.GetLogger().Error(ctx, fmt.Sprintf("invoke %s response timeout, response time: %dms", metadata.GetName(ctx), util.GetSystemTimestamp()-startTimestamp))
-		return "", fmt.Errorf("request timeout, request id: %s", request.Id)
 	case response := <-resultChan:
 		util.GetLogger().Debug(ctx, fmt.Sprintf("inovke plugin <%s> method: %s finished, response time: %dms", metadata.GetName(ctx), method, util.GetSystemTimestamp()-startTimestamp))
 		if response.Error != "" {
@@ -333,6 +346,12 @@ func (w *WebsocketHost) invokeMethod(ctx context.Context, metadata plugin.Metada
 			return response.Result, nil
 		}
 	}
+}
+
+// ping checks the runtime event loop independently of loaded plugin code.
+func (w *WebsocketHost) ping(ctx context.Context) error {
+	_, err := w.invokeMethod(ctx, plugin.Metadata{}, "ping", nil)
+	return err
 }
 
 func (w *WebsocketHost) decodeHostResult(result any, target any) error {

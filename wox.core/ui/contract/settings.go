@@ -195,6 +195,7 @@ type GeneralSettings struct {
 	CustomNodejsPath                   string
 	CloudSyncServerURL                 string
 	CloudSyncDisabledPlugins           []string
+	CloudSyncCrossPlatformHotkeys      bool
 	HiddenPluginStores                 []string
 	AppWidth                           int
 	MaxResultCount                     int

@@ -4,6 +4,7 @@ package window
 #cgo CFLAGS: -x objective-c
 #cgo LDFLAGS: -framework Foundation -framework Cocoa -framework ApplicationServices -framework ScriptingBridge
 #include <stdlib.h>
+#include <ApplicationServices/ApplicationServices.h>
 
 typedef struct {
 	int x;
@@ -46,6 +47,7 @@ int moveResizeWindowForManagement(const char* windowId, int pid, int x, int y, i
 int maximizeWindowForManagement(const char* windowId, int pid);
 int minimizeWindowForManagement(const char* windowId, int pid);
 int activateWindowByPid(int pid);
+int activateWindowForManagement(const char *windowId, int pid);
 int isOpenSaveDialog();
 int isOpenSaveDialogByPid(int pid);
 int isOpenSaveDialogSelectFolder();
@@ -360,9 +362,25 @@ func ActivateWindowByPid(pid int) bool {
 	return int(result) == 1
 }
 
-// ActivateWindow raises the captured window through the owning macOS application.
+// ActivateWindow raises the exact captured Accessibility window when available.
 func ActivateWindow(managedWindow ManagedWindow) bool {
-	return ActivateWindowByPid(managedWindow.Pid)
+	if managedWindow.Id == "" {
+		return ActivateWindowByPid(managedWindow.Pid)
+	}
+	id := C.CString(managedWindow.Id)
+	defer C.free(unsafe.Pointer(id))
+	return C.activateWindowForManagement(id, C.int(managedWindow.Pid)) == 1
+}
+
+// requestCapturedWindowActivation reports Accessibility denial before checking the target.
+func requestCapturedWindowActivation(id string, pid int) error {
+	if C.AXIsProcessTrusted() == 0 {
+		return ErrWindowManagementPermissionDenied
+	}
+	if !ActivateWindow(ManagedWindow{Id: id, Pid: pid}) {
+		return ErrWindowManagementWindowNotFound
+	}
+	return nil
 }
 
 func IsOpenSaveDialog() (bool, error) {

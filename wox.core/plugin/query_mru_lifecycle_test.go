@@ -24,7 +24,7 @@ func (ui *mruLifecycleTestUI) GetActiveWindowSnapshot(context.Context) common.Ac
 // restoring recent results must release the previous plugin before any restore work.
 func TestQueryMRULeavesPluginContext(t *testing.T) {
 	initPluginManagerLoadTest(t)
-	manager := newManager()
+	manager := newPresentationTestManager()
 	ui := &mruLifecycleTestUI{}
 	manager.AttachUI(ui)
 	ctx := util.WithSessionContext(context.Background(), "launcher")

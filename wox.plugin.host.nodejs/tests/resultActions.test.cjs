@@ -45,6 +45,7 @@ const context = (session = "", query = "") => ({
 })
 const call = (method, session, query, params = {}) =>
   rpc.handleRequestFromWox(context(), {
+    Id: `${session}:${query}:${method}`,
     PluginId: "owner",
     PluginName: "Owner",
     Method: method,
@@ -61,6 +62,30 @@ function fixture(query) {
   rpc.pluginInstances.set("owner", { Plugin: { query }, API: api, ResultActions: callbacks, ToolbarMsgActions: new Map(), ModulePath: "unused" })
   return { callbacks, api }
 }
+
+test("cancelQuery aborts the matching request and releases its callbacks", async () => {
+  let finish, signal
+  const hold = new Promise(resolve => { finish = resolve })
+  const { callbacks, api } = fixture(async (ctx, query) => {
+    if (query.Id === "slow") {
+      signal = ctx.Signal
+      await api.PushResults(ctx, query, [{ Id: "early", Actions: [{ Id: "open", Action() {} }] }])
+      await hold
+    }
+    return { Results: [{ Id: "late", Actions: [{ Id: "open", Action() {} }] }] }
+  })
+  const slow = call("query", "a", "slow")
+  assert.ok(callbacks.find("a", "slow", "early")?.results.has("early"))
+  await call("cancelQuery", "a", "slow", { RequestId: "a:slow:query" })
+  assert.equal(signal.aborted, true)
+  assert.equal(callbacks.find("a", "slow", "early"), undefined)
+  assert.equal((await call("query", "a", "next")).QuerySkipped, true)
+  assert.equal((await call("query", "other", "next")).Results.length, 1)
+  finish()
+  assert.deepEqual(await slow, { Results: [] })
+  assert.equal(callbacks.find("a", "slow", "late"), undefined)
+  assert.equal((await call("query", "a", "next")).Results.length, 1)
+})
 
 test("preview events stay scoped to their result and released document", async () => {
   const calls = [], released = []
@@ -208,9 +233,11 @@ test("a preview returned after query release is disposed", async () => {
   callbacks.release("a", "query")
   const preview = { PreviewType: "woxview", PreviewData: "{}", WoxViewID: "doc", OnWoxViewEvent() {} }
   preview[Symbol.for("wox.preview.binding")] = { bind() {}, release: () => disposed++ }
-  complete({ Results: [{ Id: "row", Preview: preview }] })
+  const row = { Preview: preview }
+  complete({ Results: [row] })
   await query
   assert.equal(disposed, 1)
+  assert.equal(row.Id, undefined)
 })
 
 test("toolbar callbacks with the same public ID stay isolated and retire by snapshot", async () => {
@@ -288,13 +315,13 @@ test("out-of-order responses retain their own closures; released late responses 
     return { Results: [{ Id: "row", Actions: [{ Id: "open", Action: async () => calls.push(query.Id) }] }] }
   })
   const old = call("query", "a", "old")
-  const current = call("query", "a", "current")
+  const current = call("query", "b", "current")
   pending.get("current")()
   await current
   pending.get("old")()
   await old
   await call("action", "a", "old", { ResultId: "row", ActionId: "open" })
-  await call("action", "a", "current", { ResultId: "row", ActionId: "open" })
+  await call("action", "b", "current", { ResultId: "row", ActionId: "open" })
   assert.deepEqual(calls, ["old", "current"])
   const late = call("query", "a", "late")
   await call("releaseQueryResults", "a", "late")

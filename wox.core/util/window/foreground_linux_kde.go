@@ -57,19 +57,6 @@ func (r *kdeForegroundReport) Report(payload string) *dbus.Error {
 	return nil
 }
 
-// getKDEActiveWindowIdentity bypasses the clipboard watcher's cache, which may
-// still contain a different window from the same app when Wox is invoked.
-func getKDEActiveWindowIdentity(ctx context.Context) (pid int, id string, name string) {
-	ctx, cancel := context.WithTimeout(ctx, linuxForegroundTimeout)
-	defer cancel()
-	app, err := queryKDEForeground(ctx)
-	if err != nil {
-		return -1, "", ""
-	}
-	app = finishLinuxForeground(app)
-	return app.Pid, app.WindowID, app.Name
-}
-
 // queryKDEForeground reads the focused window from KWin.
 // The public KWin D-Bus API cannot name that window without an id or a click,
 // so a one-shot script reads workspace.activeWindow and answers over the session bus.

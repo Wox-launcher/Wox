@@ -53,8 +53,9 @@ var caseFilePattern = regexp.MustCompile(`^[0-9]{3}_.+_test\.go$`)
 
 func main() {
 	caseSelector := flag.String("case", "", "functional path and case number, for example launcher/plugin/calculator/001")
+	suite := flag.String("suite", "", "run a named suite (core)")
 	flag.Parse()
-	code, err := run(strings.TrimSpace(*caseSelector))
+	code, err := run(strings.TrimSpace(*caseSelector), strings.TrimSpace(*suite))
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 	}
@@ -65,11 +66,12 @@ func main() {
 // Every selected package is compiled by one go test invocation. Separate go test
 // processes repeat package loading and test-binary linking, which on a warm cache
 // still costs a few seconds per package before any case runs.
-func run(caseSelector string) (int, error) {
-	targets, err := smokeTargets(caseSelector)
+func run(caseSelector, suite string) (int, error) {
+	targets, err := smokeSuiteTargets(caseSelector, suite)
 	if err != nil {
 		return 2, err
 	}
+	fullSuite := caseSelector == "" && suite == ""
 	if err := duplicateSmokeBinaries(targets); err != nil {
 		return 2, err
 	}
@@ -132,7 +134,7 @@ func run(caseSelector string) (int, error) {
 		retainSuiteDirectory = true
 		return 1, err
 	}
-	if caseSelector == "" || caseSelector == "launcher/plugin/url" || strings.HasPrefix(caseSelector, "launcher/plugin/url/") {
+	if fullSuite || caseSelector == "launcher/plugin/url" || strings.HasPrefix(caseSelector, "launcher/plugin/url/") {
 		if err := seedMissingFaviconURLHistoryFixture(woxDataDirectory, userDataDirectory); err != nil {
 			retainSuiteDirectory = true
 			return 1, err
@@ -180,7 +182,7 @@ func run(caseSelector string) (int, error) {
 	// The reference runs in its own process and data directory. Its 20 queries would
 	// otherwise persist history into the suite database, and the 46s hide tears down
 	// the renderer the later cases expect to find warm.
-	if caseSelector == "" {
+	if fullSuite {
 		probeDataDirectory := filepath.Join(suiteDirectory, "perf-reference-data")
 		probeUserDirectory := filepath.Join(probeDataDirectory, "user-data")
 		if err := os.MkdirAll(probeUserDirectory, 0o755); err != nil {
@@ -218,7 +220,7 @@ func run(caseSelector string) (int, error) {
 	testEnvironment = replaceEnvironment(testEnvironment, util.TestFlowUserDataEnv, flowUserDataDirectory)
 	testEnvironment = replaceEnvironment(testEnvironment, util.TestRaycastInstallEnv, raycastInstallDirectory)
 	testEnvironment = replaceEnvironment(testEnvironment, util.TestRaycastFileEnv, raycastExportFile)
-	if caseSelector == "" {
+	if fullSuite {
 		testEnvironment = replaceEnvironment(testEnvironment, smokeperf.CollectedEnvironment, "1")
 	}
 	suiteStarted = time.Now()
@@ -617,6 +619,44 @@ type smokeTarget struct {
 	dir string
 	// runPattern limits execution to one numbered case. Empty runs the whole package.
 	runPattern string
+}
+
+// smokeSuiteTargets resolves the quick suite through the existing numbered-case selector.
+func smokeSuiteTargets(caseSelector, suite string) ([]smokeTarget, error) {
+	if suite == "" {
+		return smokeTargets(caseSelector)
+	}
+	if suite != "core" {
+		return nil, fmt.Errorf("unknown smoke suite %q, expected core", suite)
+	}
+	if caseSelector != "" {
+		return nil, errors.New("choose either -suite or -case")
+	}
+	core := []string{
+		"launcher/plugin/app/001",
+		"launcher/plugin/filesearch/001",
+		"launcher/plugin/clipboard/001",
+		"launcher/plugin/calculator/001",
+		"launcher/009",
+		"launcher/047",
+		"launcher/plugin/singlefile/002",
+	}
+	targets := make([]smokeTarget, 0, len(core))
+	packageIndex := make(map[string]int, len(core))
+	for _, selector := range core {
+		selected, err := smokeTargets(selector)
+		if err != nil {
+			return nil, err
+		}
+		target := selected[0]
+		if index, exists := packageIndex[target.dir]; exists {
+			targets[index].runPattern += "|" + target.runPattern
+			continue
+		}
+		packageIndex[target.dir] = len(targets)
+		targets = append(targets, target)
+	}
+	return targets, nil
 }
 
 func (target smokeTarget) importPath() string {

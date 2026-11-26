@@ -440,6 +440,7 @@ type formValidatorValue struct {
 // App composes one launcher instance and coordinates cross-feature transitions.
 // Feature controllers own their state and receive only the capabilities they need.
 type App struct {
+	wakeMetrics  launcherWakeMetrics
 	attention    attentionController
 	resultDrag   resultDragController
 	appearance   appearanceController
@@ -496,8 +497,9 @@ type App struct {
 	// requestedWindowBounds also tracks resizes that GTK has not applied yet.
 	requestedWindowBounds woxui.Rect
 
-	visible bool
-	show    showAppParams
+	visible             bool
+	cancelIdleImageTrim context.CancelFunc
+	show                showAppParams
 	// permissionFlow remembers which Wox windows the macOS permission guide hid so
 	// they can be restored when System Settings is closed.
 	permissionFlow *macOSPermissionFlowHost
@@ -685,6 +687,10 @@ func (a *App) start() error {
 	}
 
 	host := woxwidget.NewHost(a.buildLauncher)
+	var onPresented func(uint64, time.Time)
+	if a.isPrimary {
+		onPresented = a.wakeMetrics.presented
+	}
 	launcher, _, err := a.windows.Open(a.windowID, woxui.WindowOptions{
 		Title:                     "Wox",
 		CanFocusWithoutActivation: true,
@@ -693,8 +699,9 @@ func (a *App) start() error {
 		// Windows uses HWND_TOPMOST so the query window stays above other apps.
 		// macOS floating level and Linux layer-shell TOP already do that without
 		// occupying the overlay band, so timer/tooltip HUDs can sit above Wox.
-		Topmost: launcherQueryWindowTopmost(runtime.GOOS),
-		OnFrame: host.Frame,
+		Topmost:          launcherQueryWindowTopmost(runtime.GOOS),
+		OnFrame:          host.Frame,
+		OnFramePresented: onPresented,
 		OnPointer: func(event woxui.PointerEvent) {
 			if event.Kind == woxui.PointerDown {
 				a.resultDrag.releaseResultFileDragHold()
@@ -827,12 +834,15 @@ func (a *App) Close() error {
 }
 
 func (a *App) showWindow(params showAppParams) error {
-	var launcher *woxui.ManagedWindow
-	queryEmpty := false
-	preserveQuery := false
+	started := time.Now()
 	refreshInlinePreview := false
-	wasVisible := false
-	if err := a.runOnUI("prepare launcher show", func() {
+	var showErr error
+	if err := a.runOnUI("prepare and present launcher", func() {
+		launcher := a.launcher
+		if launcher == nil {
+			showErr = errors.New("launcher window is not initialized")
+			return
+		}
 		if params.WindowWidth <= 0 {
 			params.WindowWidth = defaultWidth
 		}
@@ -840,7 +850,12 @@ func (a *App) showWindow(params showAppParams) error {
 			params.MaxResultCount = defaultMaxResult
 		}
 		a.resultDrag.releaseResultFileDragHold()
-		wasVisible = a.visible
+		wasVisible := a.visible
+		defer func() {
+			if showErr != nil {
+				a.visible = wasVisible
+			}
+		}()
 		a.show = params
 		// A selection query on the primary launcher is always transient (Space Quick
 		// Look preview or a selection-bearing query hotkey). Reopening through the
@@ -850,7 +865,7 @@ func (a *App) showWindow(params showAppParams) error {
 			a.querySession.queryHintEditorState = queryHintEditor{}
 			a.querySession.resetToGlobalInputLocked()
 		}
-		preserveQuery = a.applyLaunchModeOnShowLocked()
+		preserveQuery := a.applyLaunchModeOnShowLocked()
 		refreshInlinePreview = !wasVisible && a.previews.hasInlinePreviewToRestore()
 		a.querySession.armHistoryRecall(params.QueryHistories, params.LaunchMode == "continue")
 		if params.SelectAll {
@@ -859,37 +874,45 @@ func (a *App) showWindow(params showAppParams) error {
 		a.actions.clearActionPanelStateLocked()
 		a.forms.form = nil
 		a.visible = true
-		queryEmpty = a.querySession.query.QueryText == ""
-		launcher = a.launcher
+		a.stopIdleImageTrim()
 		a.webView.keepQueryFocusOnWebViewActivate = true
 		a.previews.reconcileSelectedPreview()
 		a.webView.keepQueryFocusOnWebViewActivate = false
 		a.restoreQueryTextInput()
-	}); err != nil {
-		return err
-	}
-	if launcher == nil {
-		return errors.New("launcher window is not initialized")
-	}
-	if err := a.window.SetHideOnBlur(params.HideOnBlur); err != nil {
-		return err
-	}
-	// Explorer type-to-search re-Shows the same secondary on every key. Re-applying
-	// the initial show position would fight the bottom anchor; keep resizing in place.
-	if wasVisible && params.QueryBoxAtBottom {
-		if err := a.applyWindowBounds(); err != nil {
-			return err
+
+		if showErr = a.window.SetHideOnBlur(params.HideOnBlur); showErr != nil {
+			return
 		}
-	} else if err := a.applyWindowBoundsAtShowPosition(); err != nil {
-		return err
-	}
-	if _, err := launcher.Show(); err != nil {
-		return err
-	}
-	if err := a.runOnUI("restore launcher query focus after show", func() {
+		// Explorer type-to-search re-Shows the same secondary on every key.
+		// Keep resizing in place so the initial position cannot fight its bottom anchor.
+		if wasVisible && params.QueryBoxAtBottom {
+			showErr = a.applyWindowBoundsOnUI(false)
+		} else {
+			showErr = a.applyWindowBoundsAtShowPosition()
+		}
+		if showErr != nil {
+			return
+		}
+		// Bind the startup MRU generation before native input can replace it.
+		if params.StartPage == setting.StartPageMRU && !preserveQuery && a.querySession.query.QueryText == "" {
+			if showErr = a.requestMRU(); showErr != nil {
+				return
+			}
+		}
+		if a.isPrimary && !wasVisible {
+			a.wakeMetrics.begin(started, launcher.Window().FrameSequence())
+		}
+		if _, showErr = launcher.Show(); showErr != nil {
+			a.wakeMetrics.cancel(started)
+			return
+		}
+		// Native input can run as soon as this UI turn returns.
 		a.restoreQueryFocusAfterShow()
 	}); err != nil {
 		return err
+	}
+	if showErr != nil {
+		return showErr
 	}
 	if err := a.notifyShown(); err != nil {
 		return err
@@ -897,11 +920,6 @@ func (a *App) showWindow(params showAppParams) error {
 	if refreshInlinePreview {
 		util.GetLogger().Info(a.lifecycleCtx, "refresh inline WebView state after launcher restore")
 		if err := a.RefreshQuery(a.lifecycleCtx, common.RefreshQueryOptions{PreserveSelectedIndex: true}); err != nil {
-			return err
-		}
-	}
-	if queryEmpty && params.StartPage == "mru" && !preserveQuery {
-		if err := a.requestMRU(); err != nil {
 			return err
 		}
 	}
@@ -973,6 +991,7 @@ func (a *App) hideWindow(notify bool) error {
 		a.forms.form = nil
 		a.quickSelect.stopQuickSelectLocked()
 		a.visible = false
+		a.wakeMetrics.cancel(time.Time{})
 		a.bottomAnchorY = 0
 		a.glance.stopGlanceLocked(false)
 		a.dismissLauncherHoverTooltipsOnUI()
@@ -984,6 +1003,9 @@ func (a *App) hideWindow(notify bool) error {
 		a.webView.clearWebViewPreviewModeLocked()
 		if launcher != nil {
 			hideErr = launcher.Hide()
+			if hideErr == nil {
+				a.scheduleIdleImageTrim()
+			}
 		}
 	}); err != nil {
 		return err
@@ -1002,20 +1024,6 @@ func (a *App) hideWindow(notify bool) error {
 			util.GetLogger().Warn(context.Background(), fmt.Sprintf("save last window location: %v", err))
 		}
 	}
-	// Quick re-shows keep their warm icon cache; only trim decoded images after
-	// the launcher stays hidden long enough to be considered idle.
-	util.Go(a.lifecycleCtx, "trim hidden launcher image cache", func() {
-		time.Sleep(10 * time.Second)
-		if err := a.runOnUI("trim hidden launcher image cache", func() {
-			if a.visible {
-				return
-			}
-			a.trimIdleImageCache()
-		}); err != nil {
-			log.Printf("trim hidden launcher image cache: %v", err)
-			return
-		}
-	})
 	if notify {
 		return a.notifyHidden()
 	}
@@ -1140,7 +1148,9 @@ func (a *App) onFocus(event woxui.FocusEvent) {
 		}
 		a.previews.reconcileSelectedPreview()
 		if launcher != nil {
-			_ = launcher.Hide()
+			if err := launcher.Hide(); err == nil {
+				a.scheduleIdleImageTrim()
+			}
 		}
 		a.chat.resetChatPreview()
 		a.webView.clearWebViewPreviewModeLocked()
@@ -1374,11 +1384,12 @@ func (a *App) requestMRU() error {
 	}); err != nil {
 		return err
 	}
+	ctx := a.lifecycleCtx
 	if services, ok := a.services.(contract.QuerySelectionServices); ok {
-		services.BeginSessionQuery(a.lifecycleCtx, a.sessionID, queryID)
+		ctx = services.BeginSessionQuery(ctx, a.sessionID, queryID)
 	}
-	util.Go(a.lifecycleCtx, "load MRU results", func() {
-		a.loadTypedMRU(queryID)
+	util.Go(ctx, "load MRU results", func() {
+		a.loadTypedMRU(ctx, queryID)
 	})
 	return nil
 }

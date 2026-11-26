@@ -503,8 +503,38 @@ func getShowOptions(ctx context.Context, showContext common.ShowContext) contrac
 	}
 }
 
+var errQuerySuperseded = fmt.Errorf("query superseded: %w", context.Canceled)
+
+// replaceSessionQuery registers the new generation before its worker can start.
+func (m *Manager) replaceSessionQuery(ctx context.Context, sessionID, queryID string) context.Context {
+	ctx, cancel := context.WithCancelCause(ctx)
+	m.activeQueries.Compute(sessionID, func(previous context.CancelCauseFunc, exists bool) (context.CancelCauseFunc, bool) {
+		if exists {
+			previous(errQuerySuperseded)
+		}
+		plugin.GetPluginManager().BeginSessionQuery(sessionID, queryID)
+		return cancel, true
+	})
+	return ctx
+}
+
+func (m *Manager) cancelSessionQuery(sessionID string) {
+	if m.activeQueries == nil {
+		return
+	}
+	m.activeQueries.Compute(sessionID, func(cancel context.CancelCauseFunc, exists bool) (context.CancelCauseFunc, bool) {
+		if exists {
+			cancel(errQuerySuperseded)
+		}
+		return nil, false
+	})
+}
+
 // runUIQuery executes one decoded query and reports snapshots through a typed view.
 func runUIQuery(ctx context.Context, request contract.QueryRequest, view contract.QueryView) {
+	if ctx.Err() != nil {
+		return
+	}
 	handlerStart := util.GetSystemTimestamp()
 	changedQuery := request.Query
 	queryId := changedQuery.QueryId
@@ -543,6 +573,9 @@ func runUIQuery(ctx context.Context, request contract.QueryRequest, view contrac
 
 	newQueryStart := util.GetSystemTimestamp()
 	query, ownerPlugin, queryErr := plugin.GetPluginManager().NewQuery(ctx, changedQuery)
+	if ctx.Err() != nil {
+		return
+	}
 	if queryErr != nil {
 		if conflictErr, ok := plugin.AsTriggerKeywordConflictError(queryErr); ok {
 			plugin.GetPluginManager().HandleQueryLifecycle(ctx, query, nil)
@@ -567,6 +600,9 @@ func runUIQuery(ctx context.Context, request contract.QueryRequest, view contrac
 	woxSetting := setting.GetSettingManager().GetWoxSetting(ctx)
 	if !request.SkipCompletionHint && woxSetting.EnableQueryCompletionHint.Get() && changedQuery.QueryScope.IsEmpty() {
 		util.Go(ctx, "query completion hint", func() {
+			if ctx.Err() != nil {
+				return
+			}
 			view.ApplyQueryCompletionHint(
 				ctx,
 				queryId,
@@ -589,6 +625,9 @@ func runUIQuery(ctx context.Context, request contract.QueryRequest, view contrac
 	}
 
 	lifecycleStart := util.GetSystemTimestamp()
+	if ctx.Err() != nil {
+		return
+	}
 	plugin.GetPluginManager().HandleQueryLifecycle(ctx, query, ownerPlugin)
 	if tracker := timetracking.New("handle_query_lifecycle"); tracker.Enabled() {
 		tracker.SetRawString("queryId", queryId)

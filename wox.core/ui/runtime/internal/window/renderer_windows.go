@@ -15,6 +15,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"time"
 	"unsafe"
 
 	"wox/util"
@@ -31,6 +32,7 @@ type nativeRenderer struct {
 	enableEmbeddedSurfaceOverlay bool
 	fontFamily                   string
 	traceFrameCount              uint64
+	lastPresentCost              time.Duration
 }
 
 const (
@@ -108,6 +110,14 @@ func (r *nativeRenderer) diagnostics() (string, error) {
 		return "", hresultError("get renderer diagnostics", result)
 	}
 	return C.GoString((*C.char)(unsafe.Pointer(&buffer[0]))), nil
+}
+
+// softwareRendering reports WARP even when device creation fell back automatically.
+func (w *platformWindow) softwareRendering() bool {
+	if w.renderer == nil || w.renderer.handle == nil {
+		return SoftwareRenderingEnabled()
+	}
+	return C.wox_renderer_uses_software_rendering(w.renderer.handle) != 0
 }
 
 func (r *nativeRenderer) resize(width, height int) error {
@@ -227,6 +237,7 @@ func measureDefaultUITextForTest(text string, size float32, weight uint8) (TextM
 // render replays one logical display list into the physical DirectComposition surface.
 func (r *nativeRenderer) render(displayList *DisplayList, scale float32) error {
 	r.traceFrameCount++
+	r.lastPresentCost = -1
 	damage := displayList.NativeDamage()
 	if displayList.caretPatch.Width > 0 && damage.Width > 0 {
 		caret := displayList.commands[displayList.caretCapture-1]
@@ -421,7 +432,9 @@ func (r *nativeRenderer) render(displayList *DisplayList, scale float32) error {
 }
 
 func (r *nativeRenderer) endFrame() error {
+	start := time.Now()
 	result := C.wox_renderer_end_frame(r.handle)
+	r.lastPresentCost = time.Since(start)
 	if result < 0 {
 		return hresultError("present frame", result)
 	}

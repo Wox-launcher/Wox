@@ -4,19 +4,20 @@ package perf
 
 import (
 	"os"
-	"runtime"
 	"testing"
+	"time"
+
+	"wox/test/smokeperf"
 )
 
-// requireNativePerf keeps presented-frame performance sampling local to avoid shared-runner instability.
+// requireNativePerf opts the scheduled native matrix into the existing local perf cases.
 func requireNativePerf(t *testing.T) {
 	t.Helper()
-	if os.Getenv("GITHUB_ACTIONS") == "true" {
-		t.Skip("presented-frame performance smoke runs locally only")
+	if os.Getenv("GITHUB_ACTIONS") == "true" && os.Getenv("WOX_NIGHTLY_PERF") != "1" {
+		t.Skip("presented-frame performance sampling requires the native perf matrix")
 	}
 }
 
-// perfTimingBudgetMultiplier gives shared runners scheduling headroom while retaining a hard ceiling.
 func perfTimingBudgetMultiplier() int64 {
 	if os.Getenv("GITHUB_ACTIONS") == "true" {
 		return 5
@@ -24,47 +25,45 @@ func perfTimingBudgetMultiplier() int64 {
 	return 1
 }
 
-// Local frame phase ceilings in microseconds, applied to each scenario's steady-state maximum.
-// GitHub Actions uses five times these ceilings; deterministic work limits remain unchanged.
-//
-// These are order-of-magnitude guards, not regression detectors. Each value is about five times
-// the highest steady-state P95 measured across the perf scenarios on a developer machine, with a
-// floor so a phase that normally costs microseconds still has workable headroom on a loaded CI
-// runner. Because one set of limits covers every scenario, the heaviest case sets the bar and the
-// lighter ones are gated loosely; per-scenario budgets would be the next step if these need teeth.
-// Turning them into real regression detection needs a per-runner stored baseline, which the perf
-// artifacts feed.
-//
-// Reference P95 on an Apple silicon developer machine, worst scenario per phase:
-// build/layout net of snapshot 3.6ms (chat stream), snapshot 6us, draw record 2.5ms (list-500),
-// accessibility 0.6ms (list-500), native encode 34.3ms (catalog-500).
-const (
-	perfBuildLayoutBudgetMicroseconds   = 20000
-	perfSnapshotBudgetMicroseconds      = 4000
-	perfDrawRecordBudgetMicroseconds    = 15000
-	perfAccessibilityBudgetMicroseconds = 4000
-
-	// perfGoPhaseTotalBudgetMicroseconds covers the four Go-side phases inside the frame total.
-	perfGoPhaseTotalBudgetMicroseconds = 35000
-)
-
-// perfNativeEncodeBudgetMicroseconds caps the platform renderer's encode phase.
-// This is the one phase dominated by native drawing rather than Go work, so it cannot share a
-// cross-platform limit: CoreGraphics, Cairo/Pango, and Direct2D differ by more than the margin
-// above, and a macOS measurement says nothing about a Linux CI runner.
-func perfNativeEncodeBudgetMicroseconds() int64 {
-	switch runtime.GOOS {
-	case "darwin":
-		return 175000
-	default:
-		// Linux and Windows renderers have not been measured on their own CI runners. This starts
-		// deliberately loose and should be recalibrated from the first CI perf artifacts.
-		return 400000
-	}
+// frameBudget contains local phase ceilings in microseconds. Regression detection uses
+// measured P95 independently so generous initial CI ceilings cannot hide drift.
+type frameBudget struct {
+	build, snapshot, draw, a11y, goTotal, native int64
 }
 
-// perfFrameBudgetMicroseconds caps the sum of the five measured phases. It stays below the sum of
-// the individual ceilings so a frame cannot pass by sitting just under every single limit.
-func perfFrameBudgetMicroseconds() int64 {
-	return perfNativeEncodeBudgetMicroseconds() + perfGoPhaseTotalBudgetMicroseconds
+// frameBudgetFor keeps light interactions below heavy catalog and chat ceilings.
+func frameBudgetFor(scenario smokeperf.Scenario, platform string) frameBudget {
+	budget := frameBudget{build: 10000, snapshot: 2000, draw: 7000, a11y: 2000, goTotal: 18000}
+	switch scenario {
+	case smokeperf.ScenarioHover, smokeperf.ScenarioSelection, smokeperf.ScenarioResize:
+		budget.build, budget.draw, budget.a11y, budget.goTotal = 5000, 4000, 1000, 10000
+	case smokeperf.ScenarioPluginCatalog, smokeperf.ScenarioThemeCatalog, smokeperf.ScenarioChatActive,
+		smokeperf.ScenarioChatSettled, smokeperf.ScenarioChatScrollUp, smokeperf.ScenarioChatScrollDown:
+		budget = frameBudget{build: 20000, snapshot: 4000, draw: 15000, a11y: 4000, goTotal: 35000}
+	}
+	switch platform {
+	case "darwin":
+		budget.native = budget.goTotal * 5
+	case "windows":
+		budget.native = budget.goTotal * 8
+	default:
+		budget.native = budget.goTotal * 11
+	}
+	return budget
+}
+
+// latencyBudget applies the P95 ceiling for the interaction and platform.
+func latencyBudget(scenario smokeperf.Scenario, platform string) time.Duration {
+	budget := 300 * time.Millisecond
+	if scenario == smokeperf.ScenarioKeystroke {
+		switch platform {
+		case "darwin":
+			budget = 125 * time.Millisecond
+		case "windows":
+			budget = 160 * time.Millisecond
+		default:
+			budget = 200 * time.Millisecond
+		}
+	}
+	return budget * time.Duration(perfTimingBudgetMultiplier())
 }

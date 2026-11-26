@@ -636,29 +636,49 @@ static AXUIElementRef copyWindowAfterFullScreenExit(pid_t pid, CGWindowID target
     return NULL;
 }
 
+static CGWindowID getFocusedWindowID(pid_t expectedPID) {
+    AXUIElementRef systemWide = AXUIElementCreateSystemWide();
+    if (!systemWide) {
+        return 0;
+    }
+    AXUIElementRef focusedWindow = NULL;
+    AXError status = AXUIElementCopyAttributeValue(systemWide, kAXFocusedWindowAttribute, (CFTypeRef *)&focusedWindow);
+    CFRelease(systemWide);
+    if (status != kAXErrorSuccess || !focusedWindow) {
+        return 0;
+    }
+    CGWindowID id = 0;
+    pid_t owner = 0;
+    if (expectedPID <= 0 || (AXUIElementGetPid(focusedWindow, &owner) == kAXErrorSuccess && owner == expectedPID)) {
+        getAXWindowId(focusedWindow, &id);
+    }
+    CFRelease(focusedWindow);
+    return id;
+}
+
 char *getActiveWindowIdForManagement() {
     @autoreleasepool {
-        AXUIElementRef systemWide = AXUIElementCreateSystemWide();
-        if (!systemWide) {
-            return strdup("");
-        }
-
-        AXUIElementRef focusedWindow = NULL;
-        if (AXUIElementCopyAttributeValue(systemWide, kAXFocusedWindowAttribute, (CFTypeRef *)&focusedWindow) != kAXErrorSuccess || !focusedWindow) {
-            CFRelease(systemWide);
-            return strdup("");
-        }
-
-        CGWindowID windowId = 0;
-        BOOL ok = getAXWindowId(focusedWindow, &windowId);
-        CFRelease(focusedWindow);
-        CFRelease(systemWide);
-        if (!ok) {
+        CGWindowID windowId = getFocusedWindowID(0);
+        if (!windowId) {
             return strdup("");
         }
 
         NSString *windowIdString = [NSString stringWithFormat:@"%u", windowId];
         return strdup([windowIdString UTF8String]);
+    }
+}
+
+int getActiveWindowIdentity(unsigned int *windowID, char **name) {
+    @autoreleasepool {
+        NSRunningApplication *activeApp = NSWorkspace.sharedWorkspace.frontmostApplication;
+        if (!activeApp) {
+            return -1;
+        }
+        pid_t pid = activeApp.processIdentifier;
+        // An app switch between the two APIs must never pair one app's PID with another's window.
+        *windowID = AXIsProcessTrusted() ? getFocusedWindowID(pid) : 0;
+        *name = copyApplicationName(activeApp);
+        return pid;
     }
 }
 
@@ -2035,6 +2055,28 @@ char* getFileDialogPathByPid(int pid) {
         CFRelease(dialogWindow);
         CFRelease(appElement);
         return strdup("");
+    }
+}
+
+int activateWindowForManagement(const char *windowId, int pid) {
+    @autoreleasepool {
+        CGWindowID id = parseWindowId(windowId);
+        if (id == 0 || pid <= 0 || !AXIsProcessTrusted()) {
+            return 0;
+        }
+        AXUIElementRef window = copyWindowForId((pid_t)pid, id);
+        if (!window) {
+            return 0;
+        }
+        AXUIElementRef app = AXUIElementCreateApplication(pid);
+        AXUIElementSetMessagingTimeout(app, 0.15f);
+        AXUIElementSetAttributeValue(app, kAXFrontmostAttribute, kCFBooleanTrue);
+        AXUIElementSetAttributeValue(window, kAXMainAttribute, kCFBooleanTrue);
+        AXUIElementSetAttributeValue(app, kAXFocusedWindowAttribute, window);
+        AXError raised = AXUIElementPerformAction(window, kAXRaiseAction);
+        CFRelease(app);
+        CFRelease(window);
+        return raised == kAXErrorSuccess;
     }
 }
 

@@ -38,6 +38,11 @@ func simulatePaste() error {
 	return simulateCtrlKeyCombo(evKeyCodeV, "paste", false, nil)
 }
 
+// SimulateWaylandPasteAfterFocus confirms the target after the virtual keyboard is ready.
+func SimulateWaylandPasteAfterFocus(focus func() error) error {
+	return simulateCtrlKeyCombo(evKeyCodeV, "paste", false, func(int) error { return focus() })
+}
+
 // simulateBackspace injects a Backspace key press+release via the uinput
 // virtual keyboard. On Linux/Wayland, when a CapsLock combo (e.g. CapsLock+A)
 // is triggered, the system also sees the combo key and types it into the

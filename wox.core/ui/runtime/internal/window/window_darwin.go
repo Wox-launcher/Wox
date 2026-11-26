@@ -963,7 +963,7 @@ func (w *platformWindow) drawFrame(frame FrameInfo) {
 	frameStart := time.Now()
 	displayList := &DisplayList{}
 	if w.options.frameMetrics != nil {
-		displayList.frameID = w.options.frameMetrics.beginFrame()
+		displayList.frameID = w.options.frameMetrics.beginFrame(frame.Size)
 	}
 	if w.options.OnFrame != nil {
 		w.options.OnFrame(displayList, frame)
@@ -981,7 +981,7 @@ func (w *platformWindow) drawFrameSync(frame FrameInfo, transactional bool) {
 	frameStart := time.Now()
 	displayList := &DisplayList{}
 	if w.options.frameMetrics != nil {
-		displayList.frameID = w.options.frameMetrics.beginFrame()
+		displayList.frameID = w.options.frameMetrics.beginFrame(frame.Size)
 	}
 	if w.options.OnFrame != nil {
 		w.options.OnFrame(displayList, frame)
@@ -1639,6 +1639,9 @@ func testDarwinEdgeFade(scale, top, bottom float32) ([]byte, int) {
 
 // macOS already rasterizes IOSurfaces through CPU bitmap contexts.
 func platformConfigureSoftwareRendering(bool) {}
+
+// softwareRendering reflects the CPU bitmap rasterizer used for launcher IOSurfaces.
+func (w *platformWindow) softwareRendering() bool { return true }
 
 // showInactive displays a focusable window without activating it.
 func (w *platformWindow) showInactive() (FocusEpoch, error) {

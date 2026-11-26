@@ -104,6 +104,36 @@ func focusHyprlandActivation(ctx context.Context, address string) bool {
 	}
 }
 
+// focusCapturedHyprlandWindow verifies an exact address using live compositor state.
+func focusCapturedHyprlandWindow(ctx context.Context, id string, pid int) error {
+	matches := func() bool {
+		app, err := queryHyprlandForeground(ctx)
+		return err == nil && (id == "" || app.WindowID == id) && (pid <= 0 || app.Pid == pid)
+	}
+	if matches() {
+		return ctx.Err()
+	}
+	output, err := exec.CommandContext(ctx, "hyprctl", "-j", "clients").Output()
+	if err != nil {
+		return err
+	}
+	windows, err := parseHyprlandActivationWindows(output)
+	if err != nil {
+		return err
+	}
+	for _, candidate := range windows {
+		if (id == "" || candidate.Address == id) && (pid <= 0 || candidate.Pid == pid) && candidate.Mapped && !candidate.Hidden {
+			if script := hyprlandFocusDispatch(candidate.Address); script != "" {
+				if err := hyprlandDispatch(ctx, script); err != nil {
+					return err
+				}
+				return waitForForeground(ctx, matches)
+			}
+		}
+	}
+	return ErrWindowManagementWindowNotFound
+}
+
 // hyprlandFocusHeld confirms the compositor did not immediately restore another window.
 func hyprlandFocusHeld(ctx context.Context, address string) bool {
 	timer := time.NewTimer(hyprlandActivationSettle)

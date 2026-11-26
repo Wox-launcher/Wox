@@ -155,6 +155,8 @@ func dispatch(ctx context.Context, controller Controller, method string, rawPara
 			Retained: stats.Sys - stats.HeapReleased, StackInuse: stats.StackInuse, MemProfileRate: runtime.MemProfileRate,
 			ProcessMemoryBytes: processBytes,
 		}, nil)
+	case "perf.soak_stats":
+		return resultOrError(readSoakStats(controller))
 	case "perf.thread_snapshot":
 		var params struct {
 			Path string `json:"path"`

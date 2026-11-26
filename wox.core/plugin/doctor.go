@@ -3,6 +3,7 @@ package plugin
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"sort"
 	"strings"
 	"wox/common"
@@ -284,6 +285,17 @@ func checkDatabaseHealth(ctx context.Context) DoctorCheckResult {
 
 	actionName := ""
 	action := func(ctx context.Context, actionContext ActionContext) {}
+	if event, _ := database.LatestRecovery(util.GetLocation().GetBackupDirectory()); passed && event.Timestamp > 0 {
+		desc = databaseRecoverySummary(ctx, event)
+		actionName = "i18n:ui_toolbar_show_recovered_file"
+		action = func(ctx context.Context, _ ActionContext) {
+			notice := DatabaseRecoveryToast(ctx, event)
+			notice.Action.Action(ctx)
+		}
+		if event.Mode == database.RecoveryEmpty {
+			actionName = "i18n:plugin_doctor_database_open_cloud"
+		}
+	}
 	if !passed {
 		actionName = "i18n:plugin_doctor_database_repair_action"
 		action = func(ctx context.Context, actionContext ActionContext) {
@@ -326,6 +338,30 @@ func checkDatabaseHealth(ctx context.Context) DoctorCheckResult {
 		ActionName:             actionName,
 		PreventHideAfterAction: !passed,
 		Action:                 action,
+	}
+}
+
+// DatabaseRecoveryToast keeps paths local and offers the appropriate recovery entry point.
+func DatabaseRecoveryToast(ctx context.Context, event database.RecoveryEvent) common.ToastMsg {
+	notice := databaseRecoveryManualNotify(databaseRecoverySummary(ctx, event), filepath.Join(event.QuarantineDir, database.FileName))
+	notice.DisplaySeconds = 10
+	if event.Mode == database.RecoveryEmpty {
+		notice.Action = &common.ToastAction{Name: "i18n:plugin_doctor_database_open_cloud", Action: func(ctx context.Context) {
+			GetPluginManager().GetUI().OpenSettingWindow(ctx, common.SettingWindowContext{Path: "/cloud"})
+		}}
+	}
+	return notice
+}
+
+func databaseRecoverySummary(ctx context.Context, event database.RecoveryEvent) string {
+	translate := i18n.GetI18nManager().TranslateWox
+	switch event.Mode {
+	case database.RecoveryBackup:
+		return fmt.Sprintf(translate(ctx, "plugin_doctor_database_recovered_backup"), util.FormatTimestamp(event.BackupTime), event.QuarantineDir)
+	case database.RecoveryEmpty:
+		return fmt.Sprintf(translate(ctx, "plugin_doctor_database_recovered_empty"), event.QuarantineDir)
+	default:
+		return fmt.Sprintf(translate(ctx, "plugin_doctor_database_recovered_salvage"), event.SalvagedRows, event.QuarantineDir)
 	}
 }
 

@@ -4,6 +4,11 @@ on:
   schedule:
     - cron: "17 18 * * *"
   workflow_dispatch:
+    inputs:
+      soak_cycles:
+        description: Native soak iterations (0 skips)
+        type: number
+        default: 500
 
 permissions:
   contents: read
@@ -59,7 +64,7 @@ jobs:
         include:
           - name: Linux
             os: ubuntu-latest
-            runner: xvfb-run -a
+            runner: env -u WAYLAND_DISPLAY -u WAYLAND_SOCKET XDG_SESSION_TYPE=x11 GDK_BACKEND=x11 xvfb-run -a
           - name: macOS
             os: macos-latest
             runner: ""
@@ -134,9 +139,24 @@ jobs:
         shell: bash
         env:
           GO_UI_SMOKE_RUNNER: ${{ matrix.runner }}
+          WOX_NIGHTLY_PERF: "1"
           WOX_PERF_ARTIFACT_DIR: ${{ github.workspace }}/artifacts/perf
           WOX_SMOKE_ARTIFACT_DIR: ${{ github.workspace }}/artifacts/smoke
         run: make smoke
+      - name: Run native soak
+        if: ${{ github.event_name == 'schedule' || inputs.soak_cycles > 0 }}
+        shell: bash
+        env:
+          GO_UI_SMOKE_RUNNER: ${{ matrix.runner }}
+          WOX_SOAK_CYCLES: ${{ github.event_name == 'schedule' && '500' || inputs.soak_cycles }}
+          WOX_PERF_ARTIFACT_DIR: ${{ github.workspace }}/artifacts/perf
+          WOX_SMOKE_ARTIFACT_DIR: ${{ github.workspace }}/artifacts/smoke
+        run: make smoke-soak
+      - name: Compare performance baselines
+        if: always()
+        shell: bash
+        working-directory: wox.core
+        run: go run ./test/smokeperf/cmd/checkbaseline -fail-on-regression=false
       - name: Upload perf artifacts
         if: always()
         uses: actions/upload-artifact@v7

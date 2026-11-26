@@ -39,6 +39,37 @@ def result(result_id, callback, form=False):
 
 
 class ResultActionsTest(unittest.IsolatedAsyncioTestCase):
+    async def test_cancel_query_cancels_task_and_releases_its_callbacks(self):
+        started = asyncio.Event()
+        canceled = asyncio.Event()
+        resume = asyncio.Event()
+        callback = AsyncMock()
+
+        async def query(ctx, value):
+            if value.id == "slow":
+                self.callbacks.find("a", "slow", "early").cache(result("early", callback))
+                started.set()
+                try:
+                    await asyncio.Future()
+                except asyncio.CancelledError:
+                    canceled.set()
+                    await resume.wait()  # Simulate a plugin deferring cancellation until cleanup ends.
+            return [result("late", callback)]
+
+        self.plugin.query = query
+        request = asyncio.create_task(self.call("query", "a", "slow"))
+        await asyncio.wait_for(started.wait(), 1)
+        self.assertIn("early", self.callbacks.find("a", "slow", "early").results)
+        await self.call("cancelQuery", "a", "slow", RequestId="a:slow:query")
+        await asyncio.wait_for(canceled.wait(), 1)
+        self.assertIsNone(self.callbacks.find("a", "slow", "early"))
+        self.assertTrue((await self.call("query", "a", "next"))["QuerySkipped"])
+        self.assertEqual(len((await self.call("query", "other", "next"))["Results"]), 1)
+        resume.set()
+        self.assertEqual(await request, {"Results": []})
+        self.assertIsNone(self.callbacks.find("a", "slow", "late"))
+        self.assertEqual(len((await self.call("query", "a", "next"))["Results"]), 1)
+
     async def test_plugin_preview_data_sends_chart_snapshot(self):
         from wox_plugin import UpdatePluginPreviewDataOption
 
@@ -96,9 +127,11 @@ class ResultActionsTest(unittest.IsolatedAsyncioTestCase):
         preview = create_wox_view(lambda _session: Text(text="test"), lambda error: self.fail(str(error))).as_preview(
             on_dispose=lambda: disposed.append(True)
         )
-        pending.set_result([Result(id="row", title="row", sub_title="", icon=WoxImage(), preview=preview)])
+        row = Result(id="", title="row", sub_title="", icon=WoxImage(), preview=preview)
+        pending.set_result([row])
         await request
         self.assertEqual(disposed, [True])
+        self.assertEqual(row.id, "")
 
     async def test_rejected_preview_replacement_preserves_old_session(self):
         from wox_plugin import Text, create_wox_view
@@ -173,6 +206,7 @@ class ResultActionsTest(unittest.IsolatedAsyncioTestCase):
         return await jsonrpc.handle_request_from_wox(
             Context.new(),
             {
+                "Id": f"{session}:{query}:{method}",
                 "PluginId": "owner",
                 "PluginName": "Owner",
                 "Method": method,
@@ -257,14 +291,14 @@ class ResultActionsTest(unittest.IsolatedAsyncioTestCase):
 
         self.plugin.query = query
         old = asyncio.create_task(self.call("query", "a", "old"))
-        current = asyncio.create_task(self.call("query", "a", "current"))
+        current = asyncio.create_task(self.call("query", "b", "current"))
         await asyncio.sleep(0)
         pending["current"].set()
         await current
         pending["old"].set()
         await old
-        for query_id in ("old", "current"):
-            await self.call("action", "a", query_id, ResultId="row", ActionId="open")
+        for session, query_id in (("a", "old"), ("b", "current")):
+            await self.call("action", session, query_id, ResultId="row", ActionId="open")
         self.assertEqual(self.calls, ["old", "current"])
         late = asyncio.create_task(self.call("query", "a", "late"))
         await asyncio.sleep(0)

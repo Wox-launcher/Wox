@@ -15,7 +15,7 @@ func TestQueryResultLifetime(t *testing.T) {
 	store := newQueryResultStore()
 	released := map[string]int{}
 	registerQuery := func(session, id string, age int64) func(any, func()) {
-		store.startQuery(Query{SessionId: session, Id: id})
+		store.startQuery(context.Background(), Query{SessionId: session, Id: id})
 		set, _ := store.getQuery(session, id)
 		set.StartedAt = age
 		register, managed := QueryResultLifetime(store.withQueryResultLifetime(context.Background(), session, id))
@@ -47,7 +47,7 @@ func TestQueryResultLifetime(t *testing.T) {
 func TestQueryResultLateRegistration(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		store := newQueryResultStore()
-		store.startQuery(Query{SessionId: "s", Id: "q"})
+		store.startQuery(context.Background(), Query{SessionId: "s", Id: "q"})
 		register, _ := QueryResultLifetime(store.withQueryResultLifetime(context.Background(), "s", "q"))
 		var calls atomic.Int32
 		var work sync.WaitGroup

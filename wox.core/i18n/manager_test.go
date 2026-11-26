@@ -35,19 +35,19 @@ func TestUpdateLangSharesEnglishTableAndReloadsOthers(t *testing.T) {
 		t.Fatalf("UpdateLang(en_US): %v", err)
 	}
 
-	english := manager.TranslateWox(context.Background(), "plugin_wox_memory_gpu")
-	if english == "" || english == "plugin_wox_memory_gpu" {
-		t.Fatalf("en_US translation for plugin_wox_memory_gpu = %q", english)
+	english := manager.TranslateWox(context.Background(), "plugin_doctor_memory_gpu")
+	if english == "" || english == "plugin_doctor_memory_gpu" {
+		t.Fatalf("en_US translation for plugin_doctor_memory_gpu = %q", english)
 	}
 
 	if err := manager.UpdateLang(context.Background(), LangCodeZhCn); err != nil {
 		t.Fatalf("UpdateLang(zh_CN): %v", err)
 	}
-	chinese := manager.TranslateWox(context.Background(), "plugin_wox_memory_gpu")
+	chinese := manager.TranslateWox(context.Background(), "plugin_doctor_memory_gpu")
 	if chinese == "" || chinese == english {
 		t.Fatalf("zh_CN translation = %q, want a distinct value from %q", chinese, english)
 	}
-	if got := manager.TranslateWoxEnUs(context.Background(), "plugin_wox_memory_gpu"); got != english {
+	if got := manager.TranslateWoxEnUs(context.Background(), "plugin_doctor_memory_gpu"); got != english {
 		t.Fatalf("TranslateWoxEnUs after lang change = %q, want %q", got, english)
 	}
 

@@ -16,6 +16,8 @@ const (
 	// runtime down with it; the watchdog restarts the host instead of leaving
 	// the runtime broken until the next manual plugin load.
 	hostWatchdogCheckInterval = 5 * time.Second
+	hostWatchdogPingTimeout   = 3 * time.Second
+	hostWatchdogPingThreshold = 2
 
 	// hostWatchdogMaxConsecutiveFailures is how many watchdog restarts may fail
 	// (host dies again shortly after restart) before auto-restart backs off.
@@ -31,6 +33,7 @@ const (
 // counters, a plugin that kills the host on every load would make the watchdog
 // restart the host in a tight loop.
 type hostWatchdogState struct {
+	pingFailures        int
 	consecutiveRestarts int
 	cooldownUntil       int64
 }
@@ -65,9 +68,19 @@ func (l *pluginLifecycle) startHostWatchdog(ctx context.Context) {
 				return
 			case <-ticker.C:
 				l.checkHostsHealth(util.NewTraceContext())
+			case <-l.hostWatchdogWake:
+				l.checkHostsHealth(util.NewTraceContext())
 			}
 		}
 	})
+}
+
+// CheckHostsAfterWake coalesces resume checks into the existing watchdog loop.
+func (m *Manager) CheckHostsAfterWake() {
+	select {
+	case m.lifecycle.hostWatchdogWake <- struct{}{}:
+	default:
+	}
 }
 
 // stopHostWatchdog stops the health monitor so Wox shutdown does not try to
@@ -101,6 +114,22 @@ func (l *pluginLifecycle) checkHostsHealth(ctx context.Context) {
 		}
 
 		if pluginHost.IsStarted(ctx) {
+			if !l.hostHasLiveInstances(pluginHost) {
+				l.resetHostWatchdogState(string(runtimeName))
+				continue
+			}
+			probe, supported := pluginHost.(interface{ Ping(context.Context) error })
+			if supported {
+				pingCtx, cancel := context.WithTimeout(ctx, hostWatchdogPingTimeout)
+				err := probe.Ping(pingCtx)
+				cancel()
+				if err != nil {
+					if l.recordHostPingFailure(runtimeName) >= hostWatchdogPingThreshold {
+						l.restartHostForWatchdog(ctx, pluginHost, runtimeName, true)
+					}
+					continue
+				}
+			}
 			l.resetHostWatchdogState(string(runtimeName))
 			continue
 		}
@@ -111,7 +140,7 @@ func (l *pluginLifecycle) checkHostsHealth(ctx context.Context) {
 			continue
 		}
 
-		l.restartHostForWatchdog(ctx, pluginHost, runtimeName)
+		l.restartHostForWatchdog(ctx, pluginHost, runtimeName, false)
 	}
 }
 
@@ -134,16 +163,29 @@ func (l *pluginLifecycle) resetHostWatchdogState(runtimeName string) {
 	defer l.hostRestartMu.Unlock()
 
 	state := l.hostWatchdogStates[runtimeName]
-	if state != nil && (state.consecutiveRestarts > 0 || state.cooldownUntil > 0) {
+	if state != nil {
+		state.pingFailures = 0
 		state.consecutiveRestarts = 0
 		state.cooldownUntil = 0
 	}
 }
 
+func (l *pluginLifecycle) recordHostPingFailure(runtimeName Runtime) int {
+	l.hostRestartMu.Lock()
+	defer l.hostRestartMu.Unlock()
+	state := l.hostWatchdogStates[string(runtimeName)]
+	if state == nil {
+		state = &hostWatchdogState{}
+		l.hostWatchdogStates[string(runtimeName)] = state
+	}
+	state.pingFailures++
+	return state.pingFailures
+}
+
 // restartHostForWatchdog restarts a dead host. It serializes with user-triggered
 // restarts through hostRestartMu and re-checks the host after acquiring the
 // lock, because a concurrent restart may have already recovered the runtime.
-func (l *pluginLifecycle) restartHostForWatchdog(ctx context.Context, pluginHost Host, runtimeName Runtime) {
+func (l *pluginLifecycle) restartHostForWatchdog(ctx context.Context, pluginHost Host, runtimeName Runtime, unresponsive bool) {
 	l.hostRestartMu.Lock()
 	defer l.hostRestartMu.Unlock()
 
@@ -160,11 +202,15 @@ func (l *pluginLifecycle) restartHostForWatchdog(ctx context.Context, pluginHost
 
 	// Another restart (settings/uninstall) may have completed while waiting for
 	// the lock; nothing to do if the host is already back.
-	if pluginHost.IsStarted(ctx) {
+	if unresponsive && state.pingFailures < hostWatchdogPingThreshold {
+		return
+	}
+	if !unresponsive && pluginHost.IsStarted(ctx) {
 		return
 	}
 
-	logger.Warn(ctx, fmt.Sprintf("<%s HOST> watchdog detected dead host, restarting and reloading plugins", runtimeName))
+	state.pingFailures = 0
+	logger.Warn(ctx, fmt.Sprintf("<%s HOST> watchdog detected an unavailable host, restarting and reloading plugins", runtimeName))
 	restartErr := l.restartHostInternal(ctx, pluginHost, nil, nil)
 	state.consecutiveRestarts++
 	if restartErr != nil {
@@ -175,5 +221,16 @@ func (l *pluginLifecycle) restartHostForWatchdog(ctx context.Context, pluginHost
 	if state.consecutiveRestarts >= hostWatchdogMaxConsecutiveFailures {
 		state.cooldownUntil = now + int64(hostWatchdogCooldownDuration/time.Millisecond)
 		logger.Error(ctx, fmt.Sprintf("<%s HOST> watchdog restart failed %d times in a row, back off auto-restart", runtimeName, state.consecutiveRestarts))
+	}
+}
+
+// CheckWatchersAfterWake lets system plugins revalidate owned subscriptions.
+func (m *Manager) CheckWatchersAfterWake(ctx context.Context) {
+	for _, instance := range m.GetPluginInstances() {
+		if instance.IsSystemPlugin {
+			if watcher, ok := instance.Plugin.(interface{ CheckAfterWake(context.Context) }); ok {
+				watcher.CheckAfterWake(ctx)
+			}
+		}
 	}
 }

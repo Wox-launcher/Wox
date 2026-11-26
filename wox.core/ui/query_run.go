@@ -149,6 +149,8 @@ func (r *queryRun) waitForResults(execution plugin.QueryExecution) {
 
 	for {
 		select {
+		case <-r.ctx.Done():
+			return
 		case response := <-execution.Results:
 			r.addResponse(response)
 		case <-fallbackDeadline:
@@ -181,11 +183,6 @@ func (r *queryRun) waitForResults(execution plugin.QueryExecution) {
 			// Run the same fallback check at final completion so queries without any
 			// fallback-blocking plugins still get a fallback result when appropriate.
 			r.finish(execution.Results)
-			return
-		case <-time.After(time.Minute):
-			logger.Info(r.ctx, fmt.Sprintf("query timeout, query: %s, request id: %s", r.query.String(), r.request.RequestID))
-			r.resultDebouncer.Done(r.ctx)
-			r.view.ApplyQueryError(r.ctx, r.queryId, fmt.Errorf("query timeout, query: %s, request id: %s", r.query.String(), r.request.RequestID))
 			return
 		}
 	}
@@ -341,6 +338,9 @@ func (r *queryRun) showFallbackResults() {
 }
 
 func (r *queryRun) flush(results []plugin.QueryResultUI, reason string) {
+	if r.ctx.Err() != nil {
+		return
+	}
 	flushStartedAt := time.Now()
 	flushStart := flushStartedAt.UnixMilli()
 	isFinal := reason == "done"

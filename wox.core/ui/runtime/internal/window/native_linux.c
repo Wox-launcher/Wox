@@ -298,6 +298,7 @@ struct WoxLinuxWindow {
   bool layer_move_skip_sample;
   bool input_enabled;
   bool input_composing;
+  bool ime_escape_down;
   bool active_web_view_transient;
   bool pointer_over_web_view;
   uint8_t pointer_cursor;
@@ -2025,6 +2026,22 @@ static void on_ime_preedit_changed(GtkIMContext *context, gpointer data) {
 static gboolean on_key_press(GtkWidget *widget, GdkEventKey *event, gpointer data) {
   (void)widget;
   WoxLinuxWindow *window = data;
+  if (event->keyval == GDK_KEY_Escape && window->input_enabled) {
+    if (window->ime_escape_down) {
+      return TRUE;
+    }
+    bool composing = window->input_composing;
+    bool consumed = gtk_im_context_filter_keypress(window->im_context, event);
+    if (composing && !consumed) {
+      gtk_im_context_reset(window->im_context);
+      if (window->input_composing) {
+        window->input_composing = false;
+        woxGoLinuxTextInput(window->context, WOX_TEXT_INPUT_COMPOSE, "");
+      }
+    }
+    window->ime_escape_down = composing || consumed;
+    return window->ime_escape_down || emit_key(window, event, true);
+  }
   if (emit_key(window, event, true)) {
     return TRUE;
   }
@@ -2034,6 +2051,13 @@ static gboolean on_key_press(GtkWidget *widget, GdkEventKey *event, gpointer dat
 static gboolean on_key_release(GtkWidget *widget, GdkEventKey *event, gpointer data) {
   (void)widget;
   WoxLinuxWindow *window = data;
+  if (event->keyval == GDK_KEY_Escape && window->ime_escape_down) {
+    window->ime_escape_down = false;
+    if (window->input_enabled) {
+      gtk_im_context_filter_keypress(window->im_context, event);
+    }
+    return TRUE;
+  }
   if (emit_key(window, event, false)) {
     return TRUE;
   }
@@ -3249,6 +3273,7 @@ static gboolean on_focus_out(GtkWidget *widget, GdkEventFocus *event, gpointer d
     wox_linux_note_stage("im-focus-out-done");
   }
   window->input_composing = false;
+  window->ime_escape_down = false;
   if (window->native_dialog_active) {
     return FALSE;
   }
@@ -3703,6 +3728,10 @@ static void show_main(void *data) {
   window->visible = true;
   trace_linux_window_geometry(window, "show_begin");
   wox_linux_desktop_remember_focus(window->window);
+  // Size the hidden toplevel before GTK maps it. Its first draw then uses the
+  // current launcher layout instead of the previous query's allocation.
+  apply_linux_window_size(window, (int)ceilf(window->preferred_width), (int)ceilf(window->preferred_height));
+  gtk_gl_area_queue_render(GTK_GL_AREA(window->gl_area));
   place_window(window);
   gtk_widget_show_all(window->window);
   apply_linux_background_effect(window);
@@ -4654,6 +4683,14 @@ uintptr_t wox_linux_window_display(WoxLinuxWindow *window) {
 // A native owner handle supports generic desktop operations on GTK's owning thread.
 uintptr_t wox_linux_window_handle(WoxLinuxWindow *window) {
   return window != NULL && !window->closed ? (uintptr_t)window->window : 0;
+}
+
+// Read the actual GL rasterizer after GTK realizes the primary surface.
+int32_t wox_linux_window_software_rendering(WoxLinuxWindow *window) {
+  if (window == NULL || window->closed || !window->renderer.ready) {
+    return -1;
+  }
+  return window->renderer.software_gl;
 }
 
 static gboolean linux_invalidate_idle(gpointer data) {

@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/md5"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"image/png"
 	"net/url"
@@ -18,7 +19,6 @@ import (
 	"wox/util"
 	"wox/util/clipboard"
 	"wox/util/imagecache"
-	"wox/util/keyboard"
 	"wox/util/websiteicon"
 	"wox/util/window"
 )
@@ -143,7 +143,7 @@ func GetPasteToActiveWindowAction(ctx context.Context, api plugin.API, target pl
 	if windowName == "" {
 		windowName = window.GetWindowNameByPid(windowPid)
 	}
-	if windowName == "" && windowPid <= 0 {
+	if windowName == "" && target.ActiveWindowId == "" && windowPid <= 0 {
 		return plugin.QueryResultAction{}, fmt.Errorf("no active window")
 	}
 
@@ -156,17 +156,14 @@ func GetPasteToActiveWindowAction(ctx context.Context, api plugin.API, target pl
 		Name:                   actionName,
 		Icon:                   icons.Get(icons.ActionPaste),
 		IsDefault:              true,
-		PreventHideAfterAction: util.IsKDEWayland(),
+		PreventHideAfterAction: true,
 		Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 			var err error
 			if prepareClipboard != nil {
 				err = prepareClipboard(ctx)
 			}
-			// KDE images are published by the focused launcher. Hide explicitly
-			// after publication so activation cannot race the usual async hide.
-			if util.IsKDEWayland() {
-				api.HideApp(ctx)
-			}
+			// Some clipboard providers need the launcher to own focus during publication.
+			api.HideApp(ctx)
 			if err != nil {
 				api.Log(ctx, plugin.LogLevelError, err.Error())
 				api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: err.Error()})
@@ -189,7 +186,7 @@ func GetPasteToActiveWindowAction(ctx context.Context, api plugin.API, target pl
 }
 
 func pasteTextToActiveWindow(ctx context.Context, api plugin.API, target plugin.QueryEnv, text string) error {
-	if target.ActiveWindowTitle == "" && target.ActiveWindowPid <= 0 {
+	if target.ActiveWindowId == "" && target.ActiveWindowPid <= 0 {
 		return fmt.Errorf("no active window")
 	}
 	if text == "" {
@@ -203,15 +200,29 @@ func pasteTextToActiveWindow(ctx context.Context, api plugin.API, target plugin.
 
 // pasteToActiveWindow sends the clipboard contents after the caller has published them.
 func pasteToActiveWindow(ctx context.Context, api plugin.API, target plugin.QueryEnv) error {
-	if util.IsKDEWayland() {
-		return pasteToKDEWindow(ctx, api, target)
+	focus := func() error {
+		focusCtx, cancel := context.WithTimeout(ctx, 400*time.Millisecond)
+		defer cancel()
+		ticker := time.NewTicker(10 * time.Millisecond)
+		defer ticker.Stop()
+		for api.IsVisible(focusCtx) {
+			select {
+			case <-focusCtx.Done():
+				return fmt.Errorf("launcher did not hide: %w", focusCtx.Err())
+			case <-ticker.C:
+			}
+		}
+		if err := window.FocusWindow(focusCtx, target.ActiveWindowId, target.ActiveWindowPid); err != nil {
+			return err
+		}
+		if api.IsVisible(focusCtx) {
+			return fmt.Errorf("launcher reopened during focus restoration")
+		}
+		return focusCtx.Err()
 	}
-	if pid := target.ActiveWindowPid; pid > 0 && !window.ActivateWindowByPid(pid) {
-		api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("activate window failed, pid=%d", pid))
-	}
-	time.Sleep(150 * time.Millisecond)
-	if err := keyboard.SimulatePaste(); err != nil {
-		return fmt.Errorf("simulate paste clipboard failed, err=%s", err.Error())
+	if err := simulatePasteAfterFocus(ctx, target, focus); err != nil {
+		util.GetLogger().Warn(ctx, fmt.Sprintf("automatic paste failed: %v", err))
+		return errors.New(i18n.GetI18nManager().TranslateWox(ctx, "plugin_paste_manually"))
 	}
 
 	api.Log(ctx, plugin.LogLevelInfo, "simulate paste clipboard success")

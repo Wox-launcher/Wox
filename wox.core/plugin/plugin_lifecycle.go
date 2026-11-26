@@ -37,6 +37,7 @@ type pluginLifecycle struct {
 	hostWatchdogDone      chan struct{}
 	hostWatchdogLifecycle sync.Mutex
 	hostWatchdogStarted   bool
+	hostWatchdogWake      chan struct{}
 	// Startup, store installs and reloads of the same ID must not publish duplicates.
 	pluginLoadLocks     sync.Map
 	releasePresentation func(string)
@@ -51,6 +52,7 @@ func newPluginLifecycle() pluginLifecycle {
 		singleFileReloadTimers: util.NewHashMap[string, *time.Timer](),
 		singleFileWatchIgnored: util.NewHashMap[string, int64](),
 		hostWatchdogStates:     map[string]*hostWatchdogState{},
+		hostWatchdogWake:       make(chan struct{}, 1),
 		hostWatchdogStop:       make(chan struct{}),
 		hostWatchdogDone:       make(chan struct{}),
 	}

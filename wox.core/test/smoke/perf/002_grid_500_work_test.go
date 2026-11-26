@@ -8,6 +8,7 @@ import (
 
 	"wox/test/automationdriver"
 	"wox/test/smoke"
+	"wox/test/smokeperf"
 )
 
 // Test002Grid500Work verifies the 500-item grouped grid fixture records per-frame work.
@@ -20,8 +21,8 @@ func Test002Grid500Work(t *testing.T) {
 		if _, found := automationdriver.Find(snapshot, "launcher.result.perf-grid-0000"); !found {
 			t.Fatal("expected first grid fixture result")
 		}
-		samples := waitForPresentedSamples(t, ctx, client)
-		assertSettledWork(t, samples)
+		samples := waitForPresentedSamples(t, ctx, client, smokeperf.ScenarioGrid)
+		assertSettledWork(t, smokeperf.ScenarioGrid, samples)
 		assertUnexpectedDroppedFramesAtMost(t, ctx, client, 0)
 	})
 }

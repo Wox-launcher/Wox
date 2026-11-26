@@ -1,4 +1,4 @@
-.PHONY: build clean host _bundle_mac_app _linux_package_icons plugins pluginstats themes plugin-health help dev run sdk _update_sdk_versions _sync_sdk_versions test test-go-ui-unit build-go-ui-smoke clean-go-ui-smoke smoke smoke-perf-baseline test-all test-calculator test-converter test-plugin test-time test-network test-quick test-legacy only_test check_deps release release-continue winget-update chocolatey-update appimage deb rpm www
+.PHONY: build clean host _bundle_mac_app _linux_package_icons plugins pluginstats themes plugin-health help dev run sdk _update_sdk_versions _sync_sdk_versions test test-go-ui-unit build-go-ui-smoke clean-go-ui-smoke smoke smoke-core smoke-perf-baseline test-all test-calculator test-converter test-plugin test-time test-network test-quick test-legacy only_test check_deps release release-continue winget-update chocolatey-update appimage deb rpm www
 
 ifeq ($(firstword $(MAKECMDGOALS)),smoke)
 SMOKE_ARGUMENTS := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
@@ -121,6 +121,8 @@ help:
 	@echo "  test       Run tests"
 	@echo "  test-go-ui-unit  Run retained-widget, automation-contract, and driver tests"
 	@echo "  smoke      Run all native smoke cases, one package with CASE=perf, or one case with: make smoke launcher/plugin/calculator/001"
+	@echo "  smoke-core Run the core native smoke cases in one shared Wox process"
+	@echo "  smoke-soak Run the native stability soak (default 200 cycles)"
 	@echo "             Add slow to pause 500ms after visible steps; override with SMOKE_STEP_DELAY=1s"
 	@echo "  smoke-perf-baseline  Run the perf package 10 times and write JSON artifacts"
 	@echo "  build      Build all components"
@@ -442,14 +444,17 @@ clean-go-ui-smoke:
 # The suite runner compiles the selected smoke packages once, then owns one Wox
 # process shared by those packages. Packages still run one at a time so the first
 # failure stops the suite before a later case reuses a dirty process.
-smoke: build-go-ui-smoke
+.PHONY: smoke-soak
+smoke-soak: SMOKE_CASE := perf/010
+smoke-soak: export WOX_SOAK_TEST := 1
+smoke-soak: export WOX_PERF_ARTIFACT_DIR ?= $(CURDIR)/artifacts/perf
+smoke-core: SMOKE_SUITE := core
+smoke smoke-core smoke-soak: build-go-ui-smoke
 	@trap 'rm -f "$(GO_UI_SMOKE_BINARY)"' EXIT; \
 		cd wox.core && \
-		WOX_GO_UI_SMOKE_BINARY="$(GO_UI_SMOKE_BINARY)" WOX_GO_UI_SMOKE_STEP_DELAY="$(SMOKE_STEP_DELAY)" $(GO_UI_SMOKE_RUNNER) go run ./test/smokerunner -case "$(SMOKE_CASE)"
+		WOX_GO_UI_SMOKE_BINARY="$(GO_UI_SMOKE_BINARY)" WOX_GO_UI_SMOKE_STEP_DELAY="$(SMOKE_STEP_DELAY)" $(GO_UI_SMOKE_RUNNER) go run ./test/smokerunner -case "$(SMOKE_CASE)" -suite "$(SMOKE_SUITE)"
 
-# Ten serial perf-package runs produce raw per-frame baseline artifacts for analysis.
-# The perf cases carry their own loose phase ceilings; these artifacts are what you recalibrate
-# them from, and nothing consumes them automatically.
+# Serial perf-package runs collect raw timings and scenario P95s for baseline calibration.
 PERF_BASELINE_RUNS ?= 10
 smoke-perf-baseline: build-go-ui-smoke
 	@mkdir -p artifacts/perf

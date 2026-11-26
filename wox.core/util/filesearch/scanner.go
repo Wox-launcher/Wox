@@ -59,6 +59,7 @@ type Scanner struct {
 	stopCtx     context.Context
 	stopCancel  context.CancelFunc
 	requestCh   chan scanRequest
+	wakeCh      chan struct{}
 	dirtyCh     chan struct{}
 	runningMu   sync.Mutex
 	scanRunning bool
@@ -133,6 +134,7 @@ func newScannerWithPolicyState(db *FileSearchDB, policy *policyState) *Scanner {
 		stopCtx:          stopCtx,
 		stopCancel:       stopCancel,
 		requestCh:        make(chan scanRequest, 1),
+		wakeCh:           make(chan struct{}, 1),
 		dirtyCh:          make(chan struct{}, 1),
 		changeFeed:       newPlatformChangeFeed(),
 		dirtyQueueConfig: dirtyQueueConfig,
@@ -214,6 +216,10 @@ func (s *Scanner) Start(ctx context.Context) {
 				}
 				cancelOptimize()
 				columnMaintenanceTimer.Reset(defaultColumnMaintenanceInterval)
+			case <-s.wakeCh:
+				wakeCtx, cancelWake := s.stopAwareContext(util.NewTraceContext())
+				s.refreshChangeFeed(wakeCtx)
+				cancelWake()
 			case request := <-s.requestCh:
 				rescanCtx, cancelRescan := s.stopAwareContext(contextWithTraceID(util.NewTraceContext(), request.TraceID))
 				util.GetLogger().Info(rescanCtx, fmt.Sprintf("filesearch full rescan triggered: reason=%s", request.Reason))

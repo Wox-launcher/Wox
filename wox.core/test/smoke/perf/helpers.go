@@ -9,12 +9,15 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	"wox/test/automationdriver"
 	"wox/test/smoke"
+	"wox/test/smokeperf"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 )
@@ -45,14 +48,14 @@ const (
 	frameSampleBudget = 12 * time.Second
 )
 
-func waitForPresentedSamples(t *testing.T, ctx context.Context, client *automationdriver.Client) []woxui.FrameMetricsSample {
+func waitForPresentedSamples(t *testing.T, ctx context.Context, client *automationdriver.Client, scenario smokeperf.Scenario) []woxui.FrameMetricsSample {
 	t.Helper()
 	waitForSnapshotQuiet(t, ctx, client, 150*time.Millisecond)
-	return collectPresentedSamples(t, ctx, client)
+	return collectPresentedSamples(t, ctx, client, scenario)
 }
 
 // collectPresentedSamples also serves active streams, which must not wait for quiet first.
-func collectPresentedSamples(t *testing.T, ctx context.Context, client *automationdriver.Client) []woxui.FrameMetricsSample {
+func collectPresentedSamples(t *testing.T, ctx context.Context, client *automationdriver.Client, scenario smokeperf.Scenario) []woxui.FrameMetricsSample {
 	t.Helper()
 	want := perfSampleCount
 	if err := client.ResetFrameMetrics(ctx); err != nil {
@@ -104,8 +107,9 @@ func collectPresentedSamples(t *testing.T, ctx context.Context, client *automati
 			observed = append(observed, sample)
 		}
 		if len(observed) >= want {
-			writePerfArtifact(t, observed)
-			return observed[:want]
+			samples := observed[:want]
+			writePerfArtifact(t, scenario, samples)
+			return samples
 		}
 		if len(observed) > observedBeforePoll {
 			// Every sample needs its own frame, so the next request goes out as soon as
@@ -174,7 +178,7 @@ func assertFrameWork(t *testing.T, samples []woxui.FrameMetricsSample) {
 }
 
 // assertSettledWork applies phase timing budgets only after updates have finished.
-func assertSettledWork(t *testing.T, samples []woxui.FrameMetricsSample) {
+func assertSettledWork(t *testing.T, scenario smokeperf.Scenario, samples []woxui.FrameMetricsSample) {
 	t.Helper()
 	assertFrameWork(t, samples)
 	steady := steadySamples(t, samples)
@@ -186,7 +190,9 @@ func assertSettledWork(t *testing.T, samples []woxui.FrameMetricsSample) {
 	if commandMax > perfMaxDisplayCommands {
 		t.Fatalf("steady max command count %d exceeded %d", commandMax, perfMaxDisplayCommands)
 	}
-	assertPhaseBudgets(t, steady)
+	if err := checkPhaseBudgets(scenario, runtime.GOOS, steady); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // steadySamples drops the warmup head so percentiles describe repeated frames only.
@@ -246,49 +252,36 @@ type phaseBudget struct {
 	limit int64
 }
 
-// perfPhaseBudgets lists the per-phase ceilings for this platform.
-//
-// Build/Layout is measured net of Snapshot because the recorded BuildLayout window encloses the
-// snapshot call, so charging both separately would count the same microseconds twice. Native
-// encode is the only phase whose cost is dominated by the platform renderer, so it carries a
-// per-GOOS limit instead of sharing the Go-side one.
-func perfPhaseBudgets() []phaseBudget {
+// perfPhaseBudgets counts snapshot time separately from the build/layout phase that encloses it.
+func perfPhaseBudgets(budget frameBudget) []phaseBudget {
 	return []phaseBudget{
 		{"build/layout excluding snapshot", func(sample woxui.FrameMetricsSample) int64 {
 			return sample.BuildLayoutMicroseconds - sample.SnapshotMicroseconds
-		}, perfBuildLayoutBudgetMicroseconds},
-		{"snapshot", func(sample woxui.FrameMetricsSample) int64 { return sample.SnapshotMicroseconds }, perfSnapshotBudgetMicroseconds},
-		{"draw record", func(sample woxui.FrameMetricsSample) int64 { return sample.DrawRecordMicroseconds }, perfDrawRecordBudgetMicroseconds},
-		{"accessibility", func(sample woxui.FrameMetricsSample) int64 { return sample.AccessibilityMicroseconds }, perfAccessibilityBudgetMicroseconds},
-		{"native encode", func(sample woxui.FrameMetricsSample) int64 { return sample.NativeEncodeMicroseconds }, perfNativeEncodeBudgetMicroseconds()},
-	}
-}
-
-// assertPhaseBudgets gates the wall-clock cost of each frame phase and their sum.
-// The ceilings are order-of-magnitude guards, not regression detectors: they are set far above
-// observed steady-state P95 so a slower Pango, CoreGraphics, or snapshot path is caught while
-// ordinary CI scheduling noise is not.
-func assertPhaseBudgets(t *testing.T, steady []woxui.FrameMetricsSample) {
-	t.Helper()
-	if err := checkPhaseBudgets(steady); err != nil {
-		t.Fatal(err)
+		}, budget.build},
+		{"snapshot", func(sample woxui.FrameMetricsSample) int64 { return sample.SnapshotMicroseconds }, budget.snapshot},
+		{"draw record", func(sample woxui.FrameMetricsSample) int64 { return sample.DrawRecordMicroseconds }, budget.draw},
+		{"accessibility", func(sample woxui.FrameMetricsSample) int64 { return sample.AccessibilityMicroseconds }, budget.a11y},
+		{"native renderer", func(sample woxui.FrameMetricsSample) int64 {
+			return sample.NativeEncodeMicroseconds + sample.NativePresentMicroseconds
+		}, budget.native},
 	}
 }
 
 // checkPhaseBudgets compares timings without changing the deterministic work assertions.
-func checkPhaseBudgets(steady []woxui.FrameMetricsSample) error {
+func checkPhaseBudgets(scenario smokeperf.Scenario, os string, steady []woxui.FrameMetricsSample) error {
+	budget := frameBudgetFor(scenario, os)
 	var totalMax int64
 	multiplier := perfTimingBudgetMultiplier()
-	for _, budget := range perfPhaseBudgets() {
-		budget.limit *= multiplier
-		observed := maxInt64(phaseValues(steady, budget.value))
+	for _, phase := range perfPhaseBudgets(budget) {
+		limit := phase.limit * multiplier
+		observed := maxInt64(phaseValues(steady, phase.value))
 		totalMax += observed
-		if observed > budget.limit {
-			return fmt.Errorf("steady max %s %dus exceeded %dus", budget.name, observed, budget.limit)
+		if observed > limit {
+			return fmt.Errorf("%s steady max %s %dus exceeded %dus", scenario, phase.name, observed, limit)
 		}
 	}
-	if limit := perfFrameBudgetMicroseconds() * multiplier; totalMax > limit {
-		return fmt.Errorf("steady max phase total %dus exceeded %dus", totalMax, limit)
+	if limit := (budget.goTotal + budget.native) * multiplier; totalMax > limit {
+		return fmt.Errorf("%s steady max phase total %dus exceeded %dus", scenario, totalMax, limit)
 	}
 	return nil
 }
@@ -351,11 +344,38 @@ func assertUnexpectedDroppedFramesAtMost(t *testing.T, ctx context.Context, clie
 	}
 }
 
-func writePerfArtifact(t *testing.T, samples []woxui.FrameMetricsSample) {
+// writePerfArtifact records steady-state total frame timing with the raw samples.
+func writePerfArtifact(t *testing.T, scenario smokeperf.Scenario, samples []woxui.FrameMetricsSample) {
+	t.Helper()
+	values := make([]time.Duration, 0, len(samples)-perfWarmupSamples)
+	for _, sample := range steadySamples(t, samples) {
+		total := sample.BuildLayoutMicroseconds + sample.DrawRecordMicroseconds +
+			sample.AccessibilityMicroseconds + sample.NativeEncodeMicroseconds + sample.NativePresentMicroseconds
+		values = append(values, time.Duration(total)*time.Microsecond)
+	}
+	writePerfJSON(t, scenario, struct {
+		smokeperf.PerformanceArtifact
+		Samples                []woxui.FrameMetricsSample `json:"samples"`
+		TimingBudgetMultiplier int64                      `json:"timingBudgetMultiplier"`
+	}{perfArtifactHeader(t, scenario, smokeperf.LatencyMetricFrameWork, values), samples, perfTimingBudgetMultiplier()})
+}
+
+// perfArtifactHeader uses the common latency fields consumed by Nightly.
+func perfArtifactHeader(t *testing.T, scenario smokeperf.Scenario, metric smokeperf.LatencyMetric, values []time.Duration) smokeperf.PerformanceArtifact {
+	return smokeperf.PerformanceArtifact{
+		Case: t.Name(), Scenario: scenario, OS: runtime.GOOS, Metric: metric,
+		P50Ms: durationMilliseconds(percentileDuration(values, 0.50)),
+		P95Ms: durationMilliseconds(percentileDuration(values, 0.95)),
+		MaxMs: durationMilliseconds(slices.Max(values)),
+	}
+}
+
+// writePerfJSON gives each scenario its own artifact when a test measures several.
+func writePerfJSON(t *testing.T, scenario smokeperf.Scenario, value any) {
 	t.Helper()
 	path := strings.TrimSpace(os.Getenv(perfArtifactEnvironment))
 	if dir := strings.TrimSpace(os.Getenv(perfArtifactDirEnvironment)); dir != "" {
-		path = filepath.Join(dir, strings.ReplaceAll(t.Name(), "/", "_")+".json")
+		path = filepath.Join(dir, string(scenario)+".json")
 	}
 	if path == "" {
 		return
@@ -363,15 +383,11 @@ func writePerfArtifact(t *testing.T, samples []woxui.FrameMetricsSample) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil && !os.IsExist(err) {
 		t.Fatalf("create perf artifact directory: %v", err)
 	}
-	payload, err := json.MarshalIndent(map[string]any{
-		"case":                   t.Name(),
-		"samples":                samples,
-		"timingBudgetMultiplier": perfTimingBudgetMultiplier(),
-	}, "", "  ")
+	payload, err := json.MarshalIndent(value, "", "  ")
 	if err != nil {
 		t.Fatalf("encode perf artifact: %v", err)
 	}
-	if err := os.WriteFile(path, payload, 0o644); err != nil {
+	if err := os.WriteFile(path, append(payload, '\n'), 0o644); err != nil {
 		t.Fatalf("write perf artifact: %v", err)
 	}
 }

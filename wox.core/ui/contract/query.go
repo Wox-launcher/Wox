@@ -73,6 +73,6 @@ type QueryServices interface {
 
 // QuerySelectionServices synchronizes selected-result context with core.
 type QuerySelectionServices interface {
-	BeginSessionQuery(ctx context.Context, sessionID, queryID string)
+	BeginSessionQuery(ctx context.Context, sessionID, queryID string) context.Context
 	SelectedResultChanged(ctx context.Context, sessionID, queryID, resultID string)
 }

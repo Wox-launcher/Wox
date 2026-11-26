@@ -160,7 +160,7 @@ Use the September 22, 2026 Windows run as a comparison point for hidden idle mem
 | Shared plugin logger and shared fsnotify watcher | 60.8 MB | 15.2 MB |
 | Live-object reductions (`wox.core/ui/README.md`, "Hidden-state ownership rules") | 55.4 MB | 11.0 MB |
 
-Hidden memory drops in two steps: about 2-4 MB at 10 seconds and about 40 MB at 30 seconds, so sampling before 45 seconds compares different lifecycle states. When attributing what remains, use Delve `goroutines -group userloc` for goroutine ownership and the `woxmemory go` / `woxmemory native` commands for the Go-versus-native split; the largest native owners are NT heap fragmentation from show/hide churn and renderer objects that survive hide.
+Hidden memory drops in two steps: about 2-4 MB at 10 seconds and about 40 MB at 30 seconds, so sampling before 45 seconds compares different lifecycle states. When attributing what remains, use Delve `goroutines -group userloc` for goroutine ownership and the `doctor memory go` / `doctor memory native` commands for the Go-versus-native split; the largest native owners are NT heap fragmentation from show/hide churn and renderer objects that survive hide.
 
 ## Decide Whether Memory Leaks
 
@@ -180,7 +180,7 @@ Profile when attributing either persistent growth or reducible query/idle footpr
 
 For hidden Windows checkpoints, prefer the automation-only `perf.memory_snapshot` with an optional distinct `profilePath`. It captures Go statistics and native resident-page ownership without showing the launcher or forcing GC. Inspect `wox.core/ui/automation/server_enabled.go` for the current transport and result fields. Use equivalent natural cleanup and sampling settings for both captures. The launcher command below is another capture path, but showing it recreates renderer resources and is not a hidden-state measurement.
 
-1. Trigger the Wox Memory plugin's `woxmemory profile ` command through the automation driver after warm-up:
+1. Trigger Doctor's `doctor memory profile ` command through the automation driver after warm-up:
 
 ```bash
 go run ../.agents/skills/wox-memory-debug/scripts/run-query-workload.go -info /tmp/wox-memory-automation.json -mode profile

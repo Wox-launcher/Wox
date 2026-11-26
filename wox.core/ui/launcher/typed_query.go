@@ -71,7 +71,7 @@ func fromCoreQueryScope(scope common.QueryScope) queryScope {
 }
 
 // ApplyQueryResponse updates launcher rendering from one typed core snapshot.
-func (a *App) ApplyQueryResponse(_ context.Context, response contract.QueryResponse) {
+func (a *App) ApplyQueryResponse(ctx context.Context, response contract.QueryResponse) {
 	if util.IsDev() {
 		util.GetLogger().Debug(context.Background(), fmt.Sprintf("native crash trace: query response enter queryId=%s results=%d final=%t", response.QueryID, len(response.Response.Results), response.IsFinal))
 	}
@@ -98,7 +98,7 @@ func (a *App) ApplyQueryResponse(_ context.Context, response contract.QueryRespo
 		if util.IsDev() {
 			util.GetLogger().Debug(context.Background(), fmt.Sprintf("native crash trace: query response ui enter queryId=%s results=%d final=%t", response.QueryID, len(results), response.IsFinal))
 		}
-		if !a.isDestroyed() && response.QueryID == a.querySession.query.QueryID {
+		if ctx.Err() == nil && !a.isDestroyed() && response.QueryID == a.querySession.query.QueryID {
 			previewState := &a.previews.pluginPreview
 			if previewState.preview != nil && (queryContext.IsGlobalQuery || queryContext.PluginID != previewState.pluginID) {
 				a.previews.clearPluginPreviewContext()
@@ -127,7 +127,7 @@ func (a *App) ApplyQueryResponse(_ context.Context, response contract.QueryRespo
 }
 
 // ApplyQueryCompletionHint applies a typed inline-completion candidate.
-func (a *App) ApplyQueryCompletionHint(_ context.Context, queryID string, hint *plugin.QueryCompletionHint) {
+func (a *App) ApplyQueryCompletionHint(ctx context.Context, queryID string, hint *plugin.QueryCompletionHint) {
 	var converted *queryCompletionHint
 	if hint != nil {
 		converted = &queryCompletionHint{
@@ -140,7 +140,7 @@ func (a *App) ApplyQueryCompletionHint(_ context.Context, queryID string, hint *
 		}
 	}
 	if err := a.runOnUI("apply query completion hint", func() {
-		if a.isDestroyed() {
+		if ctx.Err() != nil || a.isDestroyed() {
 			return
 		}
 		if queryID != a.querySession.query.QueryID || !a.querySession.completionHintValidLocked(converted) {
@@ -159,12 +159,12 @@ func (a *App) ApplyQueryCompletionHint(_ context.Context, queryID string, hint *
 }
 
 // ApplyQueryError reports typed query failures without disturbing a newer query.
-func (a *App) ApplyQueryError(_ context.Context, queryID string, err error) {
+func (a *App) ApplyQueryError(ctx context.Context, queryID string, err error) {
 	if err == nil {
 		return
 	}
 	if dispatchErr := a.runOnUI("apply query error", func() {
-		if a.isDestroyed() {
+		if ctx.Err() != nil || a.isDestroyed() {
 			return
 		}
 		current := a.querySession.query.QueryID == queryID
@@ -180,8 +180,11 @@ func (a *App) ApplyQueryError(_ context.Context, queryID string, err error) {
 	}
 }
 
-func (a *App) loadTypedMRU(queryID string) {
-	results, err := a.services.QueryMRU(context.Background(), a.sessionID, queryID)
+func (a *App) loadTypedMRU(ctx context.Context, queryID string) {
+	results, err := a.services.QueryMRU(ctx, a.sessionID, queryID)
+	if ctx.Err() != nil {
+		return
+	}
 	if err != nil {
 		log.Printf("load MRU results: %v", err)
 		return
@@ -192,7 +195,9 @@ func (a *App) loadTypedMRU(queryID string) {
 		converted[index].QueryID = queryID
 	}
 	if err := a.runOnUI("apply MRU results", func() {
-		a.applyResults(queryID, converted, &queryLayout{}, nil, &queryContext{IsGlobalQuery: true}, 0, true)
+		if ctx.Err() == nil {
+			a.applyResults(queryID, converted, &queryLayout{}, nil, &queryContext{IsGlobalQuery: true}, 0, true)
+		}
 	}); err != nil {
 		log.Printf("dispatch MRU results: %v", err)
 	}

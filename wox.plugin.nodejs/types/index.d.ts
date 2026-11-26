@@ -2299,6 +2299,8 @@ export interface WoxPreview {
  * ```
  */
 export declare interface Context {
+  /** Aborts when the launcher replaces or times out a plugin query. */
+  Signal?: AbortSignal
   /**
    * Key-value storage for context data.
    *

@@ -4,12 +4,17 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"testing"
 	"wox/util"
 )
 
 func TestMoveDictationModelsMigration(t *testing.T) {
 	woxDataDir := t.TempDir()
+	t.Cleanup(func() {
+		_ = debug.SetCrashOutput(nil, debug.CrashOptions{})
+		_ = util.GetLogger().CloseFile()
+	})
 	t.Setenv(util.TestWoxDataDirEnv, woxDataDir)
 	t.Setenv(util.TestUserDataDirEnv, filepath.Join(woxDataDir, "user"))
 	if err := util.GetLocation().Init(); err != nil {

@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -27,6 +28,11 @@ type migrationTestHost struct {
 	failNew bool
 }
 
+func TestWaitForInstalledArtifactReportsMissingPlugin(t *testing.T) {
+	err := waitForInstalledArtifact(context.Background(), newManager(), "missing-plugin")
+	require.EqualError(t, err, "installed plugin missing-plugin was not loaded")
+}
+
 func (h *migrationTestHost) GetRuntime(context.Context) Runtime { return h.runtime }
 
 func (h *migrationTestHost) LoadPlugin(_ context.Context, metadata Metadata, _ string) (Plugin, error) {
@@ -41,9 +47,6 @@ func (h *migrationTestHost) LoadPlugin(_ context.Context, metadata Metadata, _ s
 func TestArtifactMigration(t *testing.T) {
 	for _, oldKind := range []PluginArtifactKind{PluginArtifactScript, PluginArtifactSingleFile, PluginArtifactPackage} {
 		for _, newKind := range []PluginArtifactKind{PluginArtifactScript, PluginArtifactSingleFile, PluginArtifactPackage} {
-			if oldKind == newKind {
-				continue
-			}
 			t.Run(string(oldKind)+"_to_"+string(newKind), func(t *testing.T) {
 				testArtifactMigration(t, oldKind, newKind, "")
 			})
@@ -54,10 +57,20 @@ func TestArtifactMigration(t *testing.T) {
 			testArtifactMigration(t, PluginArtifactScript, PluginArtifactPackage, failure)
 		})
 	}
+	for _, failure := range []string{"download", "invalid_zip", "identity", "version", "init", "canceled", "collision"} {
+		t.Run("package_upgrade_"+failure, func(t *testing.T) {
+			testArtifactMigration(t, PluginArtifactPackage, PluginArtifactPackage, failure)
+		})
+	}
 }
 
 func testArtifactMigration(t *testing.T, oldKind, newKind PluginArtifactKind, failure string) {
 	t.Helper()
+	if failure == "version" {
+		previousProd := util.ProdEnv
+		util.ProdEnv = "true"
+		t.Cleanup(func() { util.ProdEnv = previousProd })
+	}
 	initPluginManagerLoadTest(t)
 	previousManager := GetPluginManager()
 	previousHosts := AllHosts
@@ -121,10 +134,17 @@ func testArtifactMigration(t *testing.T, oldKind, newKind PluginArtifactKind, fa
 		writer := zip.NewWriter(&buffer)
 		entry, err := writer.Create("plugin.json")
 		require.NoError(t, err)
-		_, err = fmt.Fprintf(entry, `{"Id":%q,"Name":"Migration","Version":"2.0.0","Runtime":"NODEJS","Entry":"main.js","TriggerKeywords":["migration"],"SupportedOS":["darwin","windows","linux"]}`, newID)
+		minimum := ""
+		if failure == "version" {
+			minimum = "9999.0.0"
+		}
+		_, err = fmt.Fprintf(entry, `{"Id":%q,"Name":"Migration","Version":"2.0.0","MinWoxVersion":%q,"Runtime":"NODEJS","Entry":"main.js","TriggerKeywords":["migration"],"SupportedOS":["darwin","windows","linux"]}`, newID, minimum)
 		require.NoError(t, err)
 		require.NoError(t, writer.Close())
 		body = buffer.Bytes()
+		if failure == "invalid_zip" {
+			body = []byte("invalid archive")
+		}
 	case PluginArtifactScript:
 		runtime = PLUGIN_RUNTIME_SCRIPT
 		body = []byte(fmt.Sprintf("# {\n# \"Id\": %q,\n# \"Name\": \"Migration\",\n# \"Version\": \"2.0.0\",\n# \"TriggerKeywords\": [\"migration\"]\n# }\n", newID))
@@ -162,6 +182,9 @@ func testArtifactMigration(t *testing.T, oldKind, newKind PluginArtifactKind, fa
 		require.Error(t, err)
 		require.FileExists(t, oldPathForTest(oldPath, oldKind))
 		require.Equal(t, "1.0.0", managerInstance.GetPluginInstanceById(id).Metadata.Version)
+		if failure != "init" {
+			require.Same(t, oldInstance, managerInstance.GetPluginInstanceById(id))
+		}
 		if newKind == PluginArtifactPackage {
 			target := filepath.Join(util.GetLocation().GetPluginDirectory(), id+"@2.0.0")
 			if failure == "collision" {
@@ -191,6 +214,63 @@ func oldPathForTest(path string, kind PluginArtifactKind) string {
 		return filepath.Join(path, "old.txt")
 	}
 	return path
+}
+
+func TestReconcileInterruptedPluginUpgrades(t *testing.T) {
+	for _, state := range []string{"staged", "promoted", "committed"} {
+		t.Run(state, func(t *testing.T) {
+			initSingleFileTestLocation(t)
+			parent := util.GetLocation().GetUserSingleFilePluginsDirectory()
+			root := filepath.Dir(util.GetLocation().GetPluginDirectory())
+			require.NoError(t, os.MkdirAll(parent, 0755))
+			staging, err := os.MkdirTemp(root, artifactStagingPrefix)
+			require.NoError(t, err)
+			transaction, err := os.MkdirTemp(root, artifactUpgradePrefix)
+			require.NoError(t, err)
+			target := filepath.Join(parent, "test.py")
+			staged := filepath.Join(staging, "test.py")
+			tx := artifactUpgrade{OldPath: target, TargetPath: target, StagedPath: staged, PluginID: "test", OldVersion: "1.0.0"}
+			journal, err := json.Marshal(tx)
+			require.NoError(t, err)
+			require.NoError(t, writeArtifactJournal(filepath.Join(transaction, "tx.json"), journal))
+			require.NoError(t, os.WriteFile(filepath.Join(transaction, "artifact"), []byte("old"), 0644))
+			newPath := target
+			if state == "staged" {
+				newPath = staged
+			}
+			require.NoError(t, os.WriteFile(newPath, []byte("new"), 0644))
+			expected := "old"
+			if state == "committed" {
+				require.NoError(t, writeArtifactJournal(filepath.Join(transaction, "committed"), nil))
+				expected = "new"
+			}
+
+			require.NoError(t, reconcileInterruptedPluginUpgrades(context.Background(), root))
+			require.NoDirExists(t, staging)
+			require.NoDirExists(t, transaction)
+			content, err := os.ReadFile(target)
+			require.NoError(t, err)
+			require.Equal(t, expected, string(content))
+		})
+	}
+}
+
+func TestDiscoveryLeavesUnsupportedPluginOnDisk(t *testing.T) {
+	initSingleFileTestLocation(t)
+	osName := "darwin"
+	if util.IsMacOS() {
+		osName = "windows"
+	}
+	pluginDir := filepath.Join(util.GetLocation().GetPluginDirectory(), "unsupported@1.0.0")
+	require.NoError(t, os.MkdirAll(pluginDir, 0755))
+	path := filepath.Join(pluginDir, "plugin.json")
+	raw := fmt.Sprintf(`{"Id":"unsupported","Name":"Unsupported","Version":"1.0.0","Runtime":"NODEJS","Entry":"main.js","TriggerKeywords":["other"],"SupportedOS":[%q]}`, osName)
+	require.NoError(t, os.WriteFile(path, []byte(raw), 0644))
+
+	metadata, err := newManager().lifecycle.discoverUserPluginMetadata(context.Background())
+	require.NoError(t, err)
+	require.Empty(t, metadata)
+	require.FileExists(t, path)
 }
 
 func TestArtifactMigrationSuppressesFileWatchers(t *testing.T) {

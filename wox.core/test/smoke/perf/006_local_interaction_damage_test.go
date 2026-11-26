@@ -8,6 +8,7 @@ import (
 
 	"wox/test/automationdriver"
 	"wox/test/smoke"
+	"wox/test/smokeperf"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 )
@@ -27,7 +28,7 @@ func Test006LocalInteractionDamage(t *testing.T) {
 		if _, err := client.MovePointerTo(ctx, result.AutomationID); err != nil {
 			t.Fatalf("hover result: %v", err)
 		}
-		assertSettledWork(t, waitForPresentedSamples(t, ctx, client))
+		assertSettledWork(t, smokeperf.ScenarioHover, waitForPresentedSamples(t, ctx, client, smokeperf.ScenarioHover))
 
 		if err := client.Perform(ctx, "launcher.query.input", woxui.AccessibilityActionSetValue, "wox-smoke warm-cache selected"); err != nil {
 			t.Fatalf("update query for selection: %v", err)
@@ -38,7 +39,7 @@ func Test006LocalInteractionDamage(t *testing.T) {
 		}); err != nil {
 			t.Fatalf("wait for selected query text: %v", err)
 		}
-		assertSettledWork(t, waitForPresentedSamples(t, ctx, client))
+		assertSettledWork(t, smokeperf.ScenarioSelection, waitForPresentedSamples(t, ctx, client, smokeperf.ScenarioSelection))
 
 		bounds, err := client.Bounds(ctx)
 		if err != nil {
@@ -48,7 +49,7 @@ func Test006LocalInteractionDamage(t *testing.T) {
 		if err := client.SetBounds(ctx, bounds); err != nil {
 			t.Fatalf("resize launcher: %v", err)
 		}
-		assertSettledWork(t, waitForPresentedSamples(t, ctx, client))
+		assertSettledWork(t, smokeperf.ScenarioResize, waitForPresentedSamples(t, ctx, client, smokeperf.ScenarioResize))
 		assertDroppedFramesAtMost(t, ctx, client, 1)
 	})
 }

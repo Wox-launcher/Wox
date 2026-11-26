@@ -52,6 +52,7 @@ func initCloudSync(ctx context.Context) {
 		ExclusionProvider: settingadapter.NewCloudSyncPluginExclusionProvider(),
 		SettingReloader:   cloudSyncUISettingReloader{},
 		HistoryStore:      historyStore,
+		ConflictPreserver: settingadapter.LocalConflictPreserver{},
 		AutoSyncAllowed:   cloudSyncAutoSyncAllowedFromAccount,
 	})
 

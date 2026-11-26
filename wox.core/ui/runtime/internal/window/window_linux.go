@@ -282,6 +282,16 @@ func (w *platformWindow) hide() error {
 	return nil
 }
 
+// softwareRendering uses the preference until the GL rasterizer is initialized.
+func (w *platformWindow) softwareRendering() bool {
+	if native, err := w.openNative(); err == nil {
+		if software := C.wox_linux_window_software_rendering(native); software >= 0 {
+			return software != 0
+		}
+	}
+	return SoftwareRenderingEnabled()
+}
+
 func (w *platformWindow) setBounds(bounds Rect) error {
 	native, err := w.openNative()
 	if err != nil {
@@ -742,7 +752,7 @@ func (w *platformWindow) drawFrame(frame FrameInfo) {
 	frame.Damage = w.consumePendingDamage()
 	displayList := &DisplayList{}
 	if w.options.frameMetrics != nil {
-		displayList.frameID = w.options.frameMetrics.beginFrame()
+		displayList.frameID = w.options.frameMetrics.beginFrame(frame.Size)
 	}
 	if w.options.OnFrame != nil {
 		w.options.OnFrame(displayList, frame)

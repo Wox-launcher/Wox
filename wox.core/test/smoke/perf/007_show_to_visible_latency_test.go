@@ -4,10 +4,8 @@ package perf
 
 import (
 	"context"
-	"encoding/json"
 	"math"
-	"os"
-	"path/filepath"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -16,6 +14,7 @@ import (
 
 	"wox/test/automationdriver"
 	"wox/test/smoke"
+	"wox/test/smokeperf"
 	woxwidget "wox/ui/widget"
 )
 
@@ -25,8 +24,6 @@ const (
 	// Product target for hotkey-to-visible / activation latency. This is the
 	// "press the shortcut and it is already there" SLA, not the smoke gate.
 	showToVisibleTargetP95 = 120 * time.Millisecond
-	// Local smoke ceiling; shared CI gets the same multiplier as frame phases.
-	showToVisibleBudgetP95 = 300 * time.Millisecond
 )
 
 // Test007ShowToVisibleLatency measures in-process activation latency after a hidden launcher is shown.
@@ -55,7 +52,7 @@ func Test007ShowToVisibleLatency(t *testing.T) {
 			p95 <= showToVisibleTargetP95,
 			formatDurationMillis(steady),
 		)
-		if budget := showToVisibleBudgetP95 * time.Duration(perfTimingBudgetMultiplier()); p95 > budget {
+		if budget := latencyBudget(smokeperf.ScenarioShow, runtime.GOOS); p95 > budget {
 			t.Fatalf("show-to-visible p95 %.1fms exceeded %dms smoke budget", durationMilliseconds(p95), budget.Milliseconds())
 		}
 	})
@@ -148,21 +145,10 @@ func formatMillis(value float64) string {
 
 func writeShowToVisibleArtifact(t *testing.T, all, steady []time.Duration, p50, p95, maxLatency time.Duration) {
 	t.Helper()
-	path := strings.TrimSpace(os.Getenv(perfArtifactEnvironment))
-	if dir := strings.TrimSpace(os.Getenv(perfArtifactDirEnvironment)); dir != "" {
-		path = filepath.Join(dir, strings.ReplaceAll(t.Name(), "/", "_")+".json")
-	}
-	if path == "" {
-		return
-	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil && !os.IsExist(err) {
-		t.Fatalf("create show-to-visible artifact directory: %v", err)
-	}
-	payload, err := json.MarshalIndent(map[string]any{
-		"case":              t.Name(),
-		"metric":            "show_to_visible",
+	artifact := map[string]any{
+		"case": t.Name(), "scenario": smokeperf.ScenarioShow, "os": runtime.GOOS, "metric": smokeperf.LatencyMetricShow,
 		"target_p95_ms":     durationMilliseconds(showToVisibleTargetP95),
-		"budget_p95_ms":     durationMilliseconds(showToVisibleBudgetP95 * time.Duration(perfTimingBudgetMultiplier())),
+		"budget_p95_ms":     durationMilliseconds(latencyBudget(smokeperf.ScenarioShow, runtime.GOOS)),
 		"warmup_samples":    showToVisibleWarmupSamples,
 		"steady_samples":    len(steady),
 		"p50_ms":            durationMilliseconds(p50),
@@ -171,13 +157,8 @@ func writeShowToVisibleArtifact(t *testing.T, all, steady []time.Duration, p50, 
 		"target_met":        p95 <= showToVisibleTargetP95,
 		"all_samples_ms":    durationMillisList(all),
 		"steady_samples_ms": durationMillisList(steady),
-	}, "", "  ")
-	if err != nil {
-		t.Fatalf("encode show-to-visible artifact: %v", err)
 	}
-	if err := os.WriteFile(path, payload, 0o644); err != nil {
-		t.Fatalf("write show-to-visible artifact: %v", err)
-	}
+	writePerfJSON(t, smokeperf.ScenarioShow, artifact)
 }
 
 func durationMillisList(samples []time.Duration) []float64 {

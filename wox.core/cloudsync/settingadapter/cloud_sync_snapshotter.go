@@ -70,7 +70,7 @@ func (s *LocalSnapshotter) collectLocalSnapshotOplogs(ctx context.Context) ([]da
 	oplogs := make([]database.Oplog, 0, len(woxSettings)+len(pluginSettings))
 
 	for _, item := range woxSettings {
-		if !isCurrentPlatformSettingKey(item.Key) {
+		if !isCurrentPlatformSettingKey(item.Key) || cloudsync.SharedHotkeyBase(item.Key) != "" {
 			continue
 		}
 		if syncable, ok := syncableWoxSettings[item.Key]; ok && !syncable {
@@ -84,6 +84,14 @@ func (s *LocalSnapshotter) collectLocalSnapshotOplogs(ctx context.Context) ([]da
 			Value:      item.Value,
 			Timestamp:  timestamp,
 		})
+	}
+	settings := setting.GetSettingManager().GetWoxSetting(ctx)
+	if settings != nil && settings.CloudSyncCrossPlatformHotkeys.Get() {
+		hotkeys, err := settings.SharedHotkeyOplogs(timestamp)
+		if err != nil {
+			return nil, err
+		}
+		oplogs = append(oplogs, hotkeys...)
 	}
 
 	for _, item := range pluginSettings {

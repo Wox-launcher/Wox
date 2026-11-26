@@ -524,6 +524,37 @@ func (a *imageStore) insertImageLocked(key string, image *woxui.Image) {
 	a.imageCacheSize += incoming
 }
 
+// scheduleIdleImageTrim measures continuous hidden time and keeps one pending trim.
+func (a *App) scheduleIdleImageTrim() {
+	a.stopIdleImageTrim()
+	ctx, cancel := context.WithCancel(a.lifecycleCtx)
+	a.cancelIdleImageTrim = cancel
+	util.Go(ctx, "trim hidden launcher images", func() {
+		defer cancel()
+		timer := time.NewTimer(10 * time.Second)
+		defer timer.Stop()
+		select {
+		case <-ctx.Done():
+			return
+		case <-timer.C:
+		}
+		if err := a.runOnUI("trim hidden launcher image cache", func() {
+			if ctx.Err() == nil && !a.visible && !a.isDestroyed() {
+				a.trimIdleImageCache()
+			}
+		}); err != nil {
+			util.GetLogger().Warn(ctx, fmt.Sprintf("trim hidden launcher image cache: %v", err))
+		}
+	})
+}
+
+func (a *App) stopIdleImageTrim() {
+	if a.cancelIdleImageTrim != nil {
+		a.cancelIdleImageTrim()
+		a.cancelIdleImageTrim = nil
+	}
+}
+
 // trimIdleImageCache evicts cold decoded images while the launcher stays hidden.
 // Must run on the UI thread like every other access to the image maps.
 func (a *App) trimIdleImageCache() {

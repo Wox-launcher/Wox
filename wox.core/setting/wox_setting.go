@@ -6,6 +6,7 @@ import (
 	"math"
 	"regexp"
 	"strings"
+	"wox/cloudsync"
 	"wox/common"
 	"wox/i18n"
 	"wox/util"
@@ -60,8 +61,9 @@ type WoxSetting struct {
 
 	// CloudSyncServerUrl is a local-only development override. It must not be
 	// synced because each device may target a different test server.
-	CloudSyncServerUrl       *WoxSettingValue[string]
-	CloudSyncDisabledPlugins *WoxSettingValue[[]string]
+	CloudSyncServerUrl            *WoxSettingValue[string]
+	CloudSyncDisabledPlugins      *WoxSettingValue[[]string]
+	CloudSyncCrossPlatformHotkeys *WoxSettingValue[bool]
 	// HiddenPluginStores lists catalog ids omitted from the store plugin page.
 	// An empty list shows every catalog. The official Wox store is never omitted.
 	HiddenPluginStores *WoxSettingValue[[]string]
@@ -525,6 +527,7 @@ func NewWoxSetting(store *WoxSettingStore) *WoxSetting {
 		CustomNodejsPath:                   NewPlatformValue(store, "CustomNodejsPath", "", "", ""),
 		CloudSyncServerUrl:                 NewLocalWoxSettingValue(store, "CloudSyncServerUrl", ""),
 		CloudSyncDisabledPlugins:           NewWoxSettingValue(store, "CloudSyncDisabledPlugins", []string{}),
+		CloudSyncCrossPlatformHotkeys:      NewWoxSettingValue(store, cloudsync.CrossPlatformHotkeysSetting, false),
 		HiddenPluginStores:                 NewWoxSettingValue(store, "HiddenPluginStores", []string{}),
 		EnableAutoBackup:                   NewWoxSettingValue(store, "EnableAutoBackup", true),
 		EnableAutoUpdate:                   NewWoxSettingValue(store, "EnableAutoUpdate", true),

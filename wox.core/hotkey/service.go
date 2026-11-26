@@ -400,7 +400,7 @@ func (s *Service) ApplyResultBindings(ctx context.Context, bindings []setting.Re
 	}
 	err = s.registerSpecsLocked(ctx, pending, specs)
 	if err == nil {
-		err = missingResultHotkey(s.collector.snapshot(), s.registered)
+		err = missingResultHotkey(pending, s.registered)
 	}
 	if err == nil {
 		err = persist()
@@ -415,6 +415,15 @@ func (s *Service) ApplyResultBindings(ctx context.Context, bindings []setting.Re
 		return errors.Join(err, fmt.Errorf("restore previous hotkeys: %w", rollbackErr))
 	}
 	return err
+}
+
+func hasHotkey(entries []Entry, entry Entry) bool {
+	for _, other := range entries {
+		if other.Source == entry.Source && other.ID == entry.ID && other.CombineKey == entry.CombineKey {
+			return true
+		}
+	}
+	return false
 }
 
 // collectResultBindings snapshots callback data for the registered hotkeys.

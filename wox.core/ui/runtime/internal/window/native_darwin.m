@@ -706,6 +706,7 @@ void wox_darwin_log_window_state(const char *stage, const void *session, NSStrin
 @public
   WoxDarwinWindow *_owner;
   NSString *_marked_text;
+  BOOL _ime_escape_down;
   NSRange _marked_selection;
   NSTrackingArea *_tracking_area;
   NSArray *_accessibility_children;
@@ -1060,6 +1061,7 @@ static void release_presented_surfaces(WoxDarwinWindow *window) {
 // display-sized backing allocation while idle. A later frame recreates the pool on demand.
 static void hide_window_and_release_surfaces(WoxDarwinWindow *window) {
   window->visible = false;
+  window->view->_ime_escape_down = NO;
   [window->primary_mouse_down_event release];
   window->primary_mouse_down_event = nil;
   atomic_fetch_add_explicit(&window->presentation_generation, 1, memory_order_relaxed);
@@ -2259,7 +2261,15 @@ static uint8_t portable_pointer_button(NSEvent *event) {
     [super keyDown:event];
     return;
   }
-  int32_t handled = woxGoDarwinKey(owner->context, portable_key(event), portable_modifiers(event.modifierFlags), 1, event.isARepeat ? 1 : 0, _marked_text.length > 0 ? 1 : 0);
+  const char *key = portable_key(event);
+  if (strcmp(key, "escape") == 0 && owner->input_enabled && (self.hasMarkedText || (event.isARepeat && _ime_escape_down))) {
+    _ime_escape_down = YES;
+    if (self.hasMarkedText) {
+      [self interpretKeyEvents:@[ event ]];
+    }
+    return;
+  }
+  int32_t handled = woxGoDarwinKey(owner->context, key, portable_modifiers(event.modifierFlags), 1, event.isARepeat ? 1 : 0, self.hasMarkedText ? 1 : 0);
   if (handled != 0) {
     return;
   }
@@ -2273,7 +2283,12 @@ static uint8_t portable_pointer_button(NSEvent *event) {
 - (void)keyUp:(NSEvent *)event {
   WoxDarwinWindow *owner = _owner;
   if (owner != NULL && !owner->closed && owner->context != 0) {
-    int32_t handled = woxGoDarwinKey(owner->context, portable_key(event), portable_modifiers(event.modifierFlags), 0, 0, _marked_text.length > 0 ? 1 : 0);
+    const char *key = portable_key(event);
+    if (strcmp(key, "escape") == 0 && _ime_escape_down) {
+      _ime_escape_down = NO;
+      return;
+    }
+    int32_t handled = woxGoDarwinKey(owner->context, key, portable_modifiers(event.modifierFlags), 0, 0, self.hasMarkedText ? 1 : 0);
     if (handled != 0) {
       return;
     }
@@ -2392,7 +2407,9 @@ static uint8_t portable_pointer_button(NSEvent *event) {
 }
 
 - (void)doCommandBySelector:(SEL)selector {
-  (void)selector;
+  if (selector == @selector(cancelOperation:) && self.hasMarkedText) {
+    [self unmarkText];
+  }
 }
 
 - (void)updateBackingScale {
@@ -2513,6 +2530,7 @@ static uint8_t portable_pointer_button(NSEvent *event) {
   }
   // The key window may not receive modifier releases after focus moves elsewhere.
   owner->view->_modifier_flags = 0;
+  owner->view->_ime_escape_down = NO;
   if (owner->native_dialog_active || owner->result_drag_source != NULL) {
     return;
   }
@@ -2761,6 +2779,8 @@ uint64_t wox_darwin_window_show(WoxDarwinWindow *window) {
       // Starting a new focus epoch is not a real focus loss.
       window->active = false;
     }
+    bool prepare_before_ordering = !window->visible && !window->application_window &&
+                                   !window->screenshot_window && !window->nonactivating;
     if (!window->nonactivating && !window->screenshot_window) {
       save_previous_active_app_if_needed(window);
     }
@@ -2771,6 +2791,12 @@ uint64_t wox_darwin_window_show(WoxDarwinWindow *window) {
     [window->view updateBackingScale];
     if (window->window.isMiniaturized) {
       [window->window deminiaturize:nil];
+    }
+    if (prepare_before_ordering) {
+      // Commit the new IOSurface in the same transaction that orders the panel front.
+      [CATransaction begin];
+      [CATransaction setDisableActions:YES];
+      [window->view renderFrameSynchronously:YES];
     }
     if (window->nonactivating) {
       [window->window orderFrontRegardless];
@@ -2788,9 +2814,12 @@ uint64_t wox_darwin_window_show(WoxDarwinWindow *window) {
       // is ready, avoiding a transparent gap between the native selector and portable editor.
       [window->view renderFrameSynchronously:YES];
       wox_darwin_log_window_state("editor_shown", window, nil);
-    } else if (!window->closed) {
+    } else if (!window->closed && !prepare_before_ordering) {
       // Rendering is explicit; AppKit does not reliably deliver updateLayer for the first frame.
       [window->view renderFrame];
+    }
+    if (prepare_before_ordering) {
+      [CATransaction commit];
     }
   });
   return epoch;

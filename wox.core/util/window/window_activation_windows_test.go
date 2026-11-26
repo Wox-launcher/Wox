@@ -3,11 +3,14 @@
 package window
 
 import (
+	"context"
+	"errors"
 	"os"
 	"runtime"
 	"strconv"
 	"syscall"
 	"testing"
+	"time"
 	"unsafe"
 )
 
@@ -36,5 +39,16 @@ func TestActivateWindowPreservesEditorFocus(t *testing.T) {
 	}
 	if focused, _, _ := user32.NewProc("GetFocus").Call(); focused != child {
 		t.Fatalf("activation moved focus from editor %#x to %#x", child, focused)
+	}
+	if ActivateWindow(ManagedWindow{Id: "invalid", Pid: os.Getpid()}) {
+		t.Fatal("activation of a missing HWND fell back to another window of the process")
+	}
+}
+
+func TestFocusWindowReportsMissingHWND(t *testing.T) {
+	ctx, cancel := context.WithTimeout(t.Context(), 250*time.Millisecond)
+	defer cancel()
+	if err := FocusWindow(ctx, "invalid", os.Getpid()); !errors.Is(err, ErrWindowManagementWindowNotFound) {
+		t.Fatalf("missing HWND returned %v, want window not found", err)
 	}
 }

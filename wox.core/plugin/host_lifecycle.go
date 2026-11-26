@@ -26,7 +26,11 @@ func (l *pluginLifecycle) RestartHostForRuntime(ctx context.Context, runtime Run
 		return fmt.Errorf("unsupported runtime: %s", runtime)
 	}
 
-	return l.restartHostInternal(ctx, pluginHost, skipPluginIDs, progressCallback)
+	err := l.restartHostInternal(ctx, pluginHost, skipPluginIDs, progressCallback)
+	if err == nil {
+		delete(l.hostWatchdogStates, string(pluginHost.GetRuntime(ctx)))
+	}
+	return err
 }
 
 // RefreshHostForRuntime re-detects a Node.js or Python interpreter after the

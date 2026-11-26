@@ -2,6 +2,7 @@ package plugin
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 
@@ -17,7 +18,10 @@ type fakeHost struct {
 	stopCount  int
 	startCount int
 	status     RuntimeHostStatus
+	pingErr    error
 }
+
+func (f *fakeHost) Ping(context.Context) error { return f.pingErr }
 
 func (f *fakeHost) GetRuntime(ctx context.Context) Runtime {
 	return PLUGIN_RUNTIME_PYTHON
@@ -89,7 +93,7 @@ func TestWatchdogRestartsDeadHostAndResetsOnRecovery(t *testing.T) {
 		AllHosts = remaining
 	}()
 
-	m.lifecycle.restartHostForWatchdog(context.Background(), host, PLUGIN_RUNTIME_PYTHON)
+	m.lifecycle.restartHostForWatchdog(context.Background(), host, PLUGIN_RUNTIME_PYTHON, false)
 
 	assert.Equal(t, 1, host.stopCount)
 	assert.Equal(t, 1, host.startCount)
@@ -109,7 +113,7 @@ func TestWatchdogBacksOffAfterRepeatedFastFailures(t *testing.T) {
 	// Simulate a plugin that keeps killing the host right after each restart.
 	for i := 0; i < hostWatchdogMaxConsecutiveFailures; i++ {
 		host.started = false
-		m.lifecycle.restartHostForWatchdog(context.Background(), host, PLUGIN_RUNTIME_PYTHON)
+		m.lifecycle.restartHostForWatchdog(context.Background(), host, PLUGIN_RUNTIME_PYTHON, false)
 	}
 
 	state := m.lifecycle.hostWatchdogStates["PYTHON"]
@@ -119,7 +123,7 @@ func TestWatchdogBacksOffAfterRepeatedFastFailures(t *testing.T) {
 	// While in cooldown, a still-dead host is not restarted again.
 	stopBefore := host.stopCount
 	startBefore := host.startCount
-	m.lifecycle.restartHostForWatchdog(context.Background(), host, PLUGIN_RUNTIME_PYTHON)
+	m.lifecycle.restartHostForWatchdog(context.Background(), host, PLUGIN_RUNTIME_PYTHON, false)
 	assert.Equal(t, stopBefore, host.stopCount)
 	assert.Equal(t, startBefore, host.startCount)
 }
@@ -131,6 +135,27 @@ func TestWatchdogIgnoresHostsWithoutLiveInstances(t *testing.T) {
 	// instances the watchdog must not try to start any host.
 	m.lifecycle.checkHostsHealth(context.Background())
 	assert.Empty(t, m.lifecycle.instances)
+}
+
+func TestWatchdogRestartsHostAfterTwoMissedPings(t *testing.T) {
+	ctx := context.Background()
+	host := &fakeHost{started: true, pingErr: errors.New("event loop stalled")}
+	manager := newWatchdogTestManager()
+	manager.lifecycle.instances = []*Instance{{Host: host, RuntimeLoaded: true}}
+	previous := AllHosts
+	AllHosts = []Host{host}
+	t.Cleanup(func() { AllHosts = previous })
+
+	manager.lifecycle.checkHostsHealth(ctx)
+	assert.Zero(t, host.startCount)
+	host.pingErr = nil
+	manager.lifecycle.checkHostsHealth(ctx)
+	host.pingErr = errors.New("event loop stalled again")
+	manager.lifecycle.checkHostsHealth(ctx)
+	assert.Zero(t, host.startCount)
+	manager.lifecycle.checkHostsHealth(ctx)
+	assert.Equal(t, 1, host.stopCount)
+	assert.Equal(t, 1, host.startCount)
 }
 
 func TestHostHasLiveInstancesDuringInstanceChanges(t *testing.T) {

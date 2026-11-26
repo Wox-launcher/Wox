@@ -254,9 +254,16 @@ func Watch(cb func(Data)) func() {
 	if !isWatching {
 		isWatching = true
 		go func() {
+			interval := time.Millisecond * time.Duration(WatchIntervalMillisecond)
+			timer := time.NewTimer(interval)
+			defer timer.Stop()
 			for {
-				time.Sleep(time.Millisecond * time.Duration(WatchIntervalMillisecond))
+				select {
+				case <-timer.C:
+				case <-wakeCheck:
+				}
 				watchChange()
+				timer.Reset(interval)
 			}
 		}()
 	}
@@ -270,6 +277,21 @@ func Watch(cb func(Data)) func() {
 			watchMutex.Unlock()
 			subscription.close()
 		})
+	}
+}
+
+var wakeCheck = make(chan struct{}, 1)
+
+// CheckAfterWake asks the existing listener to poll without waiting for its next tick.
+func CheckAfterWake() {
+	watchMutex.Lock()
+	active := len(watchList) != 0
+	watchMutex.Unlock()
+	if active {
+		select {
+		case wakeCheck <- struct{}{}:
+		default:
+		}
 	}
 }
 
