@@ -851,6 +851,9 @@ func (a *App) showWindow(params showAppParams) error {
 		}
 		a.resultDrag.releaseResultFileDragHold()
 		wasVisible := a.visible
+		if !wasVisible {
+			a.querySession.clipboardImagePasteGeneration++
+		}
 		defer func() {
 			if showErr != nil {
 				a.visible = wasVisible
@@ -1114,6 +1117,7 @@ func (a *App) onFocus(event woxui.FocusEvent) {
 		return
 	}
 	a.querySession.queryFocusNotifiedInActiveWindow = false
+	a.querySession.clipboardImagePasteGeneration++
 	if !a.visible {
 		return
 	}
@@ -2102,25 +2106,7 @@ func (a *App) onKey(event woxui.KeyEvent) bool {
 			a.resizeLauncherForQueryLineChange(previousText)
 			return true
 		case woxui.Key("v"):
-			text, err := clipboard.ReadText()
-			text = normalizeQueryPaste(text)
-			if err != nil || text == "" {
-				return true
-			}
-			if a.querySession.queryHintEditorState.allSelected {
-				a.querySession.replaceWholeQueryHint(text)
-				return true
-			}
-			previousText := a.querySession.editor.State().Text
-			if a.querySession.editor.InsertTextSeparate(text) {
-				a.applyQueryTextChangeLocked(a.querySession.editor.State().Text)
-			}
-			_ = a.window.Invalidate()
-			a.previews.reconcileSelectedPreview()
-			if err := a.sendCurrentQuery(); err != nil {
-				log.Printf("send query after paste: %v", err)
-			}
-			a.resizeLauncherForQueryLineChange(previousText)
+			a.pasteQueryClipboard(!event.Repeat)
 			return true
 		}
 	}

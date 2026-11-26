@@ -56,6 +56,10 @@ type queryController struct {
 	queryLoading            bool
 	queryLoadingTimer       *time.Timer
 	completionHint          *queryCompletionHint
+
+	// clipboardImagePasteGeneration belongs to the current paste and launcher focus lifetime.
+	clipboardImagePasteGeneration uint64
+
 	// queryFocusNotifiedInActiveWindow prevents the initial native activation
 	// from duplicating the query-focus notification already sent while laying out.
 	queryFocusNotifiedInActiveWindow bool

@@ -880,33 +880,6 @@ func (a *App) queryViewClipboardCut() error {
 	return nil
 }
 
-func (a *App) queryViewClipboardPaste() error {
-	a.querySession.selectTouchedQueryBlocks()
-	if a == nil || !a.queryCanFocus() {
-		return nil
-	}
-	text, err := clipboard.ReadText()
-	text = normalizeQueryPaste(text)
-	if err != nil || text == "" {
-		return nil
-	}
-	if a.querySession.queryHintEditorState.allSelected {
-		a.querySession.replaceWholeQueryHint(text)
-		return nil
-	}
-	previousText := a.querySession.editor.State().Text
-	if a.querySession.editor.InsertTextSeparate(text) {
-		a.applyQueryTextChangeLocked(a.querySession.editor.State().Text)
-	}
-	_ = a.window.Invalidate()
-	a.previews.reconcileSelectedPreview()
-	if err := a.sendCurrentQuery(); err != nil {
-		log.Printf("send query after paste: %v", err)
-	}
-	a.resizeLauncherForQueryLineChange(previousText)
-	return nil
-}
-
 // setQueryText applies an accessibility or automation value through the normal query pipeline.
 // Replacing the launcher query must drop the previous result's Action Panel. Typing does that
 // when the query box takes focus; SetValue does not move focus, so close it here as well.
