@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"strings"
 
-	"wox/util/clipboard"
 	"wox/util/screen"
 )
 
@@ -17,23 +16,7 @@ func getSelectedLinuxHyprland(ctx context.Context) (Selection, error) {
 	if err := ctx.Err(); err != nil {
 		return Selection{}, err
 	}
-	return selectionFromHyprlandCopy(clipboard.CaptureNextWaylandCopy, sendHyprlandSelectionCopy)
-}
-
-// selectionFromHyprlandCopy converts only the newly observed clipboard offer.
-func selectionFromHyprlandCopy(capture func(func() error) (clipboard.Data, error), trigger func() error) (Selection, error) {
-	data, err := capture(trigger)
-	if err != nil {
-		return Selection{}, err
-	}
-	switch selected := data.(type) {
-	case *clipboard.TextData:
-		return Selection{Type: SelectionTypeText, Text: selected.Text}, nil
-	case *clipboard.FilePathData:
-		return Selection{Type: SelectionTypeFile, FilePaths: selected.FilePaths}, nil
-	default:
-		return Selection{}, noSelection
-	}
+	return captureWaylandSelection(sendHyprlandSelectionCopy)
 }
 
 // sendHyprlandSelectionCopy uses explicit modifiers, like Omarchy's universal copy.

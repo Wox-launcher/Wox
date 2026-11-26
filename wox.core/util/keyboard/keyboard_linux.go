@@ -206,6 +206,12 @@ func isKeyPressed(key Key) bool {
 		return false
 	}
 
+	keyBits, err := readEvdevKeyState(fd)
+	return err == nil && keyBits[code/8]&(1<<(code%8)) != 0
+}
+
+// readEvdevKeyState snapshots the kernel key bitmap for one input device.
+func readEvdevKeyState(fd int) ([128]byte, error) {
 	var keyBits [128]byte // 1024 bits, enough for all key codes
 	_, _, errno := syscall.Syscall(
 		syscall.SYS_IOCTL,
@@ -214,9 +220,9 @@ func isKeyPressed(key Key) bool {
 		uintptr(unsafe.Pointer(&keyBits[0])),
 	)
 	if errno != 0 {
-		return false
+		return keyBits, errno
 	}
-	return keyBits[code/8]&(1<<(code%8)) != 0
+	return keyBits, nil
 }
 
 // keyToEvdevKeyCode maps Wox Key values back to Linux kernel key codes.

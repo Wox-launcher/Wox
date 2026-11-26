@@ -9,7 +9,7 @@ import (
 	"wox/util/clipboard"
 )
 
-func TestHyprlandSelectionUsesNewClipboardOffer(t *testing.T) {
+func TestWaylandSelectionUsesNewClipboardOffer(t *testing.T) {
 	for _, tc := range []struct {
 		name string
 		data clipboard.Data
@@ -26,7 +26,7 @@ func TestHyprlandSelectionUsesNewClipboardOffer(t *testing.T) {
 				}
 				return tc.data, nil
 			}
-			got, err := selectionFromHyprlandCopy(capture, func() error { triggered = true; return nil })
+			got, err := selectionFromWaylandCopy(capture, func() error { triggered = true; return nil })
 			if err != nil || !triggered || !selectionEquals(got, tc.want) {
 				t.Fatalf("selection=%+v triggered=%v err=%v", got, triggered, err)
 			}
@@ -34,10 +34,10 @@ func TestHyprlandSelectionUsesNewClipboardOffer(t *testing.T) {
 	}
 }
 
-func TestHyprlandSelectionRejectsMissingNewOffer(t *testing.T) {
+func TestWaylandSelectionRejectsMissingNewOffer(t *testing.T) {
 	captureErr := errors.New("no new offer")
 	capture := func(trigger func() error) (clipboard.Data, error) { return nil, captureErr }
-	if _, err := selectionFromHyprlandCopy(capture, func() error { return nil }); !errors.Is(err, captureErr) {
+	if _, err := selectionFromWaylandCopy(capture, func() error { return nil }); !errors.Is(err, captureErr) {
 		t.Fatalf("error = %v", err)
 	}
 }

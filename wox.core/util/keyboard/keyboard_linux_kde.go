@@ -19,7 +19,24 @@ import (
 // SimulateKDEPasteAfterFocus waits for KWin to receive the keyboard before
 // restoring focus, so device startup cannot delay a confirmed paste.
 func SimulateKDEPasteAfterFocus(ctx context.Context, shift bool, focus func() error) error {
-	return simulateCtrlKeyCombo(evKeyCodeV, "paste", shift, func(fd int) error {
+	return simulateKDECtrlKeyCombo(ctx, evKeyCodeV, "paste", shift, focus)
+}
+
+// SimulateKDECopy waits for KWin to register the keyboard and confirms the
+// target still has focus before sending the copy shortcut.
+func SimulateKDECopy(ctx context.Context, shift bool, confirmFocus func() error) error {
+	return simulateKDECtrlKeyCombo(ctx, evKeyCodeC, "copy", shift, func() error {
+		if err := waitForKDECopyModifiersRelease(ctx); err != nil {
+			return err
+		}
+		return confirmFocus()
+	})
+}
+
+// simulateKDECtrlKeyCombo waits for KWin's input-device acknowledgement before
+// the caller checks focus and the virtual keyboard sends its first chord.
+func simulateKDECtrlKeyCombo(ctx context.Context, keyCode uint16, label string, shift bool, focus func() error) error {
+	return simulateCtrlKeyCombo(keyCode, label, shift, func(fd int) error {
 		eventName, err := uinputEventName(fd)
 		if err != nil {
 			return err
@@ -29,6 +46,59 @@ func SimulateKDEPasteAfterFocus(ctx context.Context, shift bool, focus func() er
 		}
 		return focus()
 	})
+}
+
+// waitForKDECopyModifiersRelease waits for both sides of each modifier across
+// keyboards. KDE's portal activates on key-down, and a held Shift changes Ctrl+C.
+func waitForKDECopyModifiersRelease(ctx context.Context) error {
+	paths, _ := discoverKeyboardDevices()
+	var devices []*os.File
+	for _, path := range paths {
+		if device, err := os.Open(path); err == nil {
+			devices = append(devices, device)
+			defer device.Close()
+		}
+	}
+	if len(devices) == 0 {
+		// Systems that expose only uinput cannot report the physical key state.
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(100 * time.Millisecond):
+			return nil
+		}
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, time.Second)
+	defer cancel()
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+	for kdeCopyModifiersPressed(devices) {
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("waiting for modifiers to be released: %w", ctx.Err())
+		case <-ticker.C:
+		}
+	}
+	return ctx.Err()
+}
+
+// kdeCopyModifiersPressed checks any readable device, including a second keyboard.
+func kdeCopyModifiersPressed(devices []*os.File) bool {
+	modifiers := [...]Key{KeyLeftCtrl, KeyRightCtrl, KeyLeftShift, KeyRightShift, KeyLeftAlt, KeyRightAlt, KeyLeftSuper, KeyRightSuper}
+	for _, device := range devices {
+		keyBits, err := readEvdevKeyState(int(device.Fd()))
+		if err != nil {
+			continue
+		}
+		for _, modifier := range modifiers {
+			code, _ := keyToEvdevKeyCode(modifier)
+			if keyBits[code/8]&(1<<(code%8)) != 0 {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // uinputEventName resolves the event node for this file descriptor. Multiple

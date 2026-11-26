@@ -53,7 +53,7 @@ func SetInternalSelectedTextProvider(provider func() (string, bool)) {
 
 // SupportsSelectionQuery reports whether the current desktop has a selection query backend.
 func SupportsSelectionQuery() bool {
-	return !util.IsLinuxWaylandSession() || (util.IsHyprlandSession() && util.IsOmarchy())
+	return !util.IsLinuxWaylandSession() || util.IsKDEWayland() || (util.IsHyprlandSession() && util.IsOmarchy())
 }
 
 // GetSelected prefers a focused Wox editor, then falls back to the OS capture path.
