@@ -250,43 +250,42 @@ func (m *Manager) newResultBindingActions(ctx context.Context, pluginInstance *I
 	}
 	batch.setHotkeyAction.Form = batch.emptyHotkeyForm
 	batch.setAliasAction.Form = batch.emptyAliasForm
-	return m.newResultBindingActionsWithBatch(ctx, pluginInstance, query, result, sourceHash, batch)
+	return m.appendResultBindingActionsWithBatch(nil, ctx, pluginInstance, query, result, sourceHash, batch)
 }
 
-func (m *Manager) newResultBindingActionsWithBatch(ctx context.Context, pluginInstance *Instance, query Query, result QueryResult, sourceHash string, batch defaultActionBatchContext) []QueryResultAction {
+func (m *Manager) appendResultBindingActionsWithBatch(dst []QueryResultAction, ctx context.Context, pluginInstance *Instance, query Query, result QueryResult, sourceHash string, batch defaultActionBatchContext) []QueryResultAction {
 	if pluginInstance == nil || !pluginInstance.Metadata.IsSupportFeature(MetadataFeatureMRU) {
-		return nil
+		return dst
 	}
 	if len(pluginInstance.MRURestoreCallbacks) == 0 {
-		return nil
+		return dst
 	}
 
 	hash := m.resultBindingHash(ctx, pluginInstance, query, result, sourceHash)
 	if hash == "" {
-		return nil
+		return dst
 	}
 
 	binding, found := setting.FindResultBinding(batch.bindings, hash)
 	defaultAction := defaultPluginAction(result)
 	canSetHotkey := canBindResultHotkey(pluginInstance, result) || strings.TrimSpace(binding.Hotkey) != ""
 	if !found && defaultAction == nil {
-		return nil
+		return dst
 	}
 
-	var actions []QueryResultAction
 	if canSetHotkey {
 		hotkeyAction := batch.setHotkeyAction
 		if binding.Hotkey != "" {
 			hotkeyAction.Form = newResultHotkeyForm(binding.Hotkey)
 		}
-		actions = append(actions, hotkeyAction)
+		dst = append(dst, hotkeyAction)
 	}
 	aliasAction := batch.setAliasAction
 	if binding.Alias != "" {
 		aliasAction.Form = newResultAliasForm(binding.Alias)
 	}
-	actions = append(actions, aliasAction)
-	return actions
+	dst = append(dst, aliasAction)
+	return dst
 }
 
 // ResultBindingQuery is the plugin query used to find one imported shortcut target.

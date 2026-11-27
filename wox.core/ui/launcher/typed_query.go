@@ -76,8 +76,9 @@ func (a *App) ApplyQueryResponse(ctx context.Context, response contract.QueryRes
 		util.GetLogger().Debug(context.Background(), fmt.Sprintf("native crash trace: query response enter queryId=%s results=%d final=%t", response.QueryID, len(response.Response.Results), response.IsFinal))
 	}
 	results := make([]queryResult, len(response.Response.Results))
+	var formCache formDefinitionCache
 	for index := range response.Response.Results {
-		results[index] = fromCoreQueryResult(response.Response.Results[index])
+		results[index] = fromCoreQueryResultWithCache(response.Response.Results[index], &formCache)
 	}
 	layout := fromCoreQueryLayout(response.Response.Layout)
 	if len(response.Response.ScopeIcons) > 0 {
@@ -190,8 +191,9 @@ func (a *App) loadTypedMRU(ctx context.Context, queryID string) {
 		return
 	}
 	converted := make([]queryResult, len(results))
+	var formCache formDefinitionCache
 	for index := range results {
-		converted[index] = fromCoreQueryResult(results[index])
+		converted[index] = fromCoreQueryResultWithCache(results[index], &formCache)
 		converted[index].QueryID = queryID
 	}
 	if err := a.runOnUI("apply MRU results", func() {
@@ -203,27 +205,78 @@ func (a *App) loadTypedMRU(ctx context.Context, queryID string) {
 	}
 }
 
-func fromCoreQueryResult(result plugin.QueryResultUI) queryResult {
-	actions := make([]resultAction, len(result.Actions))
-	for index := range result.Actions {
-		actions[index] = fromCoreResultAction(result.Actions[index])
+type cachedFormDefinitions struct {
+	ptr  *definition.PluginSettingDefinitionItem
+	len  int
+	defs []formDefinition
+}
+
+type formDefinitionCache []cachedFormDefinitions
+
+// fromCoreFormDefinitionsCached converts core form definitions once per shared backing slice in a query batch.
+func fromCoreFormDefinitionsCached(items definition.PluginSettingDefinitions, cache *formDefinitionCache) []formDefinition {
+	if len(items) == 0 {
+		return nil
 	}
-	tails := make([]resultTail, len(result.Tails))
-	for index := range result.Tails {
-		tails[index] = resultTail{
-			Type:         result.Tails[index].Type,
-			Text:         result.Tails[index].Text,
-			TextCategory: result.Tails[index].TextCategory,
-			Image:        fromCoreImage(result.Tails[index].Image),
-			ImageWidth:   result.Tails[index].ImageWidth,
-			ImageHeight:  result.Tails[index].ImageHeight,
-			Tooltip:      result.Tails[index].Tooltip,
-			ContextData:  cloneStringMap(result.Tails[index].ContextData),
+	ptr := &items[0]
+	count := len(items)
+	if cache != nil {
+		for _, entry := range *cache {
+			if entry.ptr == ptr && entry.len == count {
+				return entry.defs
+			}
 		}
 	}
-	titleTags := make([]resultTitleTag, len(result.TitleTags))
-	for index := range result.TitleTags {
-		titleTags[index] = fromCoreTitleTag(result.TitleTags[index])
+	definitions := make([]formDefinition, 0, count)
+	for _, item := range items {
+		converted, ok := fromCoreFormDefinition(item)
+		if ok {
+			definitions = append(definitions, converted)
+		}
+	}
+	if len(definitions) == 0 {
+		definitions = nil
+	}
+	if cache != nil {
+		*cache = append(*cache, cachedFormDefinitions{ptr: ptr, len: count, defs: definitions})
+	}
+	return definitions
+}
+
+func fromCoreQueryResult(result plugin.QueryResultUI) queryResult {
+	return fromCoreQueryResultWithCache(result, nil)
+}
+
+func fromCoreQueryResultWithCache(result plugin.QueryResultUI, formCache *formDefinitionCache) queryResult {
+	var actions []resultAction
+	if len(result.Actions) > 0 {
+		actions = make([]resultAction, len(result.Actions))
+		for index := range result.Actions {
+			actions[index] = fromCoreResultActionWithCache(result.Actions[index], formCache)
+		}
+	}
+	var tails []resultTail
+	if len(result.Tails) > 0 {
+		tails = make([]resultTail, len(result.Tails))
+		for index := range result.Tails {
+			tails[index] = resultTail{
+				Type:         result.Tails[index].Type,
+				Text:         result.Tails[index].Text,
+				TextCategory: result.Tails[index].TextCategory,
+				Image:        fromCoreImage(result.Tails[index].Image),
+				ImageWidth:   result.Tails[index].ImageWidth,
+				ImageHeight:  result.Tails[index].ImageHeight,
+				Tooltip:      result.Tails[index].Tooltip,
+				ContextData:  cloneStringMap(result.Tails[index].ContextData),
+			}
+		}
+	}
+	var titleTags []resultTitleTag
+	if len(result.TitleTags) > 0 {
+		titleTags = make([]resultTitleTag, len(result.TitleTags))
+		for index := range result.TitleTags {
+			titleTags[index] = fromCoreTitleTag(result.TitleTags[index])
+		}
 	}
 	return queryResult{
 		QueryID:           result.QueryId,
@@ -247,24 +300,25 @@ func fromCoreQueryResult(result plugin.QueryResultUI) queryResult {
 }
 
 func fromCoreResultAction(action plugin.QueryResultActionUI) resultAction {
-	definitions := make([]formDefinition, 0, len(action.Form))
-	for _, item := range action.Form {
-		definition, ok := fromCoreFormDefinition(item)
-		if ok {
-			definitions = append(definitions, definition)
-		}
+	return fromCoreResultActionWithCache(action, nil)
+}
+
+func fromCoreResultActionWithCache(action plugin.QueryResultActionUI, formCache *formDefinitionCache) resultAction {
+	var searchAliases []string
+	if len(action.SearchAliases) > 0 {
+		searchAliases = action.SearchAliases
 	}
 	return resultAction{
 		ID:                     action.Id,
 		Type:                   action.Type,
 		Name:                   action.Name,
-		SearchAliases:          append([]string(nil), action.SearchAliases...),
+		SearchAliases:          searchAliases,
 		Icon:                   fromCoreImage(action.Icon),
 		IsDefault:              action.IsDefault,
 		PreventHideAfterAction: action.PreventHideAfterAction,
 		ShowInToolbar:          action.ShowInToolbar,
 		Hotkey:                 action.Hotkey,
-		Form:                   definitions,
+		Form:                   fromCoreFormDefinitionsCached(action.Form, formCache),
 		IsSystemAction:         action.IsSystemAction,
 		Tail:                   action.Tail,
 		TailIcon:               fromCoreImage(action.TailIcon),
@@ -430,7 +484,7 @@ func optionalIntegerValidatorsForEmptyAsZero(validators []formValidator) []formV
 }
 
 func cloneStringMap(values map[string]string) map[string]string {
-	if values == nil {
+	if len(values) == 0 {
 		return nil
 	}
 	copy := make(map[string]string, len(values))

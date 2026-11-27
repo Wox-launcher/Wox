@@ -663,6 +663,7 @@ type defaultActionBatchContext struct {
 	resetRankingAction      QueryResultAction
 	hasAddQueryAlias        bool
 	addQueryAliasAction     QueryResultAction
+	supportsBindings        bool
 	bindings                []setting.ResultBinding
 	setHotkeyAction         QueryResultAction
 	setAliasAction          QueryResultAction
@@ -800,6 +801,7 @@ func (m *Manager) newDefaultActionBatchContext(ctx context.Context, pluginInstan
 	m.translateSingleResultAction(ctx, pluginInstance, &batch.resetRankingAction)
 
 	if pluginInstance != nil && pluginInstance.Metadata.IsSupportFeature(MetadataFeatureMRU) && len(pluginInstance.MRURestoreCallbacks) > 0 {
+		batch.supportsBindings = true
 		batch.bindings = currentResultBindings()
 		batch.emptyHotkeyForm = newResultHotkeyForm("")
 		batch.emptyAliasForm = newResultAliasForm("")
@@ -854,6 +856,15 @@ func (m *Manager) getDefaultActionsWithBatchContext(ctx context.Context, pluginI
 	resultHash := resultIdentityHash(pluginInstance.Metadata.Id, scoreResult)
 	settingManager := setting.GetSettingManager()
 
+	actionCap := 3
+	if batch.hasAddQueryAlias {
+		actionCap++
+	}
+	if batch.supportsBindings {
+		actionCap += 2
+	}
+	defaultActions = make([]QueryResultAction, 0, actionCap)
+
 	if settingManager.IsPinedResult(ctx, resultHash, query.RawQuery) {
 		defaultActions = append(defaultActions, batch.unpinAction)
 	} else {
@@ -870,9 +881,7 @@ func (m *Manager) getDefaultActionsWithBatchContext(ctx context.Context, pluginI
 	}
 
 	defaultActions = append(defaultActions, batch.openPluginSettingAction)
-	defaultActions = append(defaultActions, m.newResultBindingActionsWithBatch(ctx, pluginInstance, query, result, sourceHash, batch)...)
-
-	return defaultActions
+	return m.appendResultBindingActionsWithBatch(defaultActions, ctx, pluginInstance, query, result, sourceHash, batch)
 }
 
 // newQueryAliasText returns the query text that can become a new query alias.

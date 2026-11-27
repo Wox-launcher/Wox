@@ -97,6 +97,55 @@ func (d *DisplayList) FrameMetricsID() uint64 {
 	return d.frameID
 }
 
+// AppendFrameMetricsID or reset? Keep maxRetainedDisplayListCommands bounded so an occasional large list does not stay pinned forever.
+const maxRetainedDisplayListCommands = 4096
+
+// reset clears recorded frame state while retaining slice capacity within maxRetainedDisplayListCommands.
+func (d *DisplayList) reset() {
+	if d == nil {
+		return
+	}
+	commands := d.commands
+	clear(commands)
+	if cap(commands) > maxRetainedDisplayListCommands {
+		commands = nil
+	} else {
+		commands = commands[:0]
+	}
+	clipStack := d.clipStack
+	clear(clipStack)
+	clipStack = clipStack[:0]
+	transformStack := d.transformStack[:0]
+	groups := d.groups
+	clear(groups)
+	groups = groups[:0]
+	snapshotScopes := d.snapshotScopes
+	clear(snapshotScopes)
+	snapshotScopes = snapshotScopes[:0]
+	floatingMaterials := d.floatingMaterials[:0]
+	inputRegions := d.inputRegions
+	clear(inputRegions)
+	inputRegions = inputRegions[:0]
+
+	*d = DisplayList{
+		commands:          commands,
+		clipStack:         clipStack,
+		transformStack:    transformStack,
+		groups:            groups,
+		snapshotScopes:    snapshotScopes,
+		floatingMaterials: floatingMaterials,
+		inputRegions:      inputRegions,
+	}
+}
+
+// release drops retained command buffers when a window trims or tears down resources.
+func (d *DisplayList) release() {
+	if d == nil {
+		return
+	}
+	*d = DisplayList{}
+}
+
 // AttachFrameMetricsID binds this display list to an already-started metrics frame.
 func (d *DisplayList) AttachFrameMetricsID(frameID uint64) {
 	if d != nil {

@@ -234,6 +234,7 @@ type platformWindow struct {
 	done       chan struct{}
 
 	renderer                *nativeRenderer
+	frameDisplayList        DisplayList
 	rendererTrimTimer       *time.Timer
 	rendererCacheClearTimer *time.Timer
 	// a11ySyncedHash is the content hash of the last tree pushed to the native UIA mirror. The
@@ -1260,11 +1261,11 @@ func (w *platformWindow) prepareWindowForResize(width, height int) bool {
 		scale = 1
 	}
 	displayList := w.buildWindowsDisplayList(PixelSize{Width: width, Height: height}, scale, Rect{})
-	err := w.renderWindowsDisplayList(&displayList, scale)
+	err := w.renderWindowsDisplayList(displayList, scale)
 	if isRecoverableRendererError(err) {
 		if err = w.recoverWindowsRenderer(err); err == nil {
 			displayList = w.buildWindowsDisplayList(PixelSize{Width: width, Height: height}, scale, Rect{})
-			err = w.renderWindowsDisplayList(&displayList, scale)
+			err = w.renderWindowsDisplayList(displayList, scale)
 		}
 	}
 	if err != nil {
@@ -2173,6 +2174,7 @@ func (w *platformWindow) executeCommand(command windowCommand) windowCommandResu
 			w.webView.Close()
 			w.webView = nil
 		}
+		w.frameDisplayList.release()
 		return windowCommandResult{err: w.renderer.trim()}
 	case windowCommandClearRendererCache:
 		// Timer.Stop cannot revoke a callback that already fired, so a clear from an earlier hide
@@ -2766,11 +2768,11 @@ func (w *platformWindow) drawFrame(hwnd win.HWND, paint win.RECT) uint64 {
 		damage = Rect{}
 	}
 	displayList := w.buildWindowsDisplayList(pixelSize, scale, damage)
-	err := w.renderWindowsDisplayList(&displayList, scale)
+	err := w.renderWindowsDisplayList(displayList, scale)
 	if isRecoverableRendererError(err) {
 		if err = w.recoverWindowsRenderer(err); err == nil {
 			displayList = w.buildWindowsDisplayList(pixelSize, scale, Rect{})
-			err = w.renderWindowsDisplayList(&displayList, scale)
+			err = w.renderWindowsDisplayList(displayList, scale)
 		}
 	}
 	if err != nil {
@@ -2778,7 +2780,7 @@ func (w *platformWindow) drawFrame(hwnd win.HWND, paint win.RECT) uint64 {
 		win.PostMessage(hwnd, windowForceCloseMessage, 0, 0)
 		return 0
 	} else if w.options.PassThroughTransparent {
-		if err := w.updateTransparentInputRegion(&displayList, pixelSize, scale); err != nil {
+		if err := w.updateTransparentInputRegion(displayList, pixelSize, scale); err != nil {
 			util.GetLogger().Warn(context.Background(), fmt.Sprintf("update transparent input region: %v", err))
 		}
 	}
@@ -2801,14 +2803,15 @@ func (w *platformWindow) recoverWindowsRenderer(cause error) error {
 }
 
 // buildWindowsDisplayList rebuilds a frame so device recovery can retry with full damage.
-func (w *platformWindow) buildWindowsDisplayList(pixelSize PixelSize, scale float32, damage Rect) DisplayList {
-	displayList := DisplayList{}
+func (w *platformWindow) buildWindowsDisplayList(pixelSize PixelSize, scale float32, damage Rect) *DisplayList {
+	displayList := &w.frameDisplayList
+	displayList.reset()
 	size := Size{Width: float32(pixelSize.Width) / scale, Height: float32(pixelSize.Height) / scale}
 	if w.options.frameMetrics != nil {
 		displayList.frameID = w.options.frameMetrics.beginFrame(size)
 	}
 	if w.options.OnFrame != nil {
-		w.options.OnFrame(&displayList, FrameInfo{
+		w.options.OnFrame(displayList, FrameInfo{
 			Size:      size,
 			PixelSize: pixelSize,
 			Scale:     scale,
@@ -2854,6 +2857,7 @@ func (w *platformWindow) destroyNativeResources() {
 	w.stopRendererCacheClearTimer()
 	w.a11yPayloadBuf = nil
 	w.a11ySynced = false
+	w.frameDisplayList.release()
 	if w.rendererTrimTimer != nil {
 		w.rendererTrimTimer.Stop()
 		w.rendererTrimTimer = nil

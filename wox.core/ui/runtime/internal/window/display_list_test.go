@@ -308,3 +308,42 @@ func TestDisplayListZeroDamageRecordsFullFrame(t *testing.T) {
 		t.Fatalf("zero damage command count = %d, want 1", len(displayList.commands))
 	}
 }
+
+func TestDisplayListResetReusesBoundedCapacityAndReleaseFrees(t *testing.T) {
+	displayList := &DisplayList{
+		RasterScale: 2,
+		clearColor:  Color{R: 1, A: 255},
+		frameID:     42,
+	}
+	displayList.SetDamage(Rect{X: 1, Y: 2, Width: 3, Height: 4})
+	for range 16 {
+		displayList.FillRect(Rect{X: 1, Y: 2, Width: 10, Height: 10}, Color{A: 255})
+	}
+	smallCap := cap(displayList.commands)
+	if smallCap < 16 || smallCap > maxRetainedDisplayListCommands {
+		t.Fatalf("unexpected initial capacity = %d", smallCap)
+	}
+
+	displayList.reset()
+	if len(displayList.commands) != 0 || cap(displayList.commands) != smallCap {
+		t.Fatalf("reset changed bounded commands len=%d cap=%d (want len=0 cap=%d)", len(displayList.commands), cap(displayList.commands), smallCap)
+	}
+	if displayList.frameID != 0 || displayList.RasterScale != 0 || displayList.clearColor != (Color{}) || displayList.damage != (Rect{}) {
+		t.Fatalf("reset left stale scalar fields: %+v", displayList)
+	}
+
+	// Oversized frames drop backing storage on reset so spikes do not stay pinned.
+	for range maxRetainedDisplayListCommands + 10 {
+		displayList.FillRect(Rect{Width: 5, Height: 5}, Color{A: 255})
+	}
+	displayList.reset()
+	if cap(displayList.commands) != 0 {
+		t.Fatalf("oversized commands cap after reset = %d, want 0", cap(displayList.commands))
+	}
+
+	displayList.FillRect(Rect{Width: 5, Height: 5}, Color{A: 255})
+	displayList.release()
+	if cap(displayList.commands) != 0 {
+		t.Fatalf("commands cap after release = %d, want 0", cap(displayList.commands))
+	}
+}

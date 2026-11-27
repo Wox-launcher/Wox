@@ -78,3 +78,62 @@ func TestBoundaryRebuildReleasesStaleIdentityNodes(t *testing.T) {
 		t.Fatalf("image of a row removed by a Boundary rebuild is still reachable from the host")
 	}
 }
+
+func TestHostAssignIdentitiesStabilityMoveAndDuplicateDiagnostics(t *testing.T) {
+	shift := false
+	duplicate := false
+	host := NewHost(func(woxui.FrameInfo) Widget {
+		row := Boundary[identityRetentionProps]{
+			Key:   "inner",
+			Props: identityRetentionProps{Rows: 1},
+			Build: func(identityRetentionProps) Widget {
+				return Semantics{Key: "leaf", AutomationID: "leaf", Role: woxui.AccessibilityRoleButton, Label: "leaf"}
+			},
+		}
+		children := []Widget{row}
+		if shift {
+			children = []Widget{Container{Width: 10, Height: 10}, row}
+		}
+		if duplicate {
+			children = []Widget{
+				Semantics{Key: "dup", AutomationID: "dup-1", Role: woxui.AccessibilityRoleButton, Label: "dup-1"},
+				Semantics{Key: "dup", AutomationID: "dup-2", Role: woxui.AccessibilityRoleButton, Label: "dup-2"},
+			}
+		}
+		return Flex{Axis: Vertical, Children: children}
+	})
+	host.AttachServices(&fakeHostServices{})
+	frame := woxui.FrameInfo{Size: woxui.Size{Width: 100, Height: 100}}
+
+	host.Frame(&woxui.DisplayList{}, frame)
+	leaf1 := findAutomationNode(t, host.Snapshot().Tree, "leaf")
+	host.Frame(&woxui.DisplayList{}, frame)
+	leaf2 := findAutomationNode(t, host.Snapshot().Tree, "leaf")
+	if leaf2.ID != leaf1.ID {
+		t.Fatalf("stable frame leaf ID = %d, want %d", leaf2.ID, leaf1.ID)
+	}
+
+	// Moving a keyed Boundary stays under the same Flex parent nodeID, whereas toggling duplicate keys changes children and emits diagnostics.
+	shift = true
+	host.Frame(&woxui.DisplayList{}, frame)
+	leafMoved := findAutomationNode(t, host.Snapshot().Tree, "leaf")
+	if leafMoved.ID != leaf1.ID {
+		t.Fatalf("keyed boundary ID after sibling shift = %d, want %d", leafMoved.ID, leaf1.ID)
+	}
+
+	duplicate = true
+	host.Frame(&woxui.DisplayList{}, frame)
+	snap := host.Snapshot()
+	dup1 := findAutomationNode(t, snap.Tree, "dup-1")
+	dup2 := findAutomationNode(t, snap.Tree, "dup-2")
+	if dup1.ID == dup2.ID {
+		t.Fatalf("duplicate siblings did not receive distinct IDs: %+v / %+v", dup1, dup2)
+	}
+	if len(snap.Diagnostics) == 0 {
+		t.Fatal("expected duplicate widget key diagnostic")
+	}
+	wantDiag := `duplicate widget key "dup" under root/layout[0] at children 0 and 1`
+	if snap.Diagnostics[0] != wantDiag {
+		t.Fatalf("diagnostic = %q, want %q", snap.Diagnostics[0], wantDiag)
+	}
+}

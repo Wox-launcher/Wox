@@ -513,8 +513,9 @@ func (a *App) RemoveResult(ctx context.Context, option plugin.RemoveResultOption
 // PushResults appends a typed result batch only when its query is still visible.
 func (a *App) PushResults(_ context.Context, payload plugin.PushResultsPayload) (bool, error) {
 	results := make([]queryResult, len(payload.Results))
+	var formCache formDefinitionCache
 	for index := range payload.Results {
-		results[index] = fromCoreQueryResult(payload.Results[index])
+		results[index] = fromCoreQueryResultWithCache(payload.Results[index], &formCache)
 	}
 	appended := false
 	var appendErr error

@@ -41,6 +41,15 @@ type Location struct {
 
 	// portableUserData is true when this launch reads user data from a wox-user directory beside the executable.
 	portableUserData bool
+
+	// Cached derived directories avoid repeated path.Join allocations on query/icon hot paths.
+	logDirectory             string
+	cacheDirectory           string
+	pluginCacheRootDirectory string
+	imageCacheDirectory      string
+	pluginDirectory          string
+	themeDirectory           string
+	pluginSettingDirectory   string
 }
 
 // portableUserDataDirectoryName is the directory that opts a copy of Wox into portable user data.
@@ -109,6 +118,7 @@ func (l *Location) Init() error {
 		userDataDirectory = strings.ReplaceAll(userDataDirectory, "\n", "")
 		l.userDataDirectory = userDataDirectory
 	}
+	l.refreshDerivedPaths()
 
 	if directoryErr := l.EnsureDirectoryExist(l.userDataDirectory); directoryErr != nil {
 		return directoryErr
@@ -194,7 +204,33 @@ func (l *Location) EnsureDirectoryExist(directory string) error {
 	return nil
 }
 
+func (l *Location) refreshDerivedPaths() {
+	if l.woxDataDirectory != "" {
+		l.logDirectory = path.Join(l.woxDataDirectory, "log")
+		l.cacheDirectory = path.Join(l.woxDataDirectory, "cache")
+		l.pluginCacheRootDirectory = path.Join(l.cacheDirectory, "plugins")
+		l.imageCacheDirectory = path.Join(l.cacheDirectory, "images")
+	} else {
+		l.logDirectory = ""
+		l.cacheDirectory = ""
+		l.pluginCacheRootDirectory = ""
+		l.imageCacheDirectory = ""
+	}
+	if l.userDataDirectory != "" {
+		l.pluginDirectory = path.Join(l.userDataDirectory, "plugins")
+		l.themeDirectory = path.Join(l.userDataDirectory, "themes")
+		l.pluginSettingDirectory = path.Join(l.userDataDirectory, "settings")
+	} else {
+		l.pluginDirectory = ""
+		l.themeDirectory = ""
+		l.pluginSettingDirectory = ""
+	}
+}
+
 func (l *Location) GetLogDirectory() string {
+	if l.logDirectory != "" {
+		return l.logDirectory
+	}
 	return path.Join(l.woxDataDirectory, "log")
 }
 
@@ -213,6 +249,9 @@ func (l *Location) GetLogHostsDirectory() string {
 }
 
 func (l *Location) GetPluginDirectory() string {
+	if l.pluginDirectory != "" {
+		return l.pluginDirectory
+	}
 	return path.Join(l.userDataDirectory, "plugins")
 }
 
@@ -226,10 +265,16 @@ func (l *Location) GetUserSingleFilePluginsDirectory() string {
 }
 
 func (l *Location) GetThemeDirectory() string {
+	if l.themeDirectory != "" {
+		return l.themeDirectory
+	}
 	return path.Join(l.userDataDirectory, "themes")
 }
 
 func (l *Location) GetPluginSettingDirectory() string {
+	if l.pluginSettingDirectory != "" {
+		return l.pluginSettingDirectory
+	}
 	return path.Join(l.userDataDirectory, "settings")
 }
 
@@ -310,11 +355,17 @@ func (l *Location) GetAISkillsCacheDirectory() string {
 }
 
 func (l *Location) GetCacheDirectory() string {
+	if l.cacheDirectory != "" {
+		return l.cacheDirectory
+	}
 	return path.Join(l.woxDataDirectory, "cache")
 }
 
 // GetPluginCacheRootDirectory is the shared parent for plugin-owned cache folders.
 func (l *Location) GetPluginCacheRootDirectory() string {
+	if l.pluginCacheRootDirectory != "" {
+		return l.pluginCacheRootDirectory
+	}
 	return path.Join(l.GetCacheDirectory(), "plugins")
 }
 
@@ -367,6 +418,9 @@ func sanitizePluginCacheID(pluginID string) (string, error) {
 }
 
 func (l *Location) GetImageCacheDirectory() string {
+	if l.imageCacheDirectory != "" {
+		return l.imageCacheDirectory
+	}
 	return path.Join(l.GetCacheDirectory(), "images")
 }
 
@@ -399,6 +453,7 @@ func (l *Location) GetAppLockPath() string {
 
 func (l *Location) UpdateUserDataDirectory(newDirectory string) {
 	l.userDataDirectory = newDirectory
+	l.refreshDerivedPaths()
 }
 
 // portableUserDataDirectory returns the wox-user directory beside the executable when that directory exists.

@@ -479,29 +479,28 @@ func firstResultIdentityKey(values ...string) string {
 }
 
 func (q *QueryResult) ToUI() QueryResultUI {
-	return QueryResultUI{
-		Id:                q.Id,
-		Title:             q.Title,
-		SubTitle:          q.SubTitle,
-		Icon:              q.Icon,
-		IconShowContainer: q.IconShowContainer,
-		Preview:           q.Preview,
-		Score:             q.Score,
-		Group:             q.Group,
-		GroupScore:        q.GroupScore,
-		TitleTags:         append([]QueryResultTitleTag(nil), q.TitleTags...),
-		Tails:             q.Tails,
-		DragData:          q.DragData,
-		Actions: lo.Map(q.Actions, func(action QueryResultAction, index int) QueryResultActionUI {
+	var titleTags []QueryResultTitleTag
+	if len(q.TitleTags) > 0 {
+		titleTags = append([]QueryResultTitleTag(nil), q.TitleTags...)
+	}
+	var actions []QueryResultActionUI
+	if len(q.Actions) > 0 {
+		actions = make([]QueryResultActionUI, len(q.Actions))
+		for index := range q.Actions {
+			action := &q.Actions[index]
 			actionType := action.Type
 			if actionType == "" {
 				actionType = QueryResultActionTypeExecute
 			}
-			return QueryResultActionUI{
+			var searchAliases []string
+			if len(action.SearchAliases) > 0 {
+				searchAliases = append([]string(nil), action.SearchAliases...)
+			}
+			actions[index] = QueryResultActionUI{
 				Id:                     action.Id,
 				Type:                   actionType,
 				Name:                   action.Name,
-				SearchAliases:          append([]string(nil), action.SearchAliases...),
+				SearchAliases:          searchAliases,
 				Icon:                   action.Icon,
 				IsDefault:              action.IsDefault,
 				PreventHideAfterAction: action.PreventHideAfterAction,
@@ -513,15 +512,35 @@ func (q *QueryResult) ToUI() QueryResultUI {
 				Tail:                   action.Tail,
 				TailIcon:               action.TailIcon,
 			}
-		}),
+		}
+	}
+	return QueryResultUI{
+		Id:                q.Id,
+		Title:             q.Title,
+		SubTitle:          q.SubTitle,
+		Icon:              q.Icon,
+		IconShowContainer: q.IconShowContainer,
+		Preview:           q.Preview,
+		Score:             q.Score,
+		Group:             q.Group,
+		GroupScore:        q.GroupScore,
+		TitleTags:         titleTags,
+		Tails:             q.Tails,
+		DragData:          q.DragData,
+		Actions:           actions,
 	}
 }
 
 func (q *QueryResponse) ToUI() QueryResponseUI {
+	var results []QueryResultUI
+	if len(q.Results) > 0 {
+		results = make([]QueryResultUI, len(q.Results))
+		for index := range q.Results {
+			results[index] = q.Results[index].ToUI()
+		}
+	}
 	return QueryResponseUI{
-		Results: lo.Map(q.Results, func(result QueryResult, index int) QueryResultUI {
-			return result.ToUI()
-		}),
+		Results:       results,
 		Refinements:   q.Refinements,
 		Layout:        q.Layout,
 		Context:       q.Context,

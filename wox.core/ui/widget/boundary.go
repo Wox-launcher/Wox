@@ -89,7 +89,7 @@ type boundaryCache struct {
 	hit                 bool
 	node                *node
 	identityValid       bool
-	identityRootPath    string
+	identityRootKey     nodeIdentityKey
 	identityEntries     []boundaryIdentityEntry
 	identityDiagnostics []string
 	identityReuses      uint64
@@ -108,6 +108,19 @@ type boundaryCache struct {
 	identityOwner    identityOwner
 }
 
+type nodeIdentityKey struct {
+	parentID  woxui.AccessibilityNodeID
+	kind      string
+	key       Key
+	index     int
+	duplicate bool
+}
+
+type siblingIdentityKey struct {
+	key  Key
+	kind string
+}
+
 type identityOwner struct {
 	seen uint64
 }
@@ -119,7 +132,7 @@ type identityBinding struct {
 }
 
 type boundaryIdentityEntry struct {
-	path   string
+	key    nodeIdentityKey
 	node   *node
 	parent *node
 	id     woxui.AccessibilityNodeID

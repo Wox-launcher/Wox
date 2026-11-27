@@ -4,6 +4,7 @@ import (
 	"reflect"
 	"testing"
 	"wox/plugin"
+	"wox/setting/definition"
 
 	launcherview "wox/ui/launcher/view"
 	previewview "wox/ui/launcher/view/preview"
@@ -385,5 +386,37 @@ func TestFromCoreResultActionCopiesContextData(t *testing.T) {
 	})
 	if action.ContextData[webViewPreviewURLContextKey] != "https://example.com" {
 		t.Fatalf("context = %#v", action.ContextData)
+	}
+}
+
+func TestFromCoreFormDefinitionsCacheReusesSharedFormsAndSeparatesDistinct(t *testing.T) {
+	emptyForm := definition.PluginSettingDefinitions{{
+		Type:  definition.PluginSettingDefinitionTypeTextBox,
+		Value: &definition.PluginSettingValueTextBox{Key: "alias", Label: "Alias", DefaultValue: ""},
+	}}
+	customForm := definition.PluginSettingDefinitions{{
+		Type:  definition.PluginSettingDefinitionTypeTextBox,
+		Value: &definition.PluginSettingValueTextBox{Key: "alias", Label: "Alias", DefaultValue: "chrome"},
+	}}
+
+	var cache formDefinitionCache
+	first := fromCoreQueryResultWithCache(plugin.QueryResultUI{
+		Actions: []plugin.QueryResultActionUI{{Id: "a1", Form: emptyForm}},
+	}, &cache)
+	second := fromCoreQueryResultWithCache(plugin.QueryResultUI{
+		Actions: []plugin.QueryResultActionUI{{Id: "a2", Form: emptyForm}},
+	}, &cache)
+	third := fromCoreQueryResultWithCache(plugin.QueryResultUI{
+		Actions: []plugin.QueryResultActionUI{{Id: "a3", Form: customForm}},
+	}, &cache)
+
+	if len(first.Actions[0].Form) != 1 || len(second.Actions[0].Form) != 1 || len(third.Actions[0].Form) != 1 {
+		t.Fatalf("unexpected form lengths: %d %d %d", len(first.Actions[0].Form), len(second.Actions[0].Form), len(third.Actions[0].Form))
+	}
+	if &first.Actions[0].Form[0] != &second.Actions[0].Form[0] {
+		t.Fatalf("shared core form did not reuse converted form slice")
+	}
+	if &first.Actions[0].Form[0] == &third.Actions[0].Form[0] || third.Actions[0].Form[0].Value.DefaultValue != "chrome" {
+		t.Fatalf("distinct form collided with cached empty form: %+v", third.Actions[0].Form[0].Value)
 	}
 }

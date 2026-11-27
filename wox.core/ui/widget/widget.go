@@ -145,6 +145,8 @@ type node struct {
 	id                  woxui.AccessibilityNodeID
 	key                 Key
 	kind                string
+	identityIndex       int
+	identityDup         bool
 	parent              *node
 	bounds              woxui.Rect
 	paint               func(*woxui.DisplayList, woxui.Rect)

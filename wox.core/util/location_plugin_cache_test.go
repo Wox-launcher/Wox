@@ -62,3 +62,22 @@ func TestPluginCacheDirectoryRejectsUnsafeIDs(t *testing.T) {
 		assert.Error(t, err, pluginID)
 	}
 }
+
+func TestLocationCachesDerivedPathsAcrossInitAndUpdate(t *testing.T) {
+	initPluginCacheTestLocation(t)
+
+	loc := GetLocation()
+	assert.Equal(t, path.Join(loc.GetWoxDataDirectory(), "log"), loc.GetLogDirectory())
+	assert.Equal(t, path.Join(loc.GetWoxDataDirectory(), "cache"), loc.GetCacheDirectory())
+	assert.Equal(t, path.Join(loc.GetCacheDirectory(), "plugins"), loc.GetPluginCacheRootDirectory())
+	assert.Equal(t, path.Join(loc.GetCacheDirectory(), "images"), loc.GetImageCacheDirectory())
+	assert.Equal(t, path.Join(loc.GetUserDataDirectory(), "plugins"), loc.GetPluginDirectory())
+	assert.Equal(t, path.Join(loc.GetUserDataDirectory(), "themes"), loc.GetThemeDirectory())
+	assert.Equal(t, path.Join(loc.GetUserDataDirectory(), "settings"), loc.GetPluginSettingDirectory())
+
+	newUserDir := filepath.Join(t.TempDir(), "custom-user")
+	loc.UpdateUserDataDirectory(newUserDir)
+	assert.Equal(t, path.Join(newUserDir, "plugins"), loc.GetPluginDirectory())
+	assert.Equal(t, path.Join(newUserDir, "themes"), loc.GetThemeDirectory())
+	assert.Equal(t, path.Join(newUserDir, "settings"), loc.GetPluginSettingDirectory())
+}

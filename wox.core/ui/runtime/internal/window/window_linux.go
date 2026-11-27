@@ -70,6 +70,7 @@ type platformWindow struct {
 	pendingDamage       Rect
 	damagePending       bool
 	fullDamage          bool
+	frameDisplayList    DisplayList
 	webView             *webviewruntime.Controller
 	webViewActionHotkey string
 }
@@ -720,6 +721,7 @@ func (w *platformWindow) markClosed() {
 	w.webView = nil
 	w.closing = false
 	w.closed = true
+	w.frameDisplayList.release()
 	handle := w.handle
 	w.handle = 0
 	onClosed := w.options.OnClosed
@@ -750,7 +752,8 @@ func (w *platformWindow) recordRenderError(operation string, result C.int32_t) {
 
 func (w *platformWindow) drawFrame(frame FrameInfo) {
 	frame.Damage = w.consumePendingDamage()
-	displayList := &DisplayList{}
+	displayList := &w.frameDisplayList
+	displayList.reset()
 	if w.options.frameMetrics != nil {
 		displayList.frameID = w.options.frameMetrics.beginFrame(frame.Size)
 	}

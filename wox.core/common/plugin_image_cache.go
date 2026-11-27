@@ -23,9 +23,18 @@ import (
 type pluginImageCache struct {
 	mu         sync.Mutex
 	generation uint64
+	cachedGen  uint64
+	cachedDir  string
+}
+
+type pluginImageCacheEntry struct {
+	imageCacheDir string
+	root          string
+	state         *pluginImageCache
 }
 
 var pluginImageCaches sync.Map
+var pluginImageCacheEntries = util.NewHashMap[string, pluginImageCacheEntry]()
 
 // remoteIconFetches collapses concurrent downloads of one URL. Different URLs run together.
 var remoteIconFetches singleflight.Group
@@ -42,16 +51,26 @@ type IconConversion struct {
 
 // pluginImageCacheFor uses the validated plugin ID, never an installation path.
 func pluginImageCacheFor(pluginID string) (string, *pluginImageCache, error) {
+	imageCacheDir := util.GetLocation().GetImageCacheDirectory()
+	if entry, ok := pluginImageCacheEntries.Load(pluginID); ok && entry.imageCacheDir == imageCacheDir {
+		return entry.root, entry.state, nil
+	}
 	directory, err := util.GetLocation().GetPluginCacheDirectory(pluginID)
 	if err != nil {
 		return "", nil, err
 	}
-	root := filepath.Join(util.GetLocation().GetImageCacheDirectory(), "plugins", filepath.Base(directory))
+	root := filepath.Join(imageCacheDir, "plugins", filepath.Base(directory))
 	state, found := pluginImageCaches.Load(root)
 	if !found {
 		state, _ = pluginImageCaches.LoadOrStore(root, &pluginImageCache{generation: 1})
 	}
-	return root, state.(*pluginImageCache), nil
+	cacheState := state.(*pluginImageCache)
+	pluginImageCacheEntries.Store(pluginID, pluginImageCacheEntry{
+		imageCacheDir: imageCacheDir,
+		root:          root,
+		state:         cacheState,
+	})
+	return root, cacheState, nil
 }
 
 // ConvertPluginIcon owns all file artifacts produced for one plugin. The lock
@@ -81,7 +100,7 @@ func ConvertPluginIcon(ctx context.Context, image WoxImage, pluginID, pluginDire
 	}
 	state.mu.Lock()
 	defer state.mu.Unlock()
-	directory := filepath.Join(root, strconv.FormatUint(state.generation, 10))
+	directory := state.directoryLocked(root)
 	if config.CacheScope != "" && config.CacheScope != directory {
 		return imageThumbnailPlaceholder, fmt.Errorf("plugin image request is stale")
 	}
@@ -128,11 +147,20 @@ func ClearPluginImageCache(pluginID string) error {
 	return err
 }
 
+// directoryLocked caches the current generation folder under s.mu to avoid repeated filepath.Join calls.
+func (s *pluginImageCache) directoryLocked(root string) string {
+	if s.cachedGen != s.generation || s.cachedDir == "" {
+		s.cachedGen = s.generation
+		s.cachedDir = filepath.Join(root, strconv.FormatUint(s.generation, 10))
+	}
+	return s.cachedDir
+}
+
 // currentDirectory is the generation directory new artifacts must use.
 func (s *pluginImageCache) currentDirectory(root string) string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return filepath.Join(root, strconv.FormatUint(s.generation, 10))
+	return s.directoryLocked(root)
 }
 
 // fetchRemoteIcon stores the URL payload in the shared image cache. One URL is

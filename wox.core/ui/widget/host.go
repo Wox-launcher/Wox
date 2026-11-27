@@ -56,8 +56,8 @@ type Host struct {
 	root           *node
 
 	nextNodeID    woxui.AccessibilityNodeID
-	identities    map[string]woxui.AccessibilityNodeID
-	identityMeta  map[string]identityBinding
+	identities    map[nodeIdentityKey]woxui.AccessibilityNodeID
+	identityMeta  map[nodeIdentityKey]identityBinding
 	identityFrame uint64
 	nodes         map[woxui.AccessibilityNodeID]*node
 
@@ -144,8 +144,8 @@ type Host struct {
 func NewHost(build func(frame woxui.FrameInfo) Widget) *Host {
 	host := &Host{
 		build:              build,
-		identities:         map[string]woxui.AccessibilityNodeID{},
-		identityMeta:       map[string]identityBinding{},
+		identities:         map[nodeIdentityKey]woxui.AccessibilityNodeID{},
+		identityMeta:       map[nodeIdentityKey]identityBinding{},
 		nodes:              map[woxui.AccessibilityNodeID]*node{},
 		scopeRestore:       map[woxui.AccessibilityNodeID]focusRestoreTarget{},
 		change:             make(chan struct{}),
@@ -387,7 +387,7 @@ func (h *Host) Frame(displayList *woxui.DisplayList, frame woxui.FrameInfo) {
 	}, vsync)
 	work.layoutVisits = countLayoutVisits(root)
 	h.identityFrame++
-	h.assignIdentities(root, nil, "root", 0, h.identities, h.identities, h.nodes, &diagnostics, nil, work)
+	h.assignIdentities(root, nil, 0, false, h.identities, h.nodes, &diagnostics, nil, work)
 	h.sweepIdentities()
 	h.root = root
 	h.reconcileHoverAnchors()
@@ -545,27 +545,39 @@ func (h *Host) Dispose() {
 	h.overlayOwner = ""
 	h.nodes = map[woxui.AccessibilityNodeID]*node{}
 	h.focusObservers = nil
-	h.identities = map[string]woxui.AccessibilityNodeID{}
-	h.identityMeta = map[string]identityBinding{}
+	h.identities = map[nodeIdentityKey]woxui.AccessibilityNodeID{}
+	h.identityMeta = map[nodeIdentityKey]identityBinding{}
 }
 
-func (h *Host) assignIdentities(current *node, parent *node, parentPath string, index int, previous, identities map[string]woxui.AccessibilityNodeID, nodes map[woxui.AccessibilityNodeID]*node, diagnostics *[]string, collectors []*boundaryCache, work *frameWorkCounters) {
+func (h *Host) assignIdentities(current *node, parent *node, index int, duplicate bool, previous map[nodeIdentityKey]woxui.AccessibilityNodeID, nodes map[woxui.AccessibilityNodeID]*node, diagnostics *[]string, collectors []*boundaryCache, work *frameWorkCounters) {
 	if current == nil {
 		return
 	}
 	current.parent = parent
+	current.identityIndex = index
+	current.identityDup = duplicate
 	kind := current.kind
 	if kind == "" {
 		kind = nodeKind(current)
 		current.kind = kind
 	}
-	segment := fmt.Sprintf("%s[%d]", kind, index)
-	if current.key != "" {
-		segment = fmt.Sprintf("%s{%s}", kind, current.key)
+	var parentID woxui.AccessibilityNodeID
+	if parent != nil {
+		parentID = parent.id
 	}
-	path := parentPath + "/" + segment
+	keyIndex := index
+	if current.key != "" && !duplicate {
+		keyIndex = -1
+	}
+	idKey := nodeIdentityKey{
+		parentID:  parentID,
+		kind:      kind,
+		key:       current.key,
+		index:     keyIndex,
+		duplicate: duplicate,
+	}
 	cache := current.boundary
-	if cache != nil && cache.hit && cache.identityValid && cache.identityRootPath == path {
+	if cache != nil && cache.hit && cache.identityValid && cache.identityRootKey == idKey {
 		cache.identityReuses++
 		markIdentityOwnersSeen(cache, h.identityFrame)
 		*diagnostics = append(*diagnostics, cache.identityDiagnostics...)
@@ -599,7 +611,7 @@ func (h *Host) assignIdentities(current *node, parent *node, parentPath string, 
 		cache.nestedOwners = cache.nestedOwners[:0]
 		collectors = append(collectors, cache)
 	}
-	if id, ok := previous[path]; ok {
+	if id, ok := previous[idKey]; ok {
 		current.id = id
 	} else {
 		h.nextNodeID++
@@ -611,31 +623,60 @@ func (h *Host) assignIdentities(current *node, parent *node, parentPath string, 
 	} else if len(collectors) > 0 {
 		owner = &collectors[len(collectors)-1].identityOwner
 	}
-	h.upsertIdentity(path, current.id, current, owner, work)
-	entry := boundaryIdentityEntry{path: path, node: current, parent: parent, id: current.id}
+	h.upsertIdentity(idKey, current.id, current, owner, work)
+	entry := boundaryIdentityEntry{key: idKey, node: current, parent: parent, id: current.id}
 	for _, collector := range collectors {
 		collector.identityEntries = append(collector.identityEntries, entry)
 	}
 
-	siblingKeys := map[string]int{}
+	var firstKey siblingIdentityKey
+	var firstKeyIndex int
+	hasFirstKey := false
+	var siblingKeys map[siblingIdentityKey]int
+	var parentDiagPath string
 	for childIndex, child := range current.children {
 		if child == nil {
 			continue
 		}
-		childPath := path
+		childDuplicate := false
 		if child.key != "" {
-			identity := string(child.key) + "|" + nodeKind(child)
-			if first, exists := siblingKeys[identity]; exists {
-				*diagnostics = append(*diagnostics, fmt.Sprintf("duplicate widget key %q under %s at children %d and %d", child.key, path, first, childIndex))
-				childPath = fmt.Sprintf("%s/duplicate[%d]", path, childIndex)
+			childKind := child.kind
+			if childKind == "" {
+				childKind = nodeKind(child)
+				child.kind = childKind
+			}
+			identity := siblingIdentityKey{key: child.key, kind: childKind}
+			if !hasFirstKey {
+				firstKey = identity
+				firstKeyIndex = childIndex
+				hasFirstKey = true
+			} else if siblingKeys == nil {
+				if identity == firstKey {
+					if parentDiagPath == "" {
+						parentDiagPath = formatNodeIdentityPath(current)
+					}
+					*diagnostics = append(*diagnostics, fmt.Sprintf("duplicate widget key %q under %s at children %d and %d", child.key, parentDiagPath, firstKeyIndex, childIndex))
+					childDuplicate = true
+				} else {
+					siblingKeys = map[siblingIdentityKey]int{
+						firstKey: firstKeyIndex,
+						identity: childIndex,
+					}
+				}
+			} else if first, exists := siblingKeys[identity]; exists {
+				if parentDiagPath == "" {
+					parentDiagPath = formatNodeIdentityPath(current)
+				}
+				*diagnostics = append(*diagnostics, fmt.Sprintf("duplicate widget key %q under %s at children %d and %d", child.key, parentDiagPath, first, childIndex))
+				childDuplicate = true
 			} else {
 				siblingKeys[identity] = childIndex
 			}
 		}
-		h.assignIdentities(child, current, childPath, childIndex, previous, identities, nodes, diagnostics, collectors, work)
+		h.assignIdentities(child, current, childIndex, childDuplicate, previous, nodes, diagnostics, collectors, work)
 	}
 	if cache != nil {
-		cache.identityRootPath = path
+		cache.identityRootKey = idKey
 		cache.identityDiagnostics = append(cache.identityDiagnostics[:0], (*diagnostics)[diagnosticStart:]...)
 		cache.identityValid = true
 		cache.identityOwner.seen = h.identityFrame
@@ -644,6 +685,34 @@ func (h *Host) assignIdentities(current *node, parent *node, parentPath string, 
 			collector.nestedOwners = append(collector.nestedOwners, &cache.identityOwner)
 		}
 	}
+}
+
+func formatNodeIdentityPath(n *node) string {
+	if n == nil {
+		return "root"
+	}
+	var segments []string
+	for cur := n; cur != nil; cur = cur.parent {
+		kind := cur.kind
+		if kind == "" {
+			kind = nodeKind(cur)
+		}
+		if cur.key != "" {
+			segments = append(segments, fmt.Sprintf("%s{%s}", kind, cur.key))
+		} else {
+			segments = append(segments, fmt.Sprintf("%s[%d]", kind, cur.identityIndex))
+		}
+		if cur.identityDup {
+			segments = append(segments, fmt.Sprintf("duplicate[%d]", cur.identityIndex))
+		}
+	}
+	var builder strings.Builder
+	builder.WriteString("root")
+	for i := len(segments) - 1; i >= 0; i-- {
+		builder.WriteByte('/')
+		builder.WriteString(segments[i])
+	}
+	return builder.String()
 }
 
 // markIdentityOwnersSeen keeps a reused Boundary and its nested owners out of the identity sweep.
@@ -668,51 +737,54 @@ func appendNestedIdentityOwners(collector, cache *boundaryCache) {
 	collector.nestedOwners = append(collector.nestedOwners, cache.nestedOwners...)
 }
 
-func (h *Host) upsertIdentity(path string, id woxui.AccessibilityNodeID, current *node, owner *identityOwner, work *frameWorkCounters) {
-	if h.identities[path] != id {
+func (h *Host) upsertIdentity(key nodeIdentityKey, id woxui.AccessibilityNodeID, current *node, owner *identityOwner, work *frameWorkCounters) {
+	if h.identities[key] != id {
 		if work != nil {
 			work.identityUpserts++
 		}
 	}
-	h.identities[path] = id
+	h.identities[key] = id
 	h.nodes[id] = current
-	h.identityMeta[path] = identityBinding{id: id, owner: owner, gen: h.identityFrame}
+	h.identityMeta[key] = identityBinding{id: id, owner: owner, gen: h.identityFrame}
 }
 
 func (h *Host) removeStaleIdentityEntries(previous, current []boundaryIdentityEntry) {
-	live := make(map[string]struct{}, len(current))
+	if len(previous) == 0 {
+		return
+	}
+	live := make(map[nodeIdentityKey]struct{}, len(current))
 	for _, entry := range current {
-		live[entry.path] = struct{}{}
+		live[entry.key] = struct{}{}
 	}
 	for _, entry := range previous {
-		if _, ok := live[entry.path]; ok {
+		if _, ok := live[entry.key]; ok {
 			continue
 		}
-		if h.identities[entry.path] == entry.id {
-			delete(h.identities, entry.path)
+		if h.identities[entry.key] == entry.id {
+			delete(h.identities, entry.key)
 		}
 		if h.nodes[entry.id] == entry.node {
 			delete(h.nodes, entry.id)
 		}
-		delete(h.identityMeta, entry.path)
+		delete(h.identityMeta, entry.key)
 	}
 }
 
 func (h *Host) sweepIdentities() {
-	for path, binding := range h.identityMeta {
+	for key, binding := range h.identityMeta {
 		if binding.owner != nil && binding.owner.seen == h.identityFrame {
 			continue
 		}
 		if binding.gen == h.identityFrame {
 			continue
 		}
-		if h.identities[path] == binding.id {
-			delete(h.identities, path)
+		if h.identities[key] == binding.id {
+			delete(h.identities, key)
 		}
 		if node := h.nodes[binding.id]; node != nil && node.id == binding.id {
 			delete(h.nodes, binding.id)
 		}
-		delete(h.identityMeta, path)
+		delete(h.identityMeta, key)
 	}
 }
 
