@@ -7,7 +7,6 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"wox/util"
 
@@ -74,7 +73,7 @@ func (l *pluginLifecycle) handleSingleFilePluginEvent(ctx context.Context, event
 	if info, err := os.Stat(event.Name); err == nil && info.IsDir() {
 		return
 	}
-	if l.isSingleFileWatchIgnored(event.Name) || l.isArtifactWatchIgnored(event.Name) {
+	if l.isArtifactWatchIgnored(event.Name) {
 		return
 	}
 
@@ -90,38 +89,13 @@ func (l *pluginLifecycle) handleSingleFilePluginEvent(ctx context.Context, event
 	}
 }
 
-// IgnoreSingleFileWatch temporarily gives a managed writer sole ownership of reload.
-func (l *pluginLifecycle) IgnoreSingleFileWatch(filePath string) {
-	absPath, err := filepath.Abs(filePath)
-	if err != nil {
-		absPath = filePath
-	}
-	l.singleFileWatchIgnored.Store(absPath, time.Now().Add(singleFileManagedWriteWindow).UnixMilli())
-}
-
-func (l *pluginLifecycle) isSingleFileWatchIgnored(filePath string) bool {
-	absPath, err := filepath.Abs(filePath)
-	if err != nil {
-		absPath = filePath
-	}
-	deadline, exists := l.singleFileWatchIgnored.Load(absPath)
-	if !exists {
-		return false
-	}
-	if time.Now().UnixMilli() <= deadline {
-		return true
-	}
-	l.singleFileWatchIgnored.Delete(absPath)
-	return false
-}
-
 func (l *pluginLifecycle) debounceSingleFilePluginReload(ctx context.Context, filePath, reason string) {
 	absPath, err := filepath.Abs(filePath)
 	if err != nil {
 		absPath = filePath
 	}
 	debounceKeyedTimer(l.singleFileReloadTimers, absPath, singleFileWatchDebounce, func() {
-		if l.isSingleFileWatchIgnored(absPath) || l.isArtifactWatchIgnored(absPath) {
+		if l.isArtifactWatchIgnored(absPath) {
 			return
 		}
 		l.reloadSingleFilePlugin(util.NewTraceContext(), absPath, reason)

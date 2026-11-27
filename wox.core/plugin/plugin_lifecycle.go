@@ -29,7 +29,6 @@ type pluginLifecycle struct {
 	artifactWatchIgnored   *util.HashMap[string, int64]
 	singleFilePluginWatch  *util.DirectoryWatch
 	singleFileReloadTimers *util.HashMap[string, *time.Timer]
-	singleFileWatchIgnored *util.HashMap[string, int64]
 	// Manual recovery and watchdog restarts share this lock and backoff state.
 	hostRestartMu         sync.Mutex
 	hostWatchdogStates    map[string]*hostWatchdogState
@@ -50,7 +49,6 @@ func newPluginLifecycle() pluginLifecycle {
 		scriptReloadTimers:     util.NewHashMap[string, *time.Timer](),
 		artifactWatchIgnored:   util.NewHashMap[string, int64](),
 		singleFileReloadTimers: util.NewHashMap[string, *time.Timer](),
-		singleFileWatchIgnored: util.NewHashMap[string, int64](),
 		hostWatchdogStates:     map[string]*hostWatchdogState{},
 		hostWatchdogWake:       make(chan struct{}, 1),
 		hostWatchdogStop:       make(chan struct{}),

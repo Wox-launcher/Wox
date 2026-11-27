@@ -102,10 +102,6 @@ func (m *Manager) ResumeOfflinePlugins(ctx context.Context) error {
 	return m.lifecycle.ResumeOfflinePlugins(ctx)
 }
 
-func (m *Manager) IgnoreSingleFileWatch(filePath string) {
-	m.lifecycle.IgnoreSingleFileWatch(filePath)
-}
-
 func (m *Manager) ParseScriptMetadata(ctx context.Context, scriptPath string) (Metadata, error) {
 	return m.lifecycle.ParseScriptMetadata(ctx, scriptPath)
 }

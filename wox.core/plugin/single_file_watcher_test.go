@@ -68,15 +68,6 @@ func TestSingleFilePluginIDConflictKeepsOtherPlugin(t *testing.T) {
 	require.Len(t, manager.pluginInstancesSnapshot(), 1)
 }
 
-func TestIgnoreSingleFileWatchExpires(t *testing.T) {
-	manager := &Manager{lifecycle: pluginLifecycle{singleFileWatchIgnored: util.NewHashMap[string, int64]()}}
-	filePath := filepath.Join(t.TempDir(), "plugin.py")
-	manager.IgnoreSingleFileWatch(filePath)
-	assert.True(t, manager.lifecycle.isSingleFileWatchIgnored(filePath))
-	manager.lifecycle.singleFileWatchIgnored.Store(filePath, time.Now().Add(-time.Millisecond).UnixMilli())
-	assert.False(t, manager.lifecycle.isSingleFileWatchIgnored(filePath))
-}
-
 func TestReadFileWithRetryReturnsStableContent(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "file.py")
 	require.NoError(t, os.WriteFile(path, []byte("hello"), 0644))

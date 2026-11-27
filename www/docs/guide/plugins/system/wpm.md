@@ -19,10 +19,10 @@ wpm install everything
 | `wpm install <name>` | Search the store and install |
 | `wpm update` | List available plugin updates; update one or all |
 | `wpm uninstall` | List installed plugins for removal |
-| `wpm create` | Create a plugin from a template |
+| `wpm create` | Copy the prompt into your AI coding agent. It will ask you to name the plugin first |
 | Double-click a `.wox` file | Open the same local installer |
 
-Actions can install, update, uninstall, open the plugin website, or copy an AI prompt for creating a plugin. You can also create single-file or full plugins from templates.
+Actions can install, update, uninstall, open the plugin website, or copy an AI prompt for creating a plugin.
 
 Node.js and Python plugins need those runtimes. If an interpreter was just installed, open **Settings -> Plugins -> Runtime Settings** and refresh its status, or configure its executable path.
 

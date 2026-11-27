@@ -1,17 +1,14 @@
 package system
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/user"
 	"path"
 	"path/filepath"
 	"sort"
 	"strings"
-	texttmpl "text/template"
 	"time"
 	"wox/common"
 	"wox/common/icons"
@@ -43,32 +40,6 @@ const (
 	wpmInstallStatusRefinementUpgradable   = "upgradable"
 )
 
-var pluginTemplates = []pluginTemplate{
-	{
-		Runtime: plugin.PLUGIN_RUNTIME_PYTHON,
-		Name:    "Wox.Plugin.Template.Python",
-		Url:     "https://codeload.github.com/Wox-launcher/Wox.Plugin.Template.Python/zip/refs/heads/main",
-	},
-	{
-		Runtime: plugin.PLUGIN_RUNTIME_NODEJS,
-		Name:    "Wox.Plugin.Template.Nodejs",
-		Url:     "https://codeload.github.com/Wox-launcher/Wox.Plugin.Template.Nodejs/zip/refs/heads/main",
-	},
-}
-
-var singleFilePluginTemplates = []pluginTemplate{
-	{
-		Runtime: plugin.PLUGIN_RUNTIME_PYTHON,
-		Name:    "plugin_wpm_singlefile_template_python",
-		Url:     "template.py",
-	},
-	{
-		Runtime: plugin.PLUGIN_RUNTIME_NODEJS,
-		Name:    "plugin_wpm_singlefile_template_nodejs",
-		Url:     "template.js",
-	},
-}
-
 // LocalPlugin is the persisted settings-table row for local plugin directories.
 // The JSON key must stay "path" so the table column can read it; encoding/json
 // would otherwise write "Path" and the plugin manager would show blank cells.
@@ -87,12 +58,6 @@ type WPMPlugin struct {
 	localPluginDirectories []string
 	localPlugins           []localPlugin
 	reloadPluginTimers     *util.HashMap[string, *time.Timer]
-}
-
-type pluginTemplate struct {
-	Runtime plugin.Runtime
-	Name    string
-	Url     string
 }
 
 type localPlugin struct {
@@ -420,7 +385,7 @@ func (w *WPMPlugin) Query(ctx context.Context, query plugin.Query) plugin.QueryR
 	}
 
 	if query.Command == "create" {
-		return plugin.NewQueryResponse(w.createCommand(ctx, query))
+		return plugin.NewQueryResponse(w.createCommand())
 	}
 
 	if query.Command == "install" {
@@ -606,32 +571,18 @@ func (w *WPMPlugin) buildInstalledPluginLookup() map[string]*plugin.Instance {
 	return installedById
 }
 
-func (w *WPMPlugin) createCommand(ctx context.Context, query plugin.Query) []plugin.QueryResult {
-	// Check if user has entered a plugin name
-	pluginName := strings.TrimSpace(query.Search)
-	if pluginName == "" {
-		return []plugin.QueryResult{
-			{
-				Id:       uuid.NewString(),
-				Title:    "i18n:plugin_wpm_enter_plugin_name",
-				SubTitle: "i18n:plugin_wpm_enter_plugin_name_subtitle",
-				Icon:     wpmIcon,
-			},
-		}
-	}
-
-	prompt := fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_wpm_ai_prompt"), "Wox.Plugin."+strings.TrimPrefix(pluginName, "Wox.Plugin."))
-	results := []plugin.QueryResult{{
+func (w *WPMPlugin) createCommand() []plugin.QueryResult {
+	return []plugin.QueryResult{{
 		Id:       uuid.NewString(),
-		Title:    "i18n:plugin_wpm_create_with_ai",
+		Title:    "i18n:plugin_wpm_copy_ai_prompt",
 		SubTitle: "i18n:plugin_wpm_create_with_ai_description",
 		Icon:     wpmIcon,
-		Tails:    []plugin.QueryResultTail{plugin.NewQueryResultTailText("i18n:plugin_wpm_create_with_ai_recommended")},
 		Actions: []plugin.QueryResultAction{{
 			Name:      "i18n:plugin_wpm_copy_ai_prompt",
 			Icon:      icons.Get(icons.ActionCopy),
 			IsDefault: true,
 			Action: func(ctx context.Context, actionContext plugin.ActionContext) {
+				prompt := i18n.GetI18nManager().TranslateWox(ctx, "plugin_wpm_creation_prompt")
 				if err := clipboard.WriteText(prompt); err != nil {
 					util.GetLogger().Error(ctx, fmt.Sprintf("Failed to copy plugin creation prompt: %s", err))
 					w.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: "i18n:plugin_wpm_copy_ai_prompt_failed"})
@@ -641,102 +592,6 @@ func (w *WPMPlugin) createCommand(ctx context.Context, query plugin.Query) []plu
 			},
 		}},
 	}}
-
-	// Add regular plugin templates with group
-	for _, template := range pluginTemplates {
-		templateCopy := template // Create a copy for the closure
-		results = append(results, plugin.QueryResult{
-			Id:       uuid.NewString(),
-			Title:    fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_wpm_create_plugin"), string(template.Runtime)),
-			SubTitle: fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_wpm_create_plugin_name"), query.Search),
-			Icon:     wpmIcon,
-			Group:    i18n.GetI18nManager().TranslateWox(ctx, "plugin_wpm_group_regular_plugins"),
-			Actions: []plugin.QueryResultAction{
-				{
-					Name:                   "i18n:plugin_wpm_create",
-					Icon:                   icons.Get(icons.ActionAdd),
-					PreventHideAfterAction: true,
-					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-						pluginName := query.Search
-						util.Go(ctx, "create plugin", func() {
-							w.createPlugin(ctx, templateCopy, pluginName, query)
-						})
-						w.api.ChangeQuery(ctx, common.PlainQuery{
-							QueryType: plugin.QueryTypeInput,
-							QueryText: fmt.Sprintf("%s create ", query.TriggerKeyword),
-						})
-					},
-				},
-			}})
-	}
-
-	for _, template := range singleFilePluginTemplates {
-		templateCopy := template
-		templateDisplayName := i18n.GetI18nManager().TranslateWox(ctx, template.Name)
-		exists, fileName := w.checkSingleFilePluginExists(pluginName, template.Url)
-
-		var title, subtitle string
-		var actions []plugin.QueryResultAction
-		if exists {
-			title = fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_wpm_singlefile_plugin_exists_title"), templateDisplayName)
-			subtitle = fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_wpm_script_plugin_exists_subtitle"), fileName)
-			actions = []plugin.QueryResultAction{
-				{
-					Name: "i18n:plugin_wpm_script_plugin_open_existing_file",
-					Icon: icons.Get(icons.ActionOpen),
-					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-						scriptFilePath := path.Join(util.GetLocation().GetUserSingleFilePluginsDirectory(), fileName)
-						openErr := shell.Open(scriptFilePath)
-						if openErr != nil {
-							w.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_wpm_open_file_failed"), openErr.Error())})
-						}
-					},
-				},
-				{
-					Name:                   "i18n:plugin_wpm_script_plugin_overwrite_existing_file",
-					Icon:                   icons.Get(icons.ActionUpdate),
-					PreventHideAfterAction: true,
-					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-						pluginName := query.Search
-						util.Go(ctx, "overwrite single-file plugin", func() {
-							w.createSingleFilePluginWithTemplate(ctx, templateCopy, pluginName, query)
-						})
-						w.api.ChangeQuery(ctx, common.PlainQuery{
-							QueryType: plugin.QueryTypeInput,
-							QueryText: fmt.Sprintf("%s create ", query.TriggerKeyword),
-						})
-					},
-				},
-			}
-		} else {
-			title = fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_wpm_singlefile_plugin_create_title"), templateDisplayName)
-			subtitle = fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_wpm_create_plugin_name"), query.Search)
-			actions = []plugin.QueryResultAction{
-				{
-					Name:                   "i18n:plugin_wpm_create",
-					Icon:                   icons.Get(icons.ActionAdd),
-					PreventHideAfterAction: true,
-					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
-						pluginName := query.Search
-						util.Go(ctx, "create single-file plugin", func() {
-							w.createSingleFilePluginWithTemplate(ctx, templateCopy, pluginName, query)
-						})
-					},
-				},
-			}
-		}
-
-		results = append(results, plugin.QueryResult{
-			Id:       uuid.NewString(),
-			Title:    title,
-			SubTitle: subtitle,
-			Icon:     wpmIcon,
-			Group:    i18n.GetI18nManager().TranslateWox(ctx, "plugin_wpm_group_singlefile_plugins"),
-			Actions:  actions,
-		})
-	}
-
-	return results
 }
 
 func (w *WPMPlugin) uninstallCommand(ctx context.Context, query plugin.Query) []plugin.QueryResult {
@@ -1395,99 +1250,6 @@ func (w *WPMPlugin) removeDevCommand(ctx context.Context, query plugin.Query) []
 	return []plugin.QueryResult{}
 }
 
-func (w *WPMPlugin) createPlugin(ctx context.Context, template pluginTemplate, pluginName string, query plugin.Query) {
-	w.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: "i18n:plugin_wpm_downloading_template"})
-
-	tempPluginDirectory := path.Join(os.TempDir(), uuid.NewString())
-	if err := util.GetLocation().EnsureDirectoryExist(tempPluginDirectory); err != nil {
-		w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to create temp plugin directory: %s", err.Error()))
-		w.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_wpm_create_temp_dir_failed"), err.Error())})
-		return
-	}
-
-	w.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_wpm_downloading_template_to"), template.Runtime, tempPluginDirectory)})
-	tempZipPath := path.Join(tempPluginDirectory, "template.zip")
-	err := util.HttpDownload(ctx, template.Url, tempZipPath)
-	if err != nil {
-		w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to download template: %s", err.Error()))
-		w.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_wpm_download_template_failed"), err.Error())})
-		return
-	}
-
-	w.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: "i18n:plugin_wpm_extracting_template"})
-	err = util.Unzip(tempZipPath, tempPluginDirectory)
-	if err != nil {
-		w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to extract template: %s", err.Error()))
-		w.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_wpm_extract_template_failed"), err.Error())})
-		return
-	}
-
-	w.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: "i18n:plugin_wpm_choose_directory_prompt"})
-	pluginDirectories := plugin.GetPluginManager().GetUI().PickFiles(ctx, common.PickFilesParams{IsDirectory: true})
-	if len(pluginDirectories) == 0 {
-		w.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: "You need to choose a directory to create the plugin"})
-		return
-	}
-	pluginDirectory := path.Join(pluginDirectories[0], pluginName)
-	w.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("Creating plugin in directory: %s", pluginDirectory))
-
-	cpErr := util.CopyPath(path.Join(tempPluginDirectory, template.Name+"-main"), pluginDirectory)
-	if cpErr != nil {
-		w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to copy template: %s", cpErr.Error()))
-		w.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf("Failed to copy template: %s", cpErr.Error())})
-		return
-	}
-
-	// replace variables in plugin.json
-	pluginJsonPath := path.Join(pluginDirectory, "plugin.json")
-	pluginJson, readErr := os.ReadFile(pluginJsonPath)
-	if readErr != nil {
-		w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to read plugin.json: %s", readErr.Error()))
-		w.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf("Failed to read plugin.json: %s", readErr.Error())})
-		return
-	}
-
-	pluginJsonString := renderPluginTemplateManifest(string(pluginJson), pluginName, template.Runtime)
-
-	writeErr := os.WriteFile(pluginJsonPath, []byte(pluginJsonString), 0644)
-	if writeErr != nil {
-		w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to write plugin.json: %s", writeErr.Error()))
-		w.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf("Failed to write plugin.json: %s", writeErr.Error())})
-		return
-	}
-
-	// replace variables in package.json
-	if template.Runtime == plugin.PLUGIN_RUNTIME_NODEJS {
-		packageJsonPath := path.Join(pluginDirectory, "package.json")
-		packageJson, readPackageErr := os.ReadFile(packageJsonPath)
-		if readPackageErr != nil {
-			w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to read package.json: %s", readPackageErr.Error()))
-			w.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf("Failed to read package.json: %s", readPackageErr.Error())})
-			return
-		}
-
-		packageJsonString := string(packageJson)
-		packageName := strings.ReplaceAll(strings.ToLower(pluginName), ".", "_")
-		packageJsonString = strings.ReplaceAll(packageJsonString, "replace_me_with_name", packageName)
-
-		writePackageErr := os.WriteFile(packageJsonPath, []byte(packageJsonString), 0644)
-		if writePackageErr != nil {
-			w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to write package.json: %s", writePackageErr.Error()))
-			w.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf("Failed to write package.json: %s", writePackageErr.Error())})
-			return
-		}
-	}
-
-	w.localPluginDirectories = append(w.localPluginDirectories, pluginDirectory)
-	w.saveLocalPluginDirectories(ctx)
-	w.loadDevPlugin(ctx, pluginDirectory)
-	w.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf("Plugin created successfully: %s", pluginName)})
-	w.api.ChangeQuery(ctx, common.PlainQuery{
-		QueryType: plugin.QueryTypeInput,
-		QueryText: fmt.Sprintf("%s dev ", query.TriggerKeyword),
-	})
-}
-
 func (w *WPMPlugin) saveLocalPluginDirectories(ctx context.Context) {
 	var localPluginDirs []LocalPlugin
 	for _, directory := range w.localPluginDirectories {
@@ -1595,176 +1357,6 @@ func (w *WPMPlugin) reloadLocalDistPlugin(ctx context.Context, localPlugin plugi
 
 	w.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_wpm_reload_success"), localPluginName, reason)})
 	return nil
-}
-
-// renderPluginTemplateManifest supports both legacy and current official template placeholders.
-func renderPluginTemplateManifest(manifest string, name string, runtime plugin.Runtime) string {
-	for key, value := range map[string]string{
-		"Id": uuid.NewString(), "Name": name, "Runtime": strings.ToLower(string(runtime)),
-		"TriggerKeyword": "np", "Description": name, "Author": "Wox User", "Website": "",
-	} {
-		encoded, _ := json.Marshal(value)
-		manifest = strings.ReplaceAll(manifest, `"{{.`+key+`}}"`, string(encoded))
-		if key == "TriggerKeyword" {
-			key = "Trigger Keyword"
-		}
-		manifest = strings.ReplaceAll(manifest, `"[`+key+`]"`, string(encoded))
-	}
-	return manifest
-}
-
-func singleFilePluginFileName(pluginName string, templateFile string) string {
-	safeName := strings.TrimSpace(pluginName)
-	safeName = strings.ReplaceAll(safeName, " ", "")
-	safeName = strings.Map(func(r rune) rune {
-		if r == '.' || r == '_' || r == '-' || (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') {
-			return r
-		}
-		return -1
-	}, safeName)
-	if safeName == "" {
-		safeName = "Plugin"
-	}
-	fileExtension := ".js"
-	if templateFile == "template.py" {
-		fileExtension = ".py"
-	}
-	return "Wox.Plugin." + safeName + fileExtension
-}
-
-func (w *WPMPlugin) checkSingleFilePluginExists(pluginName string, templateFile string) (bool, string) {
-	fileName := singleFilePluginFileName(pluginName, templateFile)
-	filePath := path.Join(util.GetLocation().GetUserSingleFilePluginsDirectory(), fileName)
-	if _, err := os.Stat(filePath); err == nil {
-		return true, fileName
-	}
-	return false, fileName
-}
-
-func (w *WPMPlugin) createSingleFilePluginWithTemplate(ctx context.Context, template pluginTemplate, pluginName string, query plugin.Query) {
-	w.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: "i18n:plugin_wpm_creating_singlefile_plugin"})
-
-	directory := util.GetLocation().GetUserSingleFilePluginsDirectory()
-	if err := util.GetLocation().EnsureDirectoryExist(directory); err != nil {
-		w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to create single-file plugin directory: %s", err.Error()))
-		w.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf("i18n:plugin_wpm_create_script_dir_failed: %s", err.Error())})
-		return
-	}
-
-	templateFile := template.Url
-	w.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: "i18n:plugin_wpm_copying_template"})
-	templatePath := path.Join(util.GetLocation().GetSingleFilePluginTemplatesDirectory(), templateFile)
-	templateContent, err := os.ReadFile(templatePath)
-	if err != nil {
-		w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to read template file: %s", err.Error()))
-		w.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf("i18n:plugin_wpm_read_template_failed: %s", err.Error())})
-		return
-	}
-
-	cleanPluginName := strings.TrimSpace(pluginName)
-	if cleanPluginName == "" {
-		w.api.Log(ctx, plugin.LogLevelError, "Plugin name is empty")
-		w.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: "i18n:plugin_wpm_plugin_name_empty"})
-		return
-	}
-
-	scriptFileName := singleFilePluginFileName(cleanPluginName, templateFile)
-	scriptFilePath := path.Join(directory, scriptFileName)
-	if _, err := os.Stat(scriptFilePath); err == nil {
-		w.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf("i18n:plugin_wpm_overwriting_script_plugin: %s", scriptFileName)})
-	}
-
-	triggerKeyword := strings.ToLower(strings.ReplaceAll(cleanPluginName, " ", ""))
-	if len(triggerKeyword) > 10 {
-		triggerKeyword = triggerKeyword[:10]
-	}
-	triggerKeywordsJSON, err := json.Marshal([]string{triggerKeyword})
-	if err != nil {
-		w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to render template: %s", err.Error()))
-		w.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf("i18n:plugin_wpm_render_template_failed: %s", err.Error())})
-		return
-	}
-
-	author := "Wox User"
-	if currentUser, userErr := user.Current(); userErr == nil {
-		if currentUser.Name != "" {
-			author = currentUser.Name
-		} else if currentUser.Username != "" {
-			author = currentUser.Username
-		}
-	}
-
-	templateData := struct {
-		PluginID            string
-		Name                string
-		Author              string
-		Description         string
-		TriggerKeywordsJSON string
-		Runtime             string
-		MinWoxVersion       string
-	}{
-		PluginID:            uuid.NewString(),
-		Name:                cleanPluginName,
-		Author:              author,
-		Description:         fmt.Sprintf("A single-file SDK plugin for %s", cleanPluginName),
-		TriggerKeywordsJSON: string(triggerKeywordsJSON),
-		Runtime:             string(template.Runtime),
-		MinWoxVersion:       plugin.SingleFilePluginMinWoxVersion,
-	}
-
-	scriptTemplate, err := texttmpl.New("single-file-plugin").Option("missingkey=error").Parse(string(templateContent))
-	if err != nil {
-		w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to render template: %s", err.Error()))
-		w.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf("i18n:plugin_wpm_render_template_failed: %s", err.Error())})
-		return
-	}
-
-	var renderedTemplate bytes.Buffer
-	if err := scriptTemplate.Execute(&renderedTemplate, templateData); err != nil {
-		w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to render template: %s", err.Error()))
-		w.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf("i18n:plugin_wpm_render_template_failed: %s", err.Error())})
-		return
-	}
-
-	pluginManager := plugin.GetPluginManager()
-	pluginManager.IgnoreSingleFileWatch(scriptFilePath)
-	if err := os.WriteFile(scriptFilePath, renderedTemplate.Bytes(), 0644); err != nil {
-		w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to write plugin file: %s", err.Error()))
-		w.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf("i18n:plugin_wpm_create_script_file_failed: %s", err.Error())})
-		return
-	}
-
-	w.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf("i18n:plugin_wpm_singlefile_plugin_created_success: %s", scriptFileName)})
-	w.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("Created single-file plugin: %s", scriptFilePath))
-	if openErr := shell.Open(scriptFilePath); openErr != nil {
-		w.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf(i18n.GetI18nManager().TranslateWox(ctx, "plugin_wpm_open_file_failed"), openErr.Error())})
-	}
-
-	util.Go(ctx, "load single-file plugin immediately", func() {
-		metadata, parseErr := pluginManager.ParseSingleFilePluginMetadata(ctx, scriptFilePath)
-		if parseErr != nil {
-			w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to parse single-file metadata: %s", parseErr.Error()))
-			w.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf("i18n:plugin_wpm_script_plugin_manual_try: %s", triggerKeyword)})
-			return
-		}
-		if loadErr := pluginManager.ReloadPlugin(ctx, metadata); loadErr != nil {
-			w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to load single-file plugin: %s", loadErr.Error()))
-			w.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf("i18n:plugin_wpm_script_plugin_manual_try: %s", triggerKeyword)})
-			return
-		}
-		w.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("Successfully loaded single-file plugin: %s", metadata.GetName(ctx)))
-		initCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-		defer cancel()
-		if initErr := pluginManager.WaitPluginInit(initCtx, metadata.Id); initErr != nil {
-			w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Single-file plugin failed to initialize: %s", initErr.Error()))
-			w.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf("i18n:plugin_wpm_script_plugin_manual_try: %s", triggerKeyword)})
-			return
-		}
-		w.api.ChangeQuery(ctx, common.PlainQuery{
-			QueryType: plugin.QueryTypeInput,
-			QueryText: fmt.Sprintf("%s ", triggerKeyword),
-		})
-	})
 }
 
 func attachWPMMRUContext(actions []plugin.QueryResultAction, pluginID string) []plugin.QueryResultAction {

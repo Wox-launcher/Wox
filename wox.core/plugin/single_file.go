@@ -14,7 +14,6 @@ const (
 	userSingleFilePluginsDirName = "single-file"
 	singleFileWatchDebounce      = 500 * time.Millisecond
 	singleFileReadRetryWindow    = time.Second
-	singleFileManagedWriteWindow = 2 * time.Second
 )
 
 // IsReservedUserPluginDirectory reports directories that must not be scanned as packaged plugins.

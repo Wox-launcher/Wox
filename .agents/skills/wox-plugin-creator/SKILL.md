@@ -11,7 +11,7 @@ description: Create, scaffold, implement, design logos for, and package Wox plug
   - `python3 scripts/scaffold_wox_plugin.py --type nodejs --output-dir ./MyPlugin --name "My Plugin" --trigger-keywords my`
 - Scaffold a Python plugin (clones template repo):
   - `python3 scripts/scaffold_wox_plugin.py --type python --output-dir ./MyPlugin --name "My Plugin" --trigger-keywords my`
-- Scaffold a single-file SDK plugin (uses local templates; plugin-id auto-generated; writes **one** file into the live user plugin directory so a running Wox instance can load it immediately). Omit `--output-dir`; default is `~/.wox/wox-user/plugins/single-file/` (Windows: `%USERPROFILE%\.wox\wox-user\plugins\single-file\`):
+- Scaffold a single-file SDK plugin (fetches the latest template from GitHub; plugin-id auto-generated; writes **one** file into the live user plugin directory so a running Wox instance can load it immediately). Omit `--output-dir`; default is `~/.wox/wox-user/plugins/single-file/` (Windows: `%USERPROFILE%\.wox\wox-user\plugins\single-file\`):
   - Auto-detect this machine: `python3 scripts/scaffold_wox_plugin.py --type singlefile --name "Weather" --trigger-keywords weather`
   - Explicit Node.js: `python3 scripts/scaffold_wox_plugin.py --type singlefile-nodejs --name "Weather" --trigger-keywords weather`
   - Explicit Python: `python3 scripts/scaffold_wox_plugin.py --type singlefile-python --name "Weather" --trigger-keywords weather`
@@ -81,10 +81,10 @@ When the user does not specify a language, detect this machine before scaffoldin
 - For Node.js and Python packages, the scaffold clones the official template repos and replaces placeholders like `{{.ID}}`, `{{.Name}}`, `{{.Description}}`, `{{.TriggerKeywordsJSON}}`, `{{.Author}}`.
 - Before starting work in a new SDK plugin project, run `make init` in the project root when the project has not been initialized yet.
 - Single-file SDK plugins are **single-file** host-loaded plugins. Prefer filenames like `Wox.Plugin.<Name>.js` or `Wox.Plugin.<Name>.py`.
-- **Single-file SDK destination**: create and implement the plugin as one file in `~/.wox/wox-user/plugins/single-file/` (Windows: `%USERPROFILE%\.wox\wox-user\plugins\single-file\`). That directory is what a running Wox instance loads; saving reloads after about 500ms, so the user can query the trigger keyword immediately. Omit `--output-dir` when using the scaffold, or write the file there directly from `assets/single_file_plugin_templates/`. Do not also create a copy under the current repository (`plugins/`, workspace root, or a new folder). Pass `--output-dir` only when the user asks for a different path.
+- **Single-file SDK destination**: create and implement the plugin as one file in `~/.wox/wox-user/plugins/single-file/` (Windows: `%USERPROFILE%\.wox\wox-user\plugins\single-file\`). That directory is what a running Wox instance loads; saving reloads after about 500ms, so the user can query the trigger keyword immediately. Omit `--output-dir` when using the scaffold. Do not also create a copy under the current repository (`plugins/`, workspace root, or a new folder). Pass `--output-dir` only when the user asks for a different path.
 - Do not put companion files (`*.test.js`, README, extra modules) in the live directory. Wox loads every `.js` and `.py` there as a plugin.
 - Single-file SDK plugins must set header `MinWoxVersion` to `"2.4.2"`. The scaffold applies this default when `--min-wox-version` is omitted. Do not lower it; Wox 2.4.2 is the first release that can load this plugin type, and store/CI reject older floors.
-- For single-file SDK plugins, the scaffold copies templates from `~/.wox/ai/skills/wox-plugin-creator/assets/single_file_plugin_templates/` (or the repo `.agents/skills/wox-plugin-creator/assets/single_file_plugin_templates/` fallback).
+- For single-file SDK plugins, the scaffold downloads the selected template from the official Wox repository’s `master` branch at creation time. Creating a scaffold requires network access.
 - Prefer standard library features; avoid third-party dependencies unless absolutely necessary. Single-file SDK plugins cannot use pip/npm packages.
 - For SDK usage and API details, read `references/sdk_nodejs.md` or `references/sdk_python.md`.
 - For plugins declaring `querySelection`, return results only for selection types and content the plugin can process. Return an empty results list for unsupported, missing, or empty selection data instead of showing usage or help rows for unrelated selections.
@@ -236,4 +236,4 @@ Do not target older interpreters. Single-file SDK plugins run inside Wox's exist
 
 - scripts: `scripts/scaffold_wox_plugin.py`, `scripts/detect_local_runtime.py`, `scripts/search_iconify.py`, `scripts/round_plugin_logo.py`
 - references: `references/plugin_overview.md`, `references/scaffold_nodejs.md`, `references/scaffold_python.md`, `references/sdk_nodejs.md`, `references/sdk_python.md`, `references/plugin_json_schema.md`, `references/settings_patterns.md`, `references/plugin_i18n.md`, `references/plugin_logo_design.md`, `references/icons.md`, `references/refinements.md`, `references/hotkeys.md`, `references/plugin_tools.md`
-- assets: `assets/single_file_plugin_templates/`, `assets/iconify/action/`
+- assets: `assets/iconify/action/`

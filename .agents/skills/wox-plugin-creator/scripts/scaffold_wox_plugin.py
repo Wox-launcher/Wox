@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 import argparse
 import getpass
+import http.client
 import importlib.util
 import json
 import shutil
 import subprocess
+import urllib.request
 import uuid
 from pathlib import Path
 
@@ -23,47 +25,20 @@ TEMPLATE_REPOS = {
     "python": "https://github.com/Wox-launcher/Wox.Plugin.Template.Python",
 }
 SINGLE_FILE_MIN_WOX_VERSION = "2.4.2"
+SINGLE_FILE_TEMPLATE_URL = (
+    "https://raw.githubusercontent.com/Wox-launcher/Wox/master/"
+    ".agents/skills/wox-plugin-creator/assets/single_file_plugin_templates"
+)
 
 
-def detect_repo_root() -> Path:
-    start = Path(__file__).resolve()
-    for parent in [start] + list(start.parents):
-        if (parent / "wox.core").is_dir():
-            return parent
-    raise SystemExit("Unable to locate repo root containing 'wox.core'.")
-
-
-def get_skill_template(asset_name: str, template_name: str) -> Path:
-    home_dir = Path.home()
-    skills_dir = (
-        home_dir
-        / ".wox"
-        / "ai"
-        / "skills"
-        / "wox-plugin-creator"
-        / "assets"
-        / asset_name
-    )
-    installed_template = skills_dir / template_name
-    if installed_template.is_file():
-        return installed_template
-
-    repo_root = detect_repo_root()
-    repo_skill_dir = (
-        repo_root / ".agents/skills/wox-plugin-creator/assets" / asset_name
-    )
-    repo_template = repo_skill_dir / template_name
-    if repo_template.is_file():
-        return repo_template
-    resource_template = (
-        repo_root
-        / "wox.core/resource/ai/skills/wox-plugin-creator/assets"
-        / asset_name
-        / template_name
-    )
-    if resource_template.is_file():
-        return resource_template
-    raise SystemExit(f"Plugin template not found: {template_name}")
+def fetch_single_file_template(ext: str) -> str:
+    """Read the current template before writing to the live plugin directory."""
+    url = f"{SINGLE_FILE_TEMPLATE_URL}/template.{ext}"
+    try:
+        with urllib.request.urlopen(url, timeout=30) as response:
+            return response.read().decode("utf-8")
+    except (OSError, http.client.HTTPException, UnicodeDecodeError) as exc:
+        raise SystemExit(f"Could not download the plugin template from {url}: {exc}") from exc
 
 
 def prepare_clone_target(path: Path, force: bool) -> None:
@@ -106,13 +81,6 @@ def render_template(content: str, values: dict[str, str]) -> str:
         rendered = rendered.replace(f"{{{{{key}}}}}", value)
         rendered = rendered.replace(f"{{{{.{key}}}}}", value)
     return rendered
-
-
-def write_plugin_file(
-    template_path: Path, output_path: Path, values: dict[str, str]
-) -> None:
-    content = template_path.read_text(encoding="utf-8")
-    output_path.write_text(render_template(content, values), encoding="utf-8")
 
 
 def sanitize_plugin_name(name: str) -> str:
@@ -253,22 +221,12 @@ def main() -> None:
         return
 
     if args.type.startswith("singlefile-"):
-        if args.type == "singlefile-nodejs":
-            template_path = get_skill_template("single_file_plugin_templates", "template.js")
-            entry = args.entry or default_single_file_entry(args.name, "js")
-            output_path, entry_name = resolve_single_file_output(
-                output_dir, entry, "js", args.force
-            )
-        elif args.type == "singlefile-python":
-            template_path = get_skill_template("single_file_plugin_templates", "template.py")
-            entry = args.entry or default_single_file_entry(args.name, "py")
-            output_path, entry_name = resolve_single_file_output(
-                output_dir, entry, "py", args.force
-            )
-        else:
-            raise SystemExit(f"Unsupported single-file runtime: {args.type}")
+        ext = "js" if args.type == "singlefile-nodejs" else "py"
+        entry = args.entry or default_single_file_entry(args.name, ext)
+        output_path, entry_name = resolve_single_file_output(output_dir, entry, ext, args.force)
+        template = fetch_single_file_template(ext)
         values["ENTRY"] = entry_name
-        write_plugin_file(template_path, output_path, values)
+        output_path.write_text(render_template(template, values), encoding="utf-8")
         print(f"Scaffolded {args.type} plugin at {output_path}")
         return
 

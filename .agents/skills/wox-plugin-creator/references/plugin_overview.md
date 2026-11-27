@@ -45,7 +45,7 @@ One `.py` or CommonJS `.js` file that loads into the existing Python or Node.js 
    - **Node.js/Python packages**: Clone the official template repos.
      - https://github.com/Wox-launcher/Wox.Plugin.Template.Nodejs
      - https://github.com/Wox-launcher/Wox.Plugin.Template.Python
-   - **Single-file SDK plugins**: Write one `.js` or `.py` file into `~/.wox/wox-user/plugins/single-file/` from `assets/single_file_plugin_templates/`, the scaffold (omit `--output-dir`), or `wpm create`. Do not also create a copy in the current repository.
+   - **Single-file SDK plugins**: Write one `.js` or `.py` file into `~/.wox/wox-user/plugins/single-file/` using the scaffold (omit `--output-dir`). Do not also create a copy in the current repository.
 2. **Configure**:
    - SDK plugins: edit `plugin.json` to define metadata, trigger keywords, supported OS, features, i18n, and `SettingDefinitions`.
    - Single-file SDK plugins: edit the JSON metadata block in the file header comments. Keep `MinWoxVersion` as `"2.4.2"`.
@@ -68,7 +68,7 @@ Single-file SDK plugins are the fastest way to get a Python or Node.js plugin th
 
 When the user does not specify a language, detect this machine: only Node.js 20+ → Node.js, only Python 3.10+ → Python, both → Node.js.
 
-1. **Create**: Write `Wox.Plugin.<Name>.js` or `.py` into `~/.wox/wox-user/plugins/single-file/` (or `wpm create`). That is the only file to create; a running Wox instance loads it immediately.
+1. **Create**: Write `Wox.Plugin.<Name>.js` or `.py` into `~/.wox/wox-user/plugins/single-file/`. That is the only file to create; a running Wox instance loads it immediately.
 2. **Edit**: Update the JSON metadata block in that file. Keep `MinWoxVersion` as `"2.4.2"`.
 3. **Implement**: Modify `query` in the same live file. Saving reloads the plugin.
 4. **Run**: Trigger the plugin by typing its `TriggerKeywords` in Wox.

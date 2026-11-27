@@ -69,8 +69,10 @@ endif
 sync-ai-skills:
 	test -f $(WOX_PLUGIN_CREATOR_SKILL_SOURCE)/SKILL.md
 	rm -rf $(WOX_PLUGIN_CREATOR_SKILL_DESTINATION)
-	mkdir -p $(dir $(WOX_PLUGIN_CREATOR_SKILL_DESTINATION))
-	cp -R $(WOX_PLUGIN_CREATOR_SKILL_SOURCE) $(WOX_PLUGIN_CREATOR_SKILL_DESTINATION)
+	mkdir -p $(WOX_PLUGIN_CREATOR_SKILL_DESTINATION)/assets
+	cp -R $(WOX_PLUGIN_CREATOR_SKILL_SOURCE)/SKILL.md $(WOX_PLUGIN_CREATOR_SKILL_SOURCE)/scripts $(WOX_PLUGIN_CREATOR_SKILL_SOURCE)/references $(WOX_PLUGIN_CREATOR_SKILL_DESTINATION)/
+	# The scaffold fetches language templates on demand from GitHub.
+	cp -R $(WOX_PLUGIN_CREATOR_SKILL_SOURCE)/assets/iconify $(WOX_PLUGIN_CREATOR_SKILL_DESTINATION)/assets/
 	rm -rf $(WOX_PLUGIN_CREATOR_SKILL_DESTINATION)/scripts/__pycache__
 	test -f ../.agents/skills/wox-theme-creator/SKILL.md
 	mkdir -p resource/ai/skills/wox-theme-creator

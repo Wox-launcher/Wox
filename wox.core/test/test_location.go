@@ -96,14 +96,6 @@ func (tl *TestLocation) GetOthersDirectory() string {
 	return filepath.Join(tl.GetWoxDataDirectory(), "others")
 }
 
-func (tl *TestLocation) GetScriptPluginTemplatesDirectory() string {
-	return filepath.Join(tl.GetWoxDataDirectory(), "script_plugin_templates")
-}
-
-func (tl *TestLocation) GetSingleFilePluginTemplatesDirectory() string {
-	return filepath.Join(tl.GetWoxDataDirectory(), "single_file_plugin_templates")
-}
-
 func (tl *TestLocation) GetCacheDirectory() string {
 	return filepath.Join(tl.GetWoxDataDirectory(), "cache")
 }
@@ -149,8 +141,6 @@ func (tl *TestLocation) InitTestDirectories() error {
 		tl.GetUpdatesDirectory(),
 		tl.GetUIDirectory(),
 		tl.GetOthersDirectory(),
-		tl.GetScriptPluginTemplatesDirectory(),
-		tl.GetSingleFilePluginTemplatesDirectory(),
 		tl.GetCacheDirectory(),
 		tl.GetPluginCacheRootDirectory(),
 		tl.GetImageCacheDirectory(),
