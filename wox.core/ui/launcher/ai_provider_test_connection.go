@@ -7,7 +7,6 @@ import (
 	"net"
 	"time"
 
-	"github.com/openai/openai-go/v3"
 	"wox/ai"
 	"wox/common"
 	"wox/setting"
@@ -89,7 +88,7 @@ func aiProviderTestResultKey(err error) string {
 	if errors.Is(err, context.DeadlineExceeded) {
 		return "i18n:ui_ai_provider_test_timeout"
 	}
-	var apiError *openai.Error
+	var apiError *ai.ProviderAPIError
 	if errors.As(err, &apiError) && (apiError.StatusCode == 401 || apiError.StatusCode == 403) {
 		return "i18n:ui_ai_provider_test_auth"
 	}

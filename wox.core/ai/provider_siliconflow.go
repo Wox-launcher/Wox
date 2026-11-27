@@ -6,8 +6,6 @@ import (
 	"strings"
 	"wox/common"
 	"wox/setting"
-
-	"github.com/openai/openai-go/v3/option"
 )
 
 func init() {
@@ -53,16 +51,16 @@ func NewSiliconFlowProvider(ctx context.Context, connectContext setting.AIProvid
 			// SiliconFlow's /v1/models catalog includes embeddings, rerankers, and
 			// image models. Those IDs 400 on chat/completions, and BAAI embeddings
 			// sort first so they become the accidental default.
-			ModelsListOptions: []option.RequestOption{option.WithQuery("sub_type", "chat")},
-			ChatRequestOptions: func(ctx context.Context, model common.Model, conversations []common.Conversation, options common.ChatOptions) []option.RequestOption {
+			ModelsQueryParams: map[string]string{"sub_type": "chat"},
+			ChatRequestExtraBody: func(ctx context.Context, model common.Model, conversations []common.Conversation, options common.ChatOptions) map[string]any {
 				// SiliconFlow uses enable_thinking instead of OpenAI reasoning fields.
 				// Only send it when the user picks an explicit mode so models that
 				// reject the parameter keep their provider default.
 				switch options.ThinkingMode {
 				case common.ChatThinkingModeThinking:
-					return []option.RequestOption{option.WithJSONSet("enable_thinking", true)}
+					return map[string]any{"enable_thinking": true}
 				case common.ChatThinkingModeNonThinking:
-					return []option.RequestOption{option.WithJSONSet("enable_thinking", false)}
+					return map[string]any{"enable_thinking": false}
 				default:
 					return nil
 				}

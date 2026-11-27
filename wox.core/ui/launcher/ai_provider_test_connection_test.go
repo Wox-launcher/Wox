@@ -9,7 +9,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/openai/openai-go/v3"
 	"wox/ai"
 	"wox/util"
 )
@@ -45,7 +44,8 @@ func TestAIProviderTestResultAndInvalidation(t *testing.T) {
 	}{
 		{nil, "i18n:ui_ai_provider_test_success"},
 		{context.DeadlineExceeded, "i18n:ui_ai_provider_test_timeout"},
-		{&openai.Error{StatusCode: 401}, "i18n:ui_ai_provider_test_auth"},
+		{&ai.ProviderAPIError{StatusCode: 401}, "i18n:ui_ai_provider_test_auth"},
+		{&ai.ProviderAPIError{StatusCode: 403}, "i18n:ui_ai_provider_test_auth"},
 		{&net.OpError{Op: "dial", Err: errors.New("refused")}, "i18n:ui_ai_provider_test_unreachable"},
 		{errors.New("secret"), "i18n:ui_ai_provider_test_failed"},
 	} {

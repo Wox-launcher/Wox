@@ -23,7 +23,6 @@ require (
 	github.com/modelcontextprotocol/go-sdk v1.6.1
 	github.com/multippt/gopaddleocr v0.0.0-20260322145423-d4b7cc8b4429
 	github.com/olahol/melody v1.4.0
-	github.com/openai/openai-go/v3 v3.43.0
 	github.com/otiai10/copy v1.14.1
 	github.com/petermattis/goid v0.0.0-20251121121749-a11dd1a45f9a
 	github.com/rivo/uniseg v0.4.7
@@ -72,7 +71,6 @@ require (
 	github.com/segmentio/asm v1.1.3 // indirect
 	github.com/segmentio/encoding v0.5.4 // indirect
 	github.com/tidwall/match v1.2.0 // indirect
-	github.com/tidwall/sjson v1.2.5 // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	google.golang.org/protobuf v1.36.8 // indirect

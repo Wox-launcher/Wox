@@ -18,8 +18,8 @@ func TestSiliconFlowRejectsEmbeddingModelsForChat(t *testing.T) {
 
 func TestSiliconFlowListsChatModelsOnly(t *testing.T) {
 	provider := NewSiliconFlowProvider(context.Background(), setting.AIProvider{Name: "siliconflow"}).(*SiliconFlowProvider)
-	if len(provider.options.ModelsListOptions) != 1 {
-		t.Fatalf("ModelsListOptions = %d, want chat sub_type filter", len(provider.options.ModelsListOptions))
+	if provider.options.ModelsQueryParams["sub_type"] != "chat" {
+		t.Fatalf("ModelsQueryParams = %v, want sub_type=chat", provider.options.ModelsQueryParams)
 	}
 }
 
@@ -27,13 +27,13 @@ func TestSiliconFlowThinkingModeOnlySetsEnableThinkingWhenChosen(t *testing.T) {
 	provider := NewSiliconFlowProvider(context.Background(), setting.AIProvider{Name: "siliconflow"}).(*SiliconFlowProvider)
 	model := common.Model{Name: "Qwen/Qwen3-8B", Provider: "siliconflow"}
 
-	if opts := provider.getChatRequestOptions(context.Background(), model, nil, common.ChatOptions{}); len(opts) != 0 {
-		t.Fatalf("provider default options = %d, want none", len(opts))
+	if extra := provider.getChatRequestExtraBody(context.Background(), model, nil, common.ChatOptions{}); len(extra) != 0 {
+		t.Fatalf("provider default extra body = %v, want none", extra)
 	}
-	if opts := provider.getChatRequestOptions(context.Background(), model, nil, common.ChatOptions{ThinkingMode: common.ChatThinkingModeThinking}); len(opts) != 1 {
-		t.Fatalf("thinking mode options = %d, want 1", len(opts))
+	if extra := provider.getChatRequestExtraBody(context.Background(), model, nil, common.ChatOptions{ThinkingMode: common.ChatThinkingModeThinking}); extra["enable_thinking"] != true {
+		t.Fatalf("thinking mode extra body = %v, want enable_thinking=true", extra)
 	}
-	if opts := provider.getChatRequestOptions(context.Background(), model, nil, common.ChatOptions{ThinkingMode: common.ChatThinkingModeNonThinking}); len(opts) != 1 {
-		t.Fatalf("non-thinking mode options = %d, want 1", len(opts))
+	if extra := provider.getChatRequestExtraBody(context.Background(), model, nil, common.ChatOptions{ThinkingMode: common.ChatThinkingModeNonThinking}); extra["enable_thinking"] != false {
+		t.Fatalf("non-thinking mode extra body = %v, want enable_thinking=false", extra)
 	}
 }

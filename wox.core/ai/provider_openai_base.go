@@ -6,26 +6,21 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"unicode"
 	"wox/common"
-	"wox/network"
 	"wox/setting"
 	"wox/util"
 
-	"github.com/openai/openai-go/v3"
-	"github.com/openai/openai-go/v3/option"
-	"github.com/openai/openai-go/v3/packages/pagination"
-	"github.com/openai/openai-go/v3/packages/param"
-	"github.com/openai/openai-go/v3/packages/ssestream"
 	"github.com/tmc/langchaingo/jsonschema"
 )
 
 type OpenAIBaseProviderOptions struct {
-	Headers            map[string]string
-	ChatRequestOptions func(ctx context.Context, model common.Model, conversations []common.Conversation, options common.ChatOptions) []option.RequestOption
-	ModelsListOptions  []option.RequestOption
+	Headers              map[string]string
+	ModelsQueryParams    map[string]string
+	ChatRequestExtraBody func(ctx context.Context, model common.Model, conversations []common.Conversation, options common.ChatOptions) map[string]any
 }
 
 // OpenAIBaseProvider is the base provider for all OpenAI compatible providers
@@ -36,15 +31,16 @@ type OpenAIBaseProvider struct {
 
 // OpenAIBaseProviderStream represents a stream from OpenAI compatible providers
 type OpenAIBaseProviderStream struct {
-	stream            *ssestream.Stream[openai.ChatCompletionChunk]
-	conversations     []common.Conversation
-	acc               openai.ChatCompletionAccumulator
-	accumulatedReason string // accumulated reasoning content from chunks
-	accumulatedData   string // accumulated answer content after provider-specific reasoning markers are removed
-	pendingData       string // buffered content that may contain a split content tag marker across stream chunks
-	activeContentTag  streamContentTag
-	hasContentTag     bool // true when content chunks are currently inside a configured tagged block
-	trimAnswerPrefix  bool // true after a tagged block so separator whitespace is not kept as answer text
+	stream               *sseReader
+	conversations        []common.Conversation
+	toolCalls            []openAIAccumulatedToolCall
+	sawExplicitToolIndex bool
+	accumulatedReason    string // accumulated reasoning content from chunks
+	accumulatedData      string // accumulated answer content after provider-specific reasoning markers are removed
+	pendingData          string // buffered content that may contain a split content tag marker across stream chunks
+	activeContentTag     streamContentTag
+	hasContentTag        bool // true when content chunks are currently inside a configured tagged block
+	trimAnswerPrefix     bool // true after a tagged block so separator whitespace is not kept as answer text
 }
 
 type streamContentTarget string
@@ -85,9 +81,6 @@ func NewOpenAIBaseProviderWithOptions(connectContext setting.AIProvider, options
 
 // ChatStream starts a chat stream with the OpenAI compatible provider
 func (o *OpenAIBaseProvider) ChatStream(ctx context.Context, model common.Model, conversations []common.Conversation, options common.ChatOptions) (ChatStream, error) {
-	client := o.getClient(ctx)
-	requestOptions := o.getChatRequestOptions(ctx, model, conversations, options)
-
 	util.GetLogger().Debug(ctx, fmt.Sprintf("AI: chat stream with model: %s, conversations: %d, tools: %d", model.Name, len(conversations), len(options.Tools)))
 
 	for i, conv := range conversations {
@@ -95,56 +88,69 @@ func (o *OpenAIBaseProvider) ChatStream(ctx context.Context, model common.Model,
 	}
 	convertedTools := o.convertTools(options.Tools)
 	for i, tool := range convertedTools {
-		if function := tool.GetFunction(); function != nil {
-			util.GetLogger().Debug(ctx, fmt.Sprintf("AI: converted tool[%d] name: %s, paramters: %v", i, function.Name, function.Parameters))
-		}
+		util.GetLogger().Debug(ctx, fmt.Sprintf("AI: converted tool[%d] name: %s, paramters: %v", i, tool.Function.Name, tool.Function.Parameters))
 	}
 
 	messages, err := o.convertConversations(conversations)
 	if err != nil {
 		return nil, err
 	}
-	var createdStream *ssestream.Stream[openai.ChatCompletionChunk]
-	if len(options.Tools) > 0 {
-		chatParams := openai.ChatCompletionNewParams{
-			Model:    model.Name,
-			Messages: messages,
-			Tools:    convertedTools,
-			ToolChoice: openai.ChatCompletionToolChoiceOptionUnionParam{
-				OfAuto: openai.String("auto"),
-			},
-		}
-		createdStream = client.Chat.Completions.NewStreaming(ctx, chatParams, requestOptions...)
-	} else {
-		createdStream = client.Chat.Completions.NewStreaming(ctx, openai.ChatCompletionNewParams{
-			Model:    model.Name,
-			Messages: messages,
-		}, requestOptions...)
-	}
 
-	return &OpenAIBaseProviderStream{conversations: conversations, stream: createdStream}, nil
-}
-
-func (o *OpenAIBaseProvider) getChatRequestOptions(ctx context.Context, model common.Model, conversations []common.Conversation, options common.ChatOptions) []option.RequestOption {
-	if o.options.ChatRequestOptions == nil {
-		return nil
-	}
-
-	return o.options.ChatRequestOptions(ctx, model, conversations, options)
-}
-
-// Models returns the list of available models from the OpenAI compatible provider
-func (o *OpenAIBaseProvider) Models(ctx context.Context) ([]common.Model, error) {
-	client := o.getClient(ctx)
-	models, err := client.Models.List(ctx, o.options.ModelsListOptions...)
+	reqBody, err := o.buildChatRequestBody(ctx, model, conversations, messages, convertedTools, options, true)
 	if err != nil {
 		return nil, err
 	}
 
-	pageAutoPager := pagination.NewPageAutoPager(models, err)
-	var openaiModels []common.Model
-	for pageAutoPager.Next() {
-		model := pageAutoPager.Current()
+	bodyBytes, err := json.Marshal(reqBody)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := o.doRequest(ctx, http.MethodPost, "chat/completions", nil, bodyBytes, "text/event-stream")
+	if err != nil {
+		util.GetLogger().Error(ctx, fmt.Sprintf("AI: Stream request error: %s", err.Error()))
+		return nil, err
+	}
+
+	return &OpenAIBaseProviderStream{
+		conversations: conversations,
+		stream:        newSSEReader(resp.Body),
+	}, nil
+}
+
+func (o *OpenAIBaseProvider) buildChatRequestBody(ctx context.Context, model common.Model, conversations []common.Conversation, messages []openAIChatMessage, tools []openAITool, options common.ChatOptions, stream bool) (map[string]any, error) {
+	body := map[string]any{
+		"model":    model.Name,
+		"messages": messages,
+		"stream":   stream,
+	}
+	if len(tools) > 0 {
+		body["tools"] = tools
+		body["tool_choice"] = "auto"
+	}
+	for k, v := range o.getChatRequestExtraBody(ctx, model, conversations, options) {
+		body[k] = v
+	}
+	return body, nil
+}
+
+func (o *OpenAIBaseProvider) getChatRequestExtraBody(ctx context.Context, model common.Model, conversations []common.Conversation, options common.ChatOptions) map[string]any {
+	if o.options.ChatRequestExtraBody == nil {
+		return nil
+	}
+
+	return o.options.ChatRequestExtraBody(ctx, model, conversations, options)
+}
+
+// Models returns the list of available models from the OpenAI compatible provider
+func (o *OpenAIBaseProvider) Models(ctx context.Context) ([]common.Model, error) {
+	var listResp openAIModelsListResponse
+	if err := o.doJSONRequest(ctx, http.MethodGet, "models", o.options.ModelsQueryParams, nil, &listResp); err != nil {
+		return nil, err
+	}
+
+	openaiModels := make([]common.Model, 0, len(listResp.Data))
+	for _, model := range listResp.Data {
 		openaiModels = append(openaiModels, common.Model{
 			Name:          model.ID,
 			Provider:      common.ProviderName(o.connectContext.Name),
@@ -157,19 +163,34 @@ func (o *OpenAIBaseProvider) Models(ctx context.Context) ([]common.Model, error)
 
 // Ping checks if the OpenAI compatible provider is available
 func (o *OpenAIBaseProvider) Ping(ctx context.Context) error {
-	client := o.getClient(ctx)
-	_, err := client.Models.List(ctx)
-	return err
+	return o.doJSONRequest(ctx, http.MethodGet, "models", nil, nil, nil)
 }
 
-func (o *OpenAIBaseProvider) convertTools(tools []common.Tool) []openai.ChatCompletionToolUnionParam {
-	convertedTools := make([]openai.ChatCompletionToolUnionParam, len(tools))
+func (o *OpenAIBaseProvider) pingChatCompletion(ctx context.Context, modelName string) error {
+	reqBody := map[string]any{
+		"model": modelName,
+		"messages": []openAIChatMessage{
+			{
+				Role:    "user",
+				Content: stringPtr("ping"),
+			},
+		},
+		"max_completion_tokens": 1,
+	}
+	return o.doJSONRequest(ctx, http.MethodPost, "chat/completions", nil, reqBody, nil)
+}
+
+func (o *OpenAIBaseProvider) convertTools(tools []common.Tool) []openAITool {
+	convertedTools := make([]openAITool, len(tools))
 	for i, tool := range tools {
-		convertedTools[i] = openai.ChatCompletionFunctionTool(openai.FunctionDefinitionParam{
-			Name:        tool.Name,
-			Description: openai.String(tool.Description),
-			Parameters:  openai.FunctionParameters(toolInputSchema(tool)),
-		})
+		convertedTools[i] = openAITool{
+			Type: "function",
+			Function: openAIToolFunction{
+				Name:        tool.Name,
+				Description: tool.Description,
+				Parameters:  toolInputSchema(tool),
+			},
+		}
 	}
 	return convertedTools
 }
@@ -215,51 +236,32 @@ func jsonSchemaDefinitionToMap(def jsonschema.Definition) map[string]any {
 	return result
 }
 
-func formatProviderAPIError(err error) string {
-	var apiErr *openai.Error
-	if !errors.As(err, &apiErr) {
-		return err.Error()
-	}
-
-	// SiliconFlow and other OpenAI-compatible hosts often return a JSON body
-	// whose `code` is a number. The SDK then drops RawJSON and the UI only
-	// shows "400 Bad Request". Keep the HTTP status and attach the body.
-	if raw := strings.TrimSpace(apiErr.RawJSON()); raw != "" && raw != "{}" {
-		return err.Error()
-	}
-	if dumped := strings.TrimSpace(string(apiErr.DumpResponse(true))); dumped != "" {
-		return fmt.Sprintf("%v\n%s", err, dumped)
-	}
-	return err.Error()
-}
-
 func (s *OpenAIBaseProviderStream) Receive(ctx context.Context) (common.ChatStreamData, error) {
-	if !s.stream.Next() {
-		if s.stream.Err() != nil {
-			streamErr := formatProviderAPIError(s.stream.Err())
-			util.GetLogger().Error(ctx, fmt.Sprintf("AI: Stream error: %s", streamErr))
-			return common.ChatStreamData{}, errors.New(streamErr)
+	rawEvent, err := s.stream.nextEvent()
+	if err != nil {
+		if !errors.Is(err, io.EOF) {
+			util.GetLogger().Error(ctx, fmt.Sprintf("AI: Stream error: %s", err.Error()))
+			return common.ChatStreamData{}, err
 		}
 
 		var toolCallInfos []common.ToolCallInfo
-		if len(s.acc.Choices) > 0 && len(s.acc.Choices[0].Message.ToolCalls) > 0 {
-			toolCalls := s.acc.Choices[0].Message.ToolCalls
-			util.GetLogger().Debug(ctx, fmt.Sprintf("AI: Tool call streaming finished, tool calls count: %d", len(toolCalls)))
+		if len(s.toolCalls) > 0 {
+			util.GetLogger().Debug(ctx, fmt.Sprintf("AI: Tool call streaming finished, tool calls count: %d", len(s.toolCalls)))
 
-			for _, toolCall := range toolCalls {
+			for _, toolCall := range s.toolCalls {
 				toolCallInfo := common.ToolCallInfo{
 					Id:    toolCall.ID,
-					Name:  toolCall.Function.Name,
-					Delta: toolCall.Function.Arguments,
+					Name:  toolCall.Name,
+					Delta: toolCall.Arguments,
 				}
 
 				// try to unmarshal tool call arguments if possible
 				var argsMap map[string]any
-				if err := json.Unmarshal([]byte(toolCall.Function.Arguments), &argsMap); err == nil {
-					toolCallInfo.Arguments = s.normalizeArguments(ctx, toolCall.Function.Name, argsMap)
+				if err := json.Unmarshal([]byte(toolCall.Arguments), &argsMap); err == nil {
+					toolCallInfo.Arguments = s.normalizeArguments(ctx, toolCall.Name, argsMap)
 					toolCallInfo.Status = common.ToolCallStatusPending
 				} else {
-					util.GetLogger().Error(ctx, fmt.Sprintf("AI: Failed to unmarshal tool call arguments, json=%s, err: %s", toolCall.Function.Arguments, err.Error()))
+					util.GetLogger().Error(ctx, fmt.Sprintf("AI: Failed to unmarshal tool call arguments, json=%s, err: %s", toolCall.Arguments, err.Error()))
 					toolCallInfo.Arguments = map[string]any{}
 					toolCallInfo.Status = common.ToolCallStatusFailed
 					toolCallInfo.Response = err.Error()
@@ -285,39 +287,47 @@ func (s *OpenAIBaseProviderStream) Receive(ctx context.Context) (common.ChatStre
 		}, nil
 	}
 
-	chunk := s.stream.Current()
-	util.GetLogger().Debug(ctx, fmt.Sprintf("AI: Received raw chunk: %s", chunk.RawJSON()))
+	util.GetLogger().Debug(ctx, fmt.Sprintf("AI: Received raw chunk: %s", string(rawEvent)))
+
+	var chunk openAIChatCompletionChunk
+	if unmarshalErr := json.Unmarshal(rawEvent, &chunk); unmarshalErr != nil {
+		s.stream.close()
+		util.GetLogger().Error(ctx, fmt.Sprintf("AI: Failed to unmarshal stream chunk: %s, err: %s", string(rawEvent), unmarshalErr.Error()))
+		return common.ChatStreamData{}, unmarshalErr
+	}
+
+	if chunk.Error != nil && len(chunk.Choices) == 0 {
+		s.stream.close()
+		msg := strings.TrimSpace(chunk.Error.Message)
+		if msg == "" {
+			msg = string(rawEvent)
+		}
+		util.GetLogger().Error(ctx, fmt.Sprintf("AI: Stream error chunk: %s", msg))
+		return common.ChatStreamData{}, errors.New(msg)
+	}
 
 	// Store previous normalized content and reasoning before adding chunk so
 	// tag-only chunks do not look like user-visible answer updates.
 	previousContent := s.accumulatedData
-	var previousReasoning string
-	previousReasoning = s.accumulatedReason
+	previousReasoning := s.accumulatedReason
 
-	// Extract reasoning from current chunk if present
+	// Extract reasoning, content, and tool calls from current chunk if present
 	if len(chunk.Choices) > 0 {
 		delta := chunk.Choices[0].Delta
 
 		for _, reasoningFieldName := range reasoningExtraFieldNames {
-			if reasoningField, exists := delta.JSON.ExtraFields[reasoningFieldName]; exists {
+			if rawReasoning, exists := delta.reasoningRawField(reasoningFieldName); exists {
 				// DeepSeek streams thinking as reasoning_content while some other
-				// OpenAI-compatible providers use reasoning. The old single-field
-				// branch dropped DeepSeek thinking chunks as empty stream updates,
-				// so keep the compatible field names together and parse them through
-				// the same path.
-				rawReasoning := reasoningField.Raw()
-
-				// Only process if reasoning is not null.
-				if rawReasoning != "null" && rawReasoning != "" {
-					var reasoningStr string
-					if err := json.Unmarshal([]byte(rawReasoning), &reasoningStr); err == nil {
-						if reasoningStr != "" {
-							s.accumulatedReason += reasoningStr
-							util.GetLogger().Debug(ctx, fmt.Sprintf("AI: Extracted reasoning from chunk field %s: %s", reasoningFieldName, reasoningStr))
-						}
-					} else {
-						util.GetLogger().Error(ctx, fmt.Sprintf("AI: Failed to unmarshal reasoning field %s: %s, error: %s", reasoningFieldName, rawReasoning, err.Error()))
+				// OpenAI-compatible providers use reasoning. Keep compatible field
+				// names together and parse them through the same path.
+				var reasoningStr string
+				if err := json.Unmarshal(rawReasoning, &reasoningStr); err == nil {
+					if reasoningStr != "" {
+						s.accumulatedReason += reasoningStr
+						util.GetLogger().Debug(ctx, fmt.Sprintf("AI: Extracted reasoning from chunk field %s: %s", reasoningFieldName, reasoningStr))
 					}
+				} else {
+					util.GetLogger().Error(ctx, fmt.Sprintf("AI: Failed to unmarshal reasoning field %s: %s, error: %s", reasoningFieldName, string(rawReasoning), err.Error()))
 				}
 			}
 		}
@@ -325,13 +335,13 @@ func (s *OpenAIBaseProviderStream) Receive(ctx context.Context) (common.ChatStre
 		if delta.Content != "" {
 			s.appendContentDelta(delta.Content)
 		}
+
+		if len(delta.ToolCalls) > 0 {
+			s.accumulateToolCalls(delta.ToolCalls)
+		}
 	}
 
-	s.acc.AddChunk(chunk)
-
 	// Check if normalized answer content has changed after processing the chunk.
-	// The OpenAI SDK accumulator still keeps the raw content for protocol state,
-	// but UI callers should receive content with configured content tags removed.
 	currentContent := s.accumulatedData
 
 	// If neither content nor reasoning has changed and there are no tool calls, skip this chunk
@@ -345,10 +355,10 @@ func (s *OpenAIBaseProviderStream) Receive(ctx context.Context) (common.ChatStre
 		Data:      currentContent,
 		Reasoning: s.accumulatedReason,
 	}
-	var totalToolCallCount = len(s.acc.Choices[0].Message.ToolCalls)
+	totalToolCallCount := len(s.toolCalls)
 	if totalToolCallCount > 0 {
-		var toolCallInfos []common.ToolCallInfo
-		for index, toolcall := range s.acc.Choices[0].Message.ToolCalls {
+		toolCallInfos := make([]common.ToolCallInfo, 0, totalToolCallCount)
+		for index, toolcall := range s.toolCalls {
 			isLastToolCall := index == totalToolCallCount-1
 
 			// if the toolcall is not the last one, we will set the status to pending, because the tool call streaming is one by one
@@ -360,9 +370,9 @@ func (s *OpenAIBaseProviderStream) Receive(ctx context.Context) (common.ChatStre
 
 			toolCallInfo := common.ToolCallInfo{
 				Id:        toolcall.ID,
-				Name:      toolcall.Function.Name,
+				Name:      toolcall.Name,
 				Arguments: map[string]any{},
-				Delta:     toolcall.Function.Arguments,
+				Delta:     toolcall.Arguments,
 				Status:    status,
 			}
 			toolCallInfos = append(toolCallInfos, toolCallInfo)
@@ -371,6 +381,51 @@ func (s *OpenAIBaseProviderStream) Receive(ctx context.Context) (common.ChatStre
 	}
 
 	return streamData, nil
+}
+
+func (s *OpenAIBaseProviderStream) accumulateToolCalls(toolCalls []openAIChunkToolCall) {
+	for _, tc := range toolCalls {
+		if tc.Index > 0 {
+			s.sawExplicitToolIndex = true
+		}
+
+		idx := tc.Index
+		if idx < 0 {
+			idx = 0
+		}
+		if !s.sawExplicitToolIndex && tc.Index == 0 && len(s.toolCalls) > 0 {
+			if tc.ID != "" {
+				matched := -1
+				for i, existing := range s.toolCalls {
+					if existing.ID == tc.ID {
+						matched = i
+						break
+					}
+				}
+				if matched >= 0 {
+					idx = matched
+				} else if s.toolCalls[0].ID != "" {
+					idx = len(s.toolCalls)
+				}
+			} else if len(s.toolCalls) > 1 {
+				// Index-less relays omit index and ID on continuation argument chunks.
+				idx = len(s.toolCalls) - 1
+			}
+		}
+
+		for len(s.toolCalls) <= idx {
+			s.toolCalls = append(s.toolCalls, openAIAccumulatedToolCall{})
+		}
+		if tc.ID != "" && s.toolCalls[idx].ID == "" {
+			s.toolCalls[idx].ID = tc.ID
+		}
+		if tc.Function.Name != "" {
+			s.toolCalls[idx].Name += tc.Function.Name
+		}
+		if tc.Function.Arguments != "" {
+			s.toolCalls[idx].Arguments += tc.Function.Arguments
+		}
+	}
 }
 
 func (s *OpenAIBaseProviderStream) appendContentDelta(delta string) {
@@ -609,7 +664,7 @@ func (s *OpenAIBaseProviderStream) isToolCallArgumentNameSame(toolRequiredName s
 	return false
 }
 
-func (s *OpenAIBaseProviderStream) isChunkEmpty(chunk openai.ChatCompletionChunk) bool {
+func (s *OpenAIBaseProviderStream) isChunkEmpty(chunk openAIChatCompletionChunk) bool {
 	if len(chunk.Choices) == 0 {
 		return true
 	}
@@ -621,11 +676,11 @@ func (s *OpenAIBaseProviderStream) isChunkEmpty(chunk openai.ChatCompletionChunk
 		return false
 	}
 
-	// Check for reasoning fields in ExtraFields. DeepSeek uses reasoning_content,
-	// while other OpenAI-compatible providers use reasoning, and both should
-	// keep streaming chunks alive even when there is no user-visible content.
+	// Check for reasoning fields. DeepSeek uses reasoning_content, while other
+	// OpenAI-compatible providers use reasoning, and both should keep streaming
+	// chunks alive even when there is no user-visible content.
 	for _, reasoningFieldName := range reasoningExtraFieldNames {
-		if reasoningField, exists := delta.JSON.ExtraFields[reasoningFieldName]; exists && reasoningField.Valid() {
+		if _, exists := delta.reasoningRawField(reasoningFieldName); exists {
 			return false
 		}
 	}
@@ -634,8 +689,8 @@ func (s *OpenAIBaseProviderStream) isChunkEmpty(chunk openai.ChatCompletionChunk
 }
 
 // convertConversations converts the conversations to OpenAI format
-func (o *OpenAIBaseProvider) convertConversations(conversations []common.Conversation) ([]openai.ChatCompletionMessageParamUnion, error) {
-	var chatMessages []openai.ChatCompletionMessageParamUnion
+func (o *OpenAIBaseProvider) convertConversations(conversations []common.Conversation) ([]openAIChatMessage, error) {
+	var chatMessages []openAIChatMessage
 	pendingToolContent := ""
 	pendingToolReasoning := ""
 	for i := 0; i < len(conversations); i++ {
@@ -649,7 +704,10 @@ func (o *OpenAIBaseProvider) convertConversations(conversations []common.Convers
 					text += "\n\n" + conversations[i].Text
 				}
 			}
-			chatMessages = append(chatMessages, openai.SystemMessage(text))
+			chatMessages = append(chatMessages, openAIChatMessage{
+				Role:    "system",
+				Content: stringPtr(text),
+			})
 		}
 		if conversation.Role == common.ConversationRoleUser {
 			images := append([]common.WoxImage(nil), conversation.Images...)
@@ -664,17 +722,26 @@ func (o *OpenAIBaseProvider) convertConversations(conversations []common.Convers
 				images = append(images, common.NewWoxImageAbsolutePath(path))
 			}
 			if len(images) == 0 {
-				chatMessages = append(chatMessages, openai.UserMessage(conversation.Text))
+				chatMessages = append(chatMessages, openAIChatMessage{
+					Role:    "user",
+					Content: stringPtr(conversation.Text),
+				})
 			} else {
-				parts := []openai.ChatCompletionContentPartUnionParam{openai.TextContentPart(conversation.Text)}
+				parts := []openAIContentPart{{Type: "text", Text: conversation.Text}}
 				for _, image := range images {
 					imageURL, err := chatImageURL(image)
 					if err != nil {
 						return nil, fmt.Errorf("read chat image: %w", err)
 					}
-					parts = append(parts, openai.ImageContentPart(openai.ChatCompletionContentPartImageImageURLParam{URL: imageURL}))
+					parts = append(parts, openAIContentPart{
+						Type:     "image_url",
+						ImageURL: &openAIContentImage{URL: imageURL},
+					})
 				}
-				chatMessages = append(chatMessages, openai.UserMessage(parts))
+				chatMessages = append(chatMessages, openAIChatMessage{
+					Role:    "user",
+					Content: parts,
+				})
 			}
 		}
 		if conversation.Role == common.ConversationRoleAssistant {
@@ -701,7 +768,11 @@ func (o *OpenAIBaseProvider) convertConversations(conversations []common.Convers
 			chatMessages = append(chatMessages, o.convertToolCallAssistantMessage(toolConversations, pendingToolContent, reasoning))
 			pendingToolContent = ""
 			for _, toolConversation := range toolConversations {
-				chatMessages = append(chatMessages, openai.ToolMessage(toolConversation.ToolCallInfo.Response, toolConversation.ToolCallInfo.Id))
+				chatMessages = append(chatMessages, openAIChatMessage{
+					Role:       "tool",
+					Content:    stringPtr(toolConversation.ToolCallInfo.Response),
+					ToolCallID: toolConversation.ToolCallInfo.Id,
+				})
 			}
 		}
 	}
@@ -718,38 +789,42 @@ func (o *OpenAIBaseProvider) shouldFoldAssistantIntoNextToolCall(conversations [
 }
 
 // convertAssistantMessage preserves provider-specific reasoning fields in chat history.
-func (o *OpenAIBaseProvider) convertAssistantMessage(content string, reasoning string) openai.ChatCompletionMessageParamUnion {
-	assistant := openai.AssistantMessage(content)
+func (o *OpenAIBaseProvider) convertAssistantMessage(content string, reasoning string) openAIChatMessage {
+	assistant := openAIChatMessage{
+		Role:    "assistant",
+		Content: stringPtr(content),
+	}
 	if o.shouldReplayToolReasoningContent() {
-		assistant.OfAssistant.SetExtraFields(map[string]any{"reasoning_content": reasoning})
+		assistant.ReasoningContent = stringPtr(reasoning)
 	}
 	return assistant
 }
 
-func (o *OpenAIBaseProvider) convertToolCallAssistantMessage(toolConversations []common.Conversation, content string, reasoning string) openai.ChatCompletionMessageParamUnion {
-	toolCalls := make([]openai.ChatCompletionMessageToolCallUnionParam, 0, len(toolConversations))
+func (o *OpenAIBaseProvider) convertToolCallAssistantMessage(toolConversations []common.Conversation, content string, reasoning string) openAIChatMessage {
+	toolCalls := make([]openAIMessageToolCall, 0, len(toolConversations))
 	for _, toolConversation := range toolConversations {
-		toolCalls = append(toolCalls, openai.ChatCompletionMessageToolCallUnionParam{
-			OfFunction: &openai.ChatCompletionMessageFunctionToolCallParam{
-				ID: toolConversation.ToolCallInfo.Id,
-				Function: openai.ChatCompletionMessageFunctionToolCallFunctionParam{
-					Name:      toolConversation.ToolCallInfo.Name,
-					Arguments: toolConversation.ToolCallInfo.Delta,
-				},
+		toolCalls = append(toolCalls, openAIMessageToolCall{
+			ID:   toolConversation.ToolCallInfo.Id,
+			Type: "function",
+			Function: openAIMessageToolCallFunc{
+				Name:      toolConversation.ToolCallInfo.Name,
+				Arguments: toolConversation.ToolCallInfo.Delta,
 			},
 		})
 	}
 
-	assistant := openai.ChatCompletionAssistantMessageParam{ToolCalls: toolCalls}
+	assistant := openAIChatMessage{
+		Role:      "assistant",
+		ToolCalls: toolCalls,
+	}
 	if o.shouldReplayToolReasoningContent() {
 		// DeepSeek V4 thinking mode requires reasoning_content to be replayed
-		// on assistant messages that contain tool_calls. The OpenAI-compatible
-		// SDK has no typed field for this provider extension, so use extras.
-		assistant.Content.OfString = param.NewOpt(content)
-		assistant.SetExtraFields(map[string]any{"reasoning_content": reasoning})
+		// on assistant messages that contain tool_calls.
+		assistant.Content = stringPtr(content)
+		assistant.ReasoningContent = stringPtr(reasoning)
 	}
 
-	return openai.ChatCompletionMessageParamUnion{OfAssistant: &assistant}
+	return assistant
 }
 
 func firstToolCallReasoning(toolConversations []common.Conversation) string {
@@ -765,37 +840,6 @@ func (o *OpenAIBaseProvider) shouldReplayToolReasoningContent() bool {
 	providerName := strings.ToLower(string(o.connectContext.Name))
 	providerHost := strings.ToLower(o.connectContext.Host)
 	return providerName == "deepseek" || strings.Contains(providerHost, "deepseek.com")
-}
-
-// getClient returns an OpenAI client
-func (o *OpenAIBaseProvider) getClient(ctx context.Context) openai.Client {
-	var requestOption = []option.RequestOption{
-		option.WithBaseURL(o.connectContext.Host),
-		option.WithAPIKey(o.connectContext.ApiKey),
-		// Some OpenAI-compatible relays block SDK fingerprint headers even when the same bearer token works with curl. #4473
-		option.WithHTTPClient(util.GetHTTPClient(ctx)),
-		option.WithHeader("User-Agent", "Wox"),
-		option.WithHeaderDel("X-Stainless-Lang"),
-		option.WithHeaderDel("X-Stainless-Package-Version"),
-		option.WithHeaderDel("X-Stainless-OS"),
-		option.WithHeaderDel("X-Stainless-Arch"),
-		option.WithHeaderDel("X-Stainless-Runtime"),
-		option.WithHeaderDel("X-Stainless-Runtime-Version"),
-		option.WithHeaderDel("X-Stainless-Retry-Count"),
-		option.WithHeaderDel("X-Stainless-Timeout"),
-	}
-
-	if network.IsOffline() {
-		requestOption = append(requestOption, option.WithMaxRetries(0))
-	}
-	// with custom headers
-	if o.options.Headers != nil {
-		for k, v := range o.options.Headers {
-			requestOption = append(requestOption, option.WithHeaderAdd(k, v))
-		}
-	}
-
-	return openai.NewClient(requestOption...)
 }
 
 // chatImageURL preserves supported encoded images and converts other local raster formats to PNG.

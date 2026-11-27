@@ -4,9 +4,6 @@ import (
 	"context"
 	"wox/common"
 	"wox/setting"
-
-	"github.com/openai/openai-go/v3"
-	"github.com/openai/openai-go/v3/option"
 )
 
 var miniMaxModels = []string{
@@ -46,16 +43,7 @@ func (p *MiniMaxProvider) Models(ctx context.Context) ([]common.Model, error) {
 }
 
 func (p *MiniMaxProvider) Ping(ctx context.Context) error {
-	client := p.getClient(ctx)
-	_, err := client.Chat.Completions.New(ctx, openai.ChatCompletionNewParams{
-		Model: miniMaxModels[0],
-		Messages: []openai.ChatCompletionMessageParamUnion{
-			openai.UserMessage("ping"),
-		},
-		MaxCompletionTokens: openai.Int(1),
-	})
-
-	return err
+	return p.pingChatCompletion(ctx, miniMaxModels[0])
 }
 
 func NewMiniMaxProvider(ctx context.Context, connectContext setting.AIProvider) Provider {
@@ -65,9 +53,9 @@ func NewMiniMaxProvider(ctx context.Context, connectContext setting.AIProvider) 
 
 	return &MiniMaxProvider{
 		OpenAIBaseProvider: NewOpenAIBaseProviderWithOptions(connectContext, OpenAIBaseProviderOptions{
-			ChatRequestOptions: func(ctx context.Context, model common.Model, conversations []common.Conversation, options common.ChatOptions) []option.RequestOption {
-				return []option.RequestOption{
-					option.WithJSONSet("reasoning_split", true),
+			ChatRequestExtraBody: func(ctx context.Context, model common.Model, conversations []common.Conversation, options common.ChatOptions) map[string]any {
+				return map[string]any{
+					"reasoning_split": true,
 				}
 			},
 		}),
