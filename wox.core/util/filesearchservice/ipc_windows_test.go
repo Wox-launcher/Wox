@@ -16,7 +16,7 @@ import (
 func startManagementTestServer(t *testing.T, handler RequestHandler) string {
 	t.Helper()
 	name := fmt.Sprintf(`\\.\pipe\WoxManagement-%d-%d`, os.Getpid(), time.Now().UnixNano())
-	owner, err := currentUserSID()
+	owner, err := CurrentUserSID()
 	if err != nil {
 		t.Fatal(err)
 	}

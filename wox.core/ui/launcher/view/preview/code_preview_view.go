@@ -5,7 +5,6 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/alecthomas/chroma/v2"
 	woxcomponent "wox/ui/launcher/component"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
@@ -15,7 +14,7 @@ import (
 type CodePreviewProps struct {
 	ID                           string
 	Value                        string
-	Tokens                       []chroma.Token
+	Tokens                       []CodeToken
 	Note                         string
 	Width, Height, InitialOffset float32
 	Window                       *woxui.Window
@@ -84,7 +83,7 @@ func CodePreview(props CodePreviewProps) woxwidget.Widget {
 }
 
 // codePreviewRuns uses three muted syntax hues; other identifiers retain the theme's text color.
-func codePreviewRuns(tokens []chroma.Token, foreground woxui.Color, length int) []woxcomponent.TextFieldRichRun {
+func codePreviewRuns(tokens []CodeToken, foreground woxui.Color, length int) []woxcomponent.TextFieldRichRun {
 	keyword, literal, number := woxui.Color{R: 185, G: 161, B: 213, A: 255}, woxui.Color{R: 164, G: 190, B: 160, A: 255}, woxui.Color{R: 201, G: 180, B: 143, A: 255}
 	// Choose ink for light themes from the foreground, including translucent surfaces.
 	if int(foreground.R)+int(foreground.G)+int(foreground.B) < 384 {
@@ -95,14 +94,14 @@ func codePreviewRuns(tokens []chroma.Token, foreground woxui.Color, length int) 
 	for _, token := range tokens {
 		end := min(length, offset+utf8.RuneCountInString(token.Value))
 		color := woxui.Color{}
-		switch {
-		case token.Type.InCategory(chroma.Comment):
+		switch token.Kind {
+		case CodeTokenComment:
 			color = previewColorWithOpacity(foreground, 0.65)
-		case token.Type.InCategory(chroma.Keyword):
+		case CodeTokenKeyword:
 			color = keyword
-		case token.Type.InSubCategory(chroma.LiteralString):
+		case CodeTokenString:
 			color = literal
-		case token.Type.InSubCategory(chroma.LiteralNumber):
+		case CodeTokenNumber:
 			color = number
 		}
 		if color.A != 0 && end > offset {

@@ -82,7 +82,8 @@ func LoadOwnerSID() (string, error) {
 	return ownerSID, nil
 }
 
-func currentUserSID() (string, error) {
+// CurrentUserSID returns the current Windows process user SID string.
+func CurrentUserSID() (string, error) {
 	user, err := windows.GetCurrentProcessToken().GetTokenUser()
 	if err != nil {
 		return "", err

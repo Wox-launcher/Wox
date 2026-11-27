@@ -14,12 +14,10 @@ import (
 	"sync"
 	"time"
 
-	"wox/util"
-	"wox/util/filesearchservice"
-
 	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/svc"
 	"golang.org/x/sys/windows/svc/mgr"
+	"wox/util/filesearchservice"
 )
 
 func main() {
@@ -50,7 +48,7 @@ func main() {
 	}
 	resultPath := argumentValue(args, "--result")
 	if err != nil {
-		util.GetLogger().Error(context.Background(), "file index service command failed: "+err.Error())
+		logServiceError("file index service command failed: " + err.Error())
 		if resultPath != "" {
 			_ = os.WriteFile(resultPath, []byte(err.Error()), 0600)
 		}
@@ -59,6 +57,28 @@ func main() {
 	if resultPath != "" {
 		_ = os.WriteFile(resultPath, nil, 0600)
 	}
+}
+
+// logServiceError writes best-effort errors to ProgramData without importing wox/util,
+// keeping the privileged helper free of Wox's main application dependency tree.
+func logServiceError(message string) {
+	programData := strings.TrimSpace(os.Getenv("ProgramData"))
+	if programData == "" {
+		return
+	}
+	logPath := filepath.Join(programData, "Wox", "FileIndexService", "service.log")
+	if err := os.MkdirAll(filepath.Dir(logPath), 0755); err != nil {
+		return
+	}
+	if info, err := os.Stat(logPath); err == nil && info.Size() > 1<<20 {
+		_ = os.Truncate(logPath, 0)
+	}
+	file, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		return
+	}
+	defer file.Close()
+	_, _ = fmt.Fprintf(file, "%s ERROR %s\n", time.Now().Format(time.RFC3339), strings.TrimSpace(message))
 }
 
 func nonEmptyArgs(args []string) []string {
@@ -124,7 +144,7 @@ func (service *serviceHandler) Execute(_ []string, requests <-chan svc.ChangeReq
 		select {
 		case err := <-endpointErrors:
 			if err != nil && !errors.Is(err, context.Canceled) {
-				util.GetLogger().Error(ctx, "file index service endpoint failed: "+err.Error())
+				logServiceError("file index service endpoint failed: " + err.Error())
 			}
 			return false, 1
 		case <-service.updateRequested:

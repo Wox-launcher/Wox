@@ -1,6 +1,6 @@
 //go:build windows
 
-package filesearchservice
+package manager
 
 import (
 	"context"
@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"wox/util"
+	"wox/util/filesearchservice"
 	"wox/util/shell"
 
 	"golang.org/x/sys/windows"
@@ -20,103 +21,87 @@ import (
 	"golang.org/x/sys/windows/svc/mgr"
 )
 
-// indexedVolumeRoots prefers the last published service snapshot, then the
-// same local fixed NTFS volumes the service itself enumerates.
-func indexedVolumeRoots() []string {
-	if !IsRunning() {
-		return nil
-	}
-	if cached := cachedIndexedVolumeRoots(); len(cached) > 0 {
-		return cached
-	}
-	roots, err := fixedNTFSVolumeRoots()
-	if err != nil {
-		return nil
-	}
-	return roots
-}
-
 func embeddedExecutable() string {
 	return filepath.Join(util.GetLocation().GetOthersDirectory(), "file_index_service", "wox-file-index-service.exe")
 }
 
 // GetStatus reads SCM state and the version encoded in the installed binary path.
-func GetStatus() (result Status) {
-	result = Status{State: StateNotInstalled, EmbeddedVersion: EmbeddedVersion}
+func GetStatus() (result filesearchservice.Status) {
+	result = filesearchservice.Status{State: filesearchservice.StateNotInstalled, EmbeddedVersion: filesearchservice.EmbeddedVersion}
 	defer func() {
-		running.Store(result.State == StateRunning || result.State == StateUpdateReady)
+		filesearchservice.SetRunning(result.State == filesearchservice.StateRunning || result.State == filesearchservice.StateUpdateReady)
 	}()
 	// Isolated test runs must not attach to the machine-wide service and its production index.
 	if util.IsTestMode() {
-		result.State = StateUnavailable
+		result.State = filesearchservice.StateUnavailable
 		return result
 	}
 	_, embeddedErr := os.Stat(embeddedExecutable())
 	scm, err := windows.OpenSCManager(nil, nil, windows.SC_MANAGER_CONNECT)
 	if err != nil {
-		result.State = StateUnavailable
+		result.State = filesearchservice.StateUnavailable
 		result.Detail = err.Error()
 		return result
 	}
 	defer windows.CloseServiceHandle(scm)
-	name, err := windows.UTF16PtrFromString(Name)
+	name, err := windows.UTF16PtrFromString(filesearchservice.Name)
 	if err != nil {
 		return result
 	}
 	handle, err := windows.OpenService(scm, name, windows.SERVICE_QUERY_CONFIG|windows.SERVICE_QUERY_STATUS)
 	if errors.Is(err, windows.ERROR_SERVICE_DOES_NOT_EXIST) {
 		if embeddedErr != nil {
-			result.State = StateUnavailable
+			result.State = filesearchservice.StateUnavailable
 			result.Detail = embeddedErr.Error()
 		}
 		return result
 	}
 	if err != nil {
-		result.State = StateUnavailable
+		result.State = filesearchservice.StateUnavailable
 		result.Detail = err.Error()
 		return result
 	}
-	s := &mgr.Service{Name: Name, Handle: handle}
+	s := &mgr.Service{Name: filesearchservice.Name, Handle: handle}
 	defer s.Close()
 	if config, configErr := s.Config(); configErr == nil {
 		result.InstalledVersion = filepath.Base(filepath.Dir(strings.Trim(config.BinaryPathName, `"`)))
 	}
 	serviceStatus, err := s.Query()
 	if err != nil {
-		result.State = StateStopped
+		result.State = filesearchservice.StateStopped
 		result.Detail = err.Error()
 		return result
 	}
 	if serviceStatus.State == svc.Running {
 		healthCtx, cancel := context.WithTimeout(context.Background(), time.Second)
-		health, healthErr := Health(healthCtx)
+		health, healthErr := filesearchservice.Health(healthCtx)
 		cancel()
 		if healthErr != nil {
-			if errors.Is(healthErr, ErrProtocolMismatch) || updateAvailable(result.InstalledVersion, EmbeddedVersion) {
-				result.State = StateNeedsUpdate
-				result.Detail = result.InstalledVersion + " → " + EmbeddedVersion
+			if errors.Is(healthErr, filesearchservice.ErrProtocolMismatch) || filesearchservice.UpdateAvailable(result.InstalledVersion, filesearchservice.EmbeddedVersion) {
+				result.State = filesearchservice.StateNeedsUpdate
+				result.Detail = result.InstalledVersion + " → " + filesearchservice.EmbeddedVersion
 			} else {
-				result.State = StateUnhealthy
+				result.State = filesearchservice.StateUnhealthy
 				result.Detail = healthErr.Error()
 			}
 			return result
 		}
 		result.InstalledVersion = health.Version
 		result.Detail = health.Version
-		if updateAvailable(result.InstalledVersion, EmbeddedVersion) {
+		if filesearchservice.UpdateAvailable(result.InstalledVersion, filesearchservice.EmbeddedVersion) {
 			if util.IsDev() {
 				// Unsigned development helpers cannot safely replace a SYSTEM service
 				// through the non-elevated update pipe.
-				result.State = StateNeedsUpdate
-				result.Detail = result.InstalledVersion + " → " + EmbeddedVersion
+				result.State = filesearchservice.StateNeedsUpdate
+				result.Detail = result.InstalledVersion + " → " + filesearchservice.EmbeddedVersion
 			} else {
-				result.State = StateUpdateReady
+				result.State = filesearchservice.StateUpdateReady
 			}
 		} else {
-			result.State = StateRunning
+			result.State = filesearchservice.StateRunning
 		}
 	} else {
-		result.State = StateStopped
+		result.State = filesearchservice.StateStopped
 	}
 	return result
 }
@@ -131,16 +116,16 @@ func Execute(ctx context.Context, action string) error {
 		return fmt.Errorf("embedded file index service is unavailable: %w", err)
 	}
 	if action == "update" {
-		hash, err := HashFile(executable)
+		hash, err := filesearchservice.HashFile(executable)
 		if err != nil {
 			return err
 		}
-		if err := Update(ctx, executable, EmbeddedVersion, hash); err != nil {
+		if err := filesearchservice.Update(ctx, executable, filesearchservice.EmbeddedVersion, hash); err != nil {
 			return err
 		}
-		err = waitForHealthyService(ctx, EmbeddedVersion)
+		err = waitForHealthyService(ctx, filesearchservice.EmbeddedVersion)
 		if err == nil {
-			markRunning()
+			filesearchservice.SetRunning(true)
 		}
 		return err
 	}
@@ -156,7 +141,7 @@ func Execute(ctx context.Context, action string) error {
 		return err
 	}
 	defer os.Remove(resultPath)
-	ownerSID, err := currentUserSID()
+	ownerSID, err := filesearchservice.CurrentUserSID()
 	if err != nil {
 		return err
 	}
@@ -176,12 +161,12 @@ func Execute(ctx context.Context, action string) error {
 		return fmt.Errorf("file index service action %q exited with code %d", action, exitCode)
 	}
 	if action == "uninstall" {
-		markStopped()
+		filesearchservice.SetRunning(false)
 	} else {
-		if err := waitForHealthyService(ctx, EmbeddedVersion); err != nil {
+		if err := waitForHealthyService(ctx, filesearchservice.EmbeddedVersion); err != nil {
 			return err
 		}
-		markRunning()
+		filesearchservice.SetRunning(true)
 	}
 	return nil
 }
@@ -192,7 +177,7 @@ func waitForHealthyService(ctx context.Context, version string) error {
 	var lastErr error
 	for time.Now().Before(deadline) {
 		healthCtx, cancel := context.WithTimeout(ctx, time.Second)
-		response, err := Health(healthCtx)
+		response, err := filesearchservice.Health(healthCtx)
 		cancel()
 		if err == nil && response.Version == version {
 			return nil

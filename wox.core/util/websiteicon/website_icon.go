@@ -5,13 +5,13 @@ import (
 	"crypto/md5"
 	"errors"
 	"fmt"
-	"io"
+	"net"
 	"net/url"
 	"os"
 	"path"
+	"strings"
 
 	"github.com/disintegration/imaging"
-	"github.com/mat/besticon/besticon"
 
 	"wox/common"
 	"wox/common/icons"
@@ -64,37 +64,28 @@ func Fetch(ctx context.Context, websiteUrl string) (common.WoxImage, error) {
 		}, nil
 	}
 
-	// 1) Try Google favicon service first (usually returns PNG)
+	// 1) Try Google favicon service first for public hostnames (usually returns PNG)
 	domain := parseUrl.Hostname()
-	googleFaviconUrl := fmt.Sprintf("https://www.google.com/s2/favicons?sz=96&domain_url=%s", url.QueryEscape(domain))
-	if downloadErr := util.HttpDownload(ctx, googleFaviconUrl, iconCachePath); downloadErr == nil {
-		return common.NewWoxImageAbsolutePath(iconCachePath), nil
+	if domain != "" && !strings.EqualFold(domain, "localhost") && net.ParseIP(domain) == nil {
+		googleFaviconUrl := fmt.Sprintf("https://www.google.com/s2/favicons?sz=96&domain_url=%s", url.QueryEscape(domain))
+		if downloadErr := util.HttpDownload(ctx, googleFaviconUrl, iconCachePath); downloadErr == nil {
+			return common.NewWoxImageAbsolutePath(iconCachePath), nil
+		}
 	}
 
-	// 2) Fallback to besticon crawler
-	option := besticon.WithLogger(besticon.NewDefaultLogger(io.Discard))
-	iconFinder := besticon.New(option).NewIconFinder()
-	siteIcons, fetchErr := iconFinder.FetchIcons(hostUrl)
+	// 2) Fallback to native site HTML + standard path favicon discovery
+	img, fetchErr := fetchSiteFavicon(ctx, hostUrl)
 	if fetchErr != nil {
 		return icons.Get(icons.PluginWebsearch), fmt.Errorf("failed to fetch icons for %s: %s", hostUrl, fetchErr.Error())
 	}
 
-	if len(siteIcons) == 0 {
-		return icons.Get(icons.PluginWebsearch), fmt.Errorf("no icons found for %s", hostUrl)
-	}
-
-	image, imageEr := siteIcons[0].Image()
-	if imageEr != nil {
-		return icons.Get(icons.PluginWebsearch), fmt.Errorf("failed to get image for %s: %s", hostUrl, imageEr.Error())
-	}
-
-	woxImage, woxImageErr := common.NewWoxImage(*image)
+	woxImage, woxImageErr := common.NewWoxImage(img)
 	if woxImageErr != nil {
 		return icons.Get(icons.PluginWebsearch), fmt.Errorf("failed to convert image for %s: %s", hostUrl, woxImageErr.Error())
 	}
 
 	// save to cache
-	saveErr := imaging.Save(*image, iconCachePath)
+	saveErr := imaging.Save(img, iconCachePath)
 	if saveErr != nil {
 		return woxImage, fmt.Errorf("failed to save image for %s: %s", hostUrl, saveErr.Error())
 	}

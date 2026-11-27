@@ -28,6 +28,7 @@ import (
 	"wox/util/fileicon"
 	"wox/util/filesearch"
 	"wox/util/filesearchservice"
+	filesearchservicemgr "wox/util/filesearchservice/manager"
 	"wox/util/nativecontextmenu"
 	"wox/util/pathquery"
 	"wox/util/permission"
@@ -92,7 +93,7 @@ const (
 var listRecentFilesFn = recentfiles.List
 
 // executeFileIndexServiceFn lets lifecycle tests avoid the machine-wide service.
-var executeFileIndexServiceFn = filesearchservice.Execute
+var executeFileIndexServiceFn = filesearchservicemgr.Execute
 
 const (
 	fileSearchTypeRefinementKey     = "file_type"
@@ -379,7 +380,7 @@ func (c *FileSearchPlugin) Init(ctx context.Context, initParams plugin.InitParam
 	c.indexPolicy.SetSkipHiddenFiles(c.getConfiguredSkipHiddenFiles(ctx))
 
 	if runtime.GOOS == "windows" {
-		filesearchservice.GetStatus()
+		filesearchservicemgr.GetStatus()
 	}
 	serviceRunning := runtime.GOOS == "windows" && filesearchservice.IsRunning()
 	engine, initErr := filesearch.NewEngineWithOptions(ctx, filesearch.EngineOptions{
@@ -447,7 +448,7 @@ func (c *FileSearchPlugin) Init(ctx context.Context, initParams plugin.InitParam
 	c.api.OnEnterPluginQuery(ctx, func(ctx context.Context) {
 		c.enterToolbarQuery()
 		if runtime.GOOS == "windows" {
-			c.refreshServiceUpdateNotice(ctx, filesearchservice.GetStatus())
+			c.refreshServiceUpdateNotice(ctx, filesearchservicemgr.GetStatus())
 		}
 		c.syncToolbarMsg(ctx, false)
 	})
@@ -484,13 +485,13 @@ func (c *FileSearchPlugin) Init(ctx context.Context, initParams plugin.InitParam
 	c.syncUserRoots(ctx)
 	if runtime.GOOS == "windows" {
 		util.Go(ctx, "auto-update file index service", func() {
-			status := filesearchservice.GetStatus()
+			status := filesearchservicemgr.GetStatus()
 			c.refreshServiceUpdateNotice(ctx, status)
 			if status.State != filesearchservice.StateUpdateReady {
 				return
 			}
 			util.GetLogger().Info(ctx, fmt.Sprintf("updating file index service from %s to %s", status.InstalledVersion, status.EmbeddedVersion))
-			if err := filesearchservice.Execute(ctx, "update"); err != nil {
+			if err := filesearchservicemgr.Execute(ctx, "update"); err != nil {
 				util.GetLogger().Warn(ctx, "failed to update file index service automatically: "+err.Error())
 				return
 			}
@@ -509,7 +510,7 @@ func (c *FileSearchPlugin) Init(ctx context.Context, initParams plugin.InitParam
 				c.syncUserRoots(ctx)
 			}
 			util.GetLogger().Info(ctx, "file index service updated automatically to "+status.EmbeddedVersion)
-			c.refreshServiceUpdateNotice(ctx, filesearchservice.GetStatus())
+			c.refreshServiceUpdateNotice(ctx, filesearchservicemgr.GetStatus())
 		})
 	}
 
@@ -633,7 +634,7 @@ func (c *FileSearchPlugin) fileIndexServiceSetting() definition.PluginSettingDef
 	if runtime.GOOS != "windows" {
 		return definition.PluginSettingDefinitionItem{}
 	}
-	status := filesearchservice.GetStatus()
+	status := filesearchservicemgr.GetStatus()
 	value := &definition.PluginSettingValueService{
 		Key: fileIndexServiceSettingKey, Title: "i18n:plugin_file_setting_service_title", Description: "i18n:plugin_file_setting_service_description",
 		Detail: status.InstalledVersion,

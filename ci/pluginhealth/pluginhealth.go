@@ -253,7 +253,7 @@ func bootstrapPluginHealth(ctx context.Context, dataDir string) (string, error) 
 	if err := util.GetLocation().Init(); err != nil {
 		return "", fmt.Errorf("initialize location: %w", err)
 	}
-	if err := resource.Extract(ctx); err != nil {
+	if err := resource.Extract(ctx, nil); err != nil {
 		return "", fmt.Errorf("extract host resources: %w", err)
 	}
 	if err := database.Init(ctx); err != nil {

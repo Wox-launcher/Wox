@@ -1,8 +1,0 @@
-      PID    PPID    PGID     WINPID   TTY         UID    STIME COMMAND
-      317       1     317      24064  cons1     197609 17:48:41 /usr/bin/bash
-      328     317     328      13804  cons1     197609 17:48:44 /c/Users/qianl/scoop/apps/mingw/current/bin/make
-      396       1     395      19348  cons2     197609 17:51:21 /usr/bin/ps
-      395     370     395      27244  cons2     197609 17:50:51 /c/Windows/System32/WindowsPowerShell/v1.0/powershell
-      302       1     302      41464  cons0     197609 17:46:00 /usr/bin/bash
-      370       1     370      27744  cons2     197609 17:50:27 /usr/bin/bash
-      369       1     328      36436  cons1     197609 17:49:37 /d/dev/Wox/wox.core/__debug_bin_wox

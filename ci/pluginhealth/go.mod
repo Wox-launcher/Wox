@@ -29,7 +29,6 @@ require (
 	github.com/mattn/go-sqlite3 v1.14.32 // indirect
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
 	github.com/modelcontextprotocol/go-sdk v1.6.1 // indirect
-	github.com/openai/openai-go/v3 v3.11.0 // indirect
 	github.com/otiai10/copy v1.14.1 // indirect
 	github.com/otiai10/mint v1.6.3 // indirect
 	github.com/petermattis/goid v0.0.0-20251121121749-a11dd1a45f9a // indirect
@@ -45,7 +44,6 @@ require (
 	github.com/tidwall/gjson v1.18.0 // indirect
 	github.com/tidwall/match v1.2.0 // indirect
 	github.com/tidwall/pretty v1.2.1 // indirect
-	github.com/tidwall/sjson v1.2.5 // indirect
 	github.com/tmc/langchaingo v0.1.14 // indirect
 	github.com/wissance/stringFormatter v1.6.1 // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect

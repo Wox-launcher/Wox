@@ -17,7 +17,7 @@ import (
 func runFactTestServer(t *testing.T, handler factRequestHandler) (string, context.CancelFunc) {
 	t.Helper()
 	name := fmt.Sprintf(`\\.\pipe\WoxFactsTest-%d-%s`, os.Getpid(), t.Name())
-	sid, err := currentUserSID()
+	sid, err := CurrentUserSID()
 	if err != nil {
 		t.Fatal(err)
 	}

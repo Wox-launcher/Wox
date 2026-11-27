@@ -5,8 +5,6 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	"github.com/alecthomas/chroma/v2"
-	"github.com/alecthomas/chroma/v2/lexers"
 	woxcomponent "wox/ui/launcher/component"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
@@ -14,10 +12,7 @@ import (
 
 func TestCodePreviewPreservesSourceAndWrappedLineNumbers(t *testing.T) {
 	const source = "// 中文 comment\n\npackage main\nvar message = `a long string that wraps in a narrow preview and keeps its original line number`\n"
-	tokens, err := chroma.Tokenise(lexers.Get("go"), nil, source)
-	if err != nil {
-		t.Fatal(err)
-	}
+	tokens := TokenizeCode("main.go", source)
 	for _, scale := range []float32{0.9, 1, 1.1, 1.5} {
 		for _, width := range []float32{160, 420} {
 			theme := woxcomponent.Theme{Controls: woxcomponent.ControlTheme{DensityScale: scale}, PreviewText: woxui.Color{R: 240, G: 240, B: 240, A: 255}}
@@ -52,10 +47,7 @@ func TestCodePreviewPreservesSourceAndWrappedLineNumbers(t *testing.T) {
 
 func TestCodePreviewSyntaxUsesRuneOffsetsAndLightDarkInk(t *testing.T) {
 	const source = "// 中文\npackage main\nvar s = \"hello\"\nvar n = 42"
-	tokens, err := chroma.Tokenise(lexers.Get("go"), nil, source)
-	if err != nil {
-		t.Fatal(err)
-	}
+	tokens := TokenizeCode("main.go", source)
 	dark := codePreviewRuns(tokens, woxui.Color{R: 240, G: 240, B: 240, A: 255}, utf8.RuneCountInString(source))
 	light := codePreviewRuns(tokens, woxui.Color{R: 30, G: 30, B: 30, A: 255}, utf8.RuneCountInString(source))
 	if len(dark) == 0 || len(light) != len(dark) {
@@ -73,5 +65,116 @@ func TestCodePreviewSyntaxUsesRuneOffsetsAndLightDarkInk(t *testing.T) {
 		if !seen[text] {
 			t.Fatalf("missing syntax run %q: %#v", text, seen)
 		}
+	}
+}
+
+func TestCodeSyntaxTokenizerLanguagesAndInvariants(t *testing.T) {
+	for _, plain := range []string{"notes.txt", "output.log", "data.csv", "file.unknown"} {
+		if IsCodePreviewFile(plain) {
+			t.Fatalf("%q should not be treated as code", plain)
+		}
+	}
+
+	cases := []struct {
+		name      string
+		source    string
+		wantKinds map[string]CodeTokenKind
+	}{
+		{
+			name:   "app.py",
+			source: "# 注释\ndef greet(foo2):\n    s = \"\"\"multi\nline\"\"\"\n    return 3.14\n",
+			wantKinds: map[string]CodeTokenKind{
+				"# 注释":                    CodeTokenComment,
+				"def":                     CodeTokenKeyword,
+				"return":                  CodeTokenKeyword,
+				"\"\"\"multi\nline\"\"\"": CodeTokenString,
+				"3.14":                    CodeTokenNumber,
+				"foo2":                    CodeTokenPlain,
+			},
+		},
+		{
+			name:   "index.ts",
+			source: "/* block */ export const n = 0xff;\nconst msg = `hi \\`world\\``;\n",
+			wantKinds: map[string]CodeTokenKind{
+				"/* block */":      CodeTokenComment,
+				"export":           CodeTokenKeyword,
+				"const":            CodeTokenKeyword,
+				"0xff":             CodeTokenNumber,
+				"`hi \\`world\\``": CodeTokenString,
+			},
+		},
+		{
+			name:   "config.json",
+			source: "{\"enabled\": true, \"count\": 10}\n",
+			wantKinds: map[string]CodeTokenKind{
+				"\"enabled\"": CodeTokenString,
+				"true":        CodeTokenKeyword,
+				"10":          CodeTokenNumber,
+			},
+		},
+		{
+			name:   "index.html",
+			source: "<!-- hi --><div class=\"box\">It's 42</div>",
+			wantKinds: map[string]CodeTokenKind{
+				"<!-- hi -->": CodeTokenComment,
+				"div":         CodeTokenKeyword,
+				"\"box\"":     CodeTokenString,
+			},
+		},
+		{
+			name:   "query.sql",
+			source: "-- q\nSELECT * FROM users WHERE id = 7;\n",
+			wantKinds: map[string]CodeTokenKind{
+				"-- q":   CodeTokenComment,
+				"SELECT": CodeTokenKeyword,
+				"FROM":   CodeTokenKeyword,
+				"WHERE":  CodeTokenKeyword,
+				"7":      CodeTokenNumber,
+			},
+		},
+		{
+			name:   "lib.rs",
+			source: "fn foo<'a>(x: &'a str) -> char { 'z' }\n",
+			wantKinds: map[string]CodeTokenKind{
+				"fn":  CodeTokenKeyword,
+				"'z'": CodeTokenString,
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if !IsCodePreviewFile(tc.name) {
+				t.Fatalf("%q should be recognized as code", tc.name)
+			}
+			tokens := TokenizeCode(tc.name, tc.source)
+			var rebuilt strings.Builder
+			got := map[string]CodeTokenKind{}
+			for _, tok := range tokens {
+				rebuilt.WriteString(tok.Value)
+				got[tok.Value] = tok.Kind
+			}
+			if rebuilt.String() != tc.source {
+				t.Fatalf("roundtrip mismatch: got %q, want %q", rebuilt.String(), tc.source)
+			}
+			for val, wantKind := range tc.wantKinds {
+				if wantKind == CodeTokenPlain {
+					foundPlain := false
+					for _, tok := range tokens {
+						if tok.Kind == CodeTokenPlain && strings.Contains(tok.Value, val) {
+							foundPlain = true
+							break
+						}
+					}
+					if !foundPlain {
+						t.Fatalf("expected plain span containing %q (tokens=%+v)", val, tokens)
+					}
+					continue
+				}
+				if kind, ok := got[val]; !ok || kind != wantKind {
+					t.Fatalf("token %q: got kind=%v ok=%v, want %v (tokens=%+v)", val, kind, ok, wantKind, tokens)
+				}
+			}
+		})
 	}
 }

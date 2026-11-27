@@ -14,10 +14,8 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/alecthomas/chroma/v2"
-	"github.com/alecthomas/chroma/v2/lexers"
-
 	"wox/common"
+	previewview "wox/ui/launcher/view/preview"
 	woxui "wox/ui/runtime"
 	"wox/util"
 )
@@ -36,7 +34,7 @@ const (
 type filePreviewContent struct {
 	Kind               string
 	Text               string
-	CodeTokens         []chroma.Token
+	CodeTokens         []previewview.CodeToken
 	Image              woxImage
 	WebViewData        string
 	NativeFilePath     string
@@ -331,15 +329,12 @@ func inspectPreviewFile(path, extension string, forceLoad bool) filePreviewConte
 		base.Limited = truncated || len(lines) > maxFilePreviewDisplayLines
 		return base
 	}
-	if lexer := lexers.Match(filepath.Base(path)); lexer != nil && lexer.Config().Name != "plaintext" {
+	if previewview.IsCodePreviewFile(filepath.Base(path)) {
 		// Keep source line numbers intact and tokenize once, off the UI thread.
 		base.Kind = "code"
 		base.Text, base.DisplayLines, base.Limited = boundFilePreviewCode(string(data))
 		base.Limited = base.Limited || truncated
-		base.CodeTokens, err = chroma.Tokenise(chroma.Coalesce(lexer), nil, base.Text)
-		if err != nil {
-			base.CodeTokens = nil // Unrecognized syntax still has a readable, numbered preview.
-		}
+		base.CodeTokens = previewview.TokenizeCode(filepath.Base(path), base.Text)
 		return base
 	}
 	text, lines, limited := boundFilePreviewText(string(data))

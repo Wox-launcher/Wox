@@ -27,6 +27,9 @@ func markRunning() { running.Store(true) }
 
 func markStopped() { running.Store(false) }
 
+// SetRunning updates the cached service state observed by lifecycle management.
+func SetRunning(value bool) { running.Store(value) }
+
 var indexedVolumeRootsCache atomic.Value
 
 // IndexedVolumeRoots returns the NTFS volumes the running service indexes.
@@ -87,10 +90,11 @@ type Status struct {
 }
 
 func (s Status) HasUpdate() bool {
-	return s.InstalledVersion != "" && updateAvailable(s.InstalledVersion, s.EmbeddedVersion)
+	return s.InstalledVersion != "" && UpdateAvailable(s.InstalledVersion, s.EmbeddedVersion)
 }
 
-func updateAvailable(installed, embedded string) bool {
+// UpdateAvailable reports whether embedded is a newer semantic version than installed.
+func UpdateAvailable(installed, embedded string) bool {
 	installedVersion, installedErr := semver.NewVersion(installed)
 	embeddedVersion, embeddedErr := semver.NewVersion(embedded)
 	return installedErr == nil && embeddedErr == nil && embeddedVersion.GreaterThan(installedVersion)

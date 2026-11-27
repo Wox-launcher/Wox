@@ -5,7 +5,6 @@ go 1.26.5
 require (
 	github.com/Masterminds/semver/v3 v3.4.0
 	github.com/PuerkitoBio/goquery v1.11.0
-	github.com/alecthomas/chroma/v2 v2.27.0
 	github.com/cdfmlr/ellipsis v0.0.1
 	github.com/disintegration/imaging v1.6.2
 	github.com/fsnotify/fsnotify v1.9.0
@@ -17,7 +16,6 @@ require (
 	github.com/gotk3/gotk3 v0.6.5-0.20240618185848-ff349ae13f56
 	github.com/ledongthuc/pdf v0.0.0-20260907135840-6c8c28e0e8a0
 	github.com/lxn/win v0.0.0-20210218163916-a377121e959e
-	github.com/mat/besticon v0.0.0-20231103204413-ee089084f347
 	github.com/mattn/go-sqlite3 v1.14.32
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/modelcontextprotocol/go-sdk v1.6.1
@@ -58,9 +56,6 @@ require (
 	github.com/andybalholm/cascadia v1.3.3 // indirect
 	github.com/danieljoos/wincred v1.1.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
-	github.com/dlclark/regexp2/v2 v2.2.1 // indirect
-	github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 // indirect
-	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect
 	github.com/klauspost/compress v1.18.0 // indirect
@@ -73,6 +68,5 @@ require (
 	github.com/tidwall/match v1.2.0 // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	google.golang.org/protobuf v1.36.8 // indirect
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
 )

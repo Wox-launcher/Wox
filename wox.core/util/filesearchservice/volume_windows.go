@@ -39,6 +39,22 @@ type readUSNJournalData struct {
 	MaxMajorVersion   uint16
 }
 
+// indexedVolumeRoots prefers the last published service snapshot, then the
+// same local fixed NTFS volumes the service itself enumerates.
+func indexedVolumeRoots() []string {
+	if !IsRunning() {
+		return nil
+	}
+	if cached := cachedIndexedVolumeRoots(); len(cached) > 0 {
+		return cached
+	}
+	roots, err := fixedNTFSVolumeRoots()
+	if err != nil {
+		return nil
+	}
+	return roots
+}
+
 // fixedNTFSVolumeRoots returns the local fixed NTFS volumes owned by service mode.
 func fixedNTFSVolumeRoots() ([]string, error) {
 	mask, err := windows.GetLogicalDrives()

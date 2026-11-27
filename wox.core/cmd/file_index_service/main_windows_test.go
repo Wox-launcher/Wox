@@ -4,7 +4,9 @@ package main
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -40,5 +42,27 @@ func TestRemoveInstallDirectoryStaysInsideWoxServiceRoot(t *testing.T) {
 	removeInstallDirectory(serviceBinary)
 	if _, err := os.Stat(serviceRoot); !os.IsNotExist(err) {
 		t.Fatalf("service root still exists: %v", err)
+	}
+}
+
+func TestServiceHelperHasMinimalDependencies(t *testing.T) {
+	output, err := exec.Command("go", "list", "-f", `{{range .Deps}}{{println .}}{{end}}`, ".").CombinedOutput()
+	if err != nil {
+		t.Fatalf("go list failed: %v\n%s", err, output)
+	}
+	disallowed := []string{
+		"wox/util",
+		"wox/util/shell",
+		"net/http",
+		"go.uber.org/zap",
+		"github.com/klauspost/compress",
+	}
+	for _, dep := range strings.Split(strings.TrimSpace(string(output)), "\n") {
+		dep = strings.TrimSpace(dep)
+		for _, forbidden := range disallowed {
+			if dep == forbidden {
+				t.Fatalf("file index service helper must not depend on %s", forbidden)
+			}
+		}
 	}
 }

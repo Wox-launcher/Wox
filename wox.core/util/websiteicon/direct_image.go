@@ -33,33 +33,9 @@ var ErrNotAnImage = errors.New("url is not a direct image")
 
 // FetchDirectImage downloads a URL only when the response itself is an image.
 func FetchDirectImage(ctx context.Context, imageURL string) (common.WoxImage, error) {
-	resp, err := util.HttpOpenWithHeaders(ctx, imageURL, imageRequestHeaders(imageURL))
+	data, err := fetchImageBytes(ctx, imageURL)
 	if err != nil {
 		return common.WoxImage{}, err
-	}
-	defer resp.Body.Close()
-
-	limited := io.LimitReader(resp.Body, maxDirectImageBytes+1)
-	peek := make([]byte, imageSniffLen)
-	n, readErr := io.ReadFull(limited, peek)
-	if readErr != nil && readErr != io.EOF && readErr != io.ErrUnexpectedEOF {
-		return common.WoxImage{}, readErr
-	}
-	peek = peek[:n]
-	if !isImagePayload(resp.Header.Get("Content-Type"), peek) {
-		return common.WoxImage{}, ErrNotAnImage
-	}
-	if resp.ContentLength > maxDirectImageBytes {
-		return common.WoxImage{}, fmt.Errorf("image exceeds %d bytes", maxDirectImageBytes)
-	}
-
-	rest, err := io.ReadAll(limited)
-	if err != nil {
-		return common.WoxImage{}, err
-	}
-	data := append(peek, rest...)
-	if len(data) > maxDirectImageBytes {
-		return common.WoxImage{}, fmt.Errorf("image exceeds %d bytes", maxDirectImageBytes)
 	}
 
 	decoded, err := decodeImageBytes(data)
@@ -67,6 +43,38 @@ func FetchDirectImage(ctx context.Context, imageURL string) (common.WoxImage, er
 		return common.WoxImage{}, err
 	}
 	return common.NewWoxImage(decoded)
+}
+
+func fetchImageBytes(ctx context.Context, imageURL string) ([]byte, error) {
+	resp, err := util.HttpOpenWithHeaders(ctx, imageURL, imageRequestHeaders(imageURL))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	limited := io.LimitReader(resp.Body, maxDirectImageBytes+1)
+	peek := make([]byte, imageSniffLen)
+	n, readErr := io.ReadFull(limited, peek)
+	if readErr != nil && readErr != io.EOF && readErr != io.ErrUnexpectedEOF {
+		return nil, readErr
+	}
+	peek = peek[:n]
+	if !isImagePayload(resp.Header.Get("Content-Type"), peek) {
+		return nil, ErrNotAnImage
+	}
+	if resp.ContentLength > maxDirectImageBytes {
+		return nil, fmt.Errorf("image exceeds %d bytes", maxDirectImageBytes)
+	}
+
+	rest, err := io.ReadAll(limited)
+	if err != nil {
+		return nil, err
+	}
+	data := append(peek, rest...)
+	if len(data) > maxDirectImageBytes {
+		return nil, fmt.Errorf("image exceeds %d bytes", maxDirectImageBytes)
+	}
+	return data, nil
 }
 
 // IsDirectImageURL reports whether the path looks like a pasted image address.
@@ -101,9 +109,9 @@ func imageRequestHeaders(rawURL string) map[string]string {
 	return headers
 }
 
-// isImagePayload accepts image Content-Type, sniffed raster bytes, or SVG markup.
+// isImagePayload accepts image Content-Type, sniffed raster bytes, ICO, or SVG markup.
 func isImagePayload(contentType string, peek []byte) bool {
-	if looksLikeSVG(peek) {
+	if looksLikeSVG(peek) || isICO(peek) {
 		return true
 	}
 	mediaType, _, err := mime.ParseMediaType(contentType)
@@ -126,10 +134,13 @@ func looksLikeSVG(data []byte) bool {
 	return false
 }
 
-// decodeImageBytes rasterizes SVG locally and uses the shared decoder for other formats.
+// decodeImageBytes rasterizes SVG locally, decodes ICO natively, and uses the shared decoder for other formats.
 func decodeImageBytes(data []byte) (image.Image, error) {
 	if looksLikeSVG(data) {
-		return woxsvg.Render(string(data), 32, 32)
+		return woxsvg.Render(string(data), 64, 64)
+	}
+	if isICO(data) {
+		return decodeICO(data)
 	}
 	return imaging.Decode(bytes.NewReader(data))
 }
