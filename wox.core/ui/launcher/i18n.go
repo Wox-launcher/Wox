@@ -47,11 +47,20 @@ func (a *languageCatalog) translate(value string) string {
 	if !strings.HasPrefix(value, "i18n:") {
 		return value
 	}
-	key := strings.TrimPrefix(value, "i18n:")
 	a.translationsMu.RLock()
-	translated := a.translations[key]
+	translations := a.translations
 	a.translationsMu.RUnlock()
-	if translated != "" {
+	return translateFrom(translations, value)
+}
+
+// translateFrom resolves a value against an explicit translation table so deferred builders do not
+// read the live catalog.
+func translateFrom(translations map[string]string, value string) string {
+	if !strings.HasPrefix(value, "i18n:") {
+		return value
+	}
+	key := strings.TrimPrefix(value, "i18n:")
+	if translated := translations[key]; translated != "" {
 		return translated
 	}
 	return strings.ReplaceAll(key, "_", " ")

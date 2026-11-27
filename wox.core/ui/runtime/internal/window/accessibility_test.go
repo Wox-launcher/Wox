@@ -83,7 +83,7 @@ func TestClearAccessibilityDoesNotPublishEmptyNativeTree(t *testing.T) {
 
 	originalUpdate := updateNativeAccessibility
 	nativeUpdateCalled := false
-	updateNativeAccessibility = func(*platformWindow, AccessibilityTree) error {
+	updateNativeAccessibility = func(*platformWindow, AccessibilityTree, uint64) error {
 		nativeUpdateCalled = true
 		return nil
 	}

@@ -72,6 +72,17 @@ type context struct {
 	work         *frameWorkCounters
 	scroll       *scrollLayoutEnv
 	viewportPass *viewportPass
+	// incrementalOff is resolved once per Host frame because reading the kill-switch
+	// environment variable for every Boundary showed up in layout profiles.
+	incrementalOff bool
+}
+
+// incrementalDisabledFor uses the frame's resolved flag inside a Host and the environment elsewhere.
+func (c context) incrementalDisabledFor() bool {
+	if c.elements != nil {
+		return c.incrementalOff
+	}
+	return incrementalDisabled()
 }
 
 func (c context) withElement(element *stateElement) context {

@@ -26,6 +26,10 @@ type launcherPreparedSectionProps struct {
 	Width     float32
 	Height    float32
 	Child     woxwidget.Widget `boundary:"stable"`
+	// Build defers constructing the section until the Boundary actually rebuilds, so a cache hit
+	// skips the work of assembling a widget tree that would be discarded. Only side-effect-free
+	// sections may use it; Child remains the eager path.
+	Build func() woxwidget.Widget `boundary:"stable"`
 }
 
 // Equal compares the immutable signature and geometry of a prepared launcher section.
@@ -34,7 +38,12 @@ func (p launcherPreparedSectionProps) Equal(other launcherPreparedSectionProps) 
 }
 
 func launcherPreparedSection(key woxwidget.Key, label string, props launcherPreparedSectionProps) woxwidget.Widget {
-	return woxwidget.Boundary[launcherPreparedSectionProps]{Key: key, Label: label, Props: props, Build: func(props launcherPreparedSectionProps) woxwidget.Widget { return props.Child }}
+	return woxwidget.Boundary[launcherPreparedSectionProps]{Key: key, Label: label, Props: props, Build: func(props launcherPreparedSectionProps) woxwidget.Widget {
+		if props.Build != nil {
+			return props.Build()
+		}
+		return props.Child
+	}}
 }
 
 func launcherSectionSignature(values ...any) string {
@@ -106,6 +115,7 @@ type viewSnapshot struct {
 	show                  showAppParams
 	palette               uiPalette
 	densityMetrics        launcherDensityMetrics
+	appFontFamily         string
 	selectedPreviewType   string
 	pluginPreview         *queryResult
 	webViewNavigation     woxui.WebViewNavigationState
@@ -155,6 +165,10 @@ func (a *App) snapshot() viewSnapshot {
 		preview := a.remotePreview.resolvePreview(a.resultList.results[a.resultList.selected].Preview)
 		selectedPreviewType = preview.PreviewType
 	}
+	appFontFamily := ""
+	if a.generalSettings != nil {
+		appFontFamily = a.generalSettings.Data().AppFontFamily
+	}
 	return viewSnapshot{
 		queryTabFeedback:      a.querySession.queryTabFeedback,
 		hint:                  a.querySession.query.QueryHint.Clone(),
@@ -199,6 +213,7 @@ func (a *App) snapshot() viewSnapshot {
 		show:                  a.show,
 		palette:               a.appearance.palette,
 		densityMetrics:        a.appearance.densityMetrics.normalized(),
+		appFontFamily:         appFontFamily,
 		selectedPreviewType:   selectedPreviewType,
 		pluginPreview:         pluginPreview,
 		webViewNavigation:     a.webView.webViewNavigation,
@@ -1048,14 +1063,19 @@ func (a *App) buildPreviewSection(result queryResult, snapshot viewSnapshot, wid
 	resolved := a.remotePreview.resolvePreview(result.Preview)
 	fullBleed := launcherPreviewTitleBarVisible(snapshot)
 	showChatHeader := resolved.PreviewType != "chat" || !fullBleed
-	child := a.buildPreviewWithChatHeader(result, snapshot.palette, width, height, imageScale, showChatHeader, fullBleed)
+	build := func() woxwidget.Widget {
+		return a.buildPreviewWithChatHeader(result, snapshot.palette, width, height, imageScale, showChatHeader, fullBleed)
+	}
 	// Chat is already prepared above and owns retained scrolling/message state.
 	// Hashing its entire history to cache a trivial wrapper costs more than rebuilding it.
 	// Media likewise owns its smaller animation and live-data boundaries.
 	if resolved.PreviewType == "media" || resolved.PreviewType == "chat" {
-		return child
+		return build()
 	}
-	state := []any{result, resolved, snapshot.palette, snapshot.show, snapshot.chatFullscreen, snapshot.webViewFullscreen, snapshot.terminalFullscreen, fullBleed, width, height, imageScale, a.language.translationsRevision.Load(), a.imageStore.imagesRevision.Load()}
+	// Density and font family are rendering inputs of text layout; they must be in the key because a
+	// font or density change can leave the preview bounds untouched.
+	density := snapshot.densityMetrics.normalized()
+	state := []any{result, resolved, snapshot.palette, snapshot.show, snapshot.chatFullscreen, snapshot.webViewFullscreen, snapshot.terminalFullscreen, fullBleed, width, height, imageScale, a.language.translationsRevision.Load(), a.imageStore.imagesRevision.Load(), density, snapshot.appFontFamily}
 	switch resolved.PreviewType {
 	case "query_requirement_settings":
 		if a.requirements.requirementForm != nil {
@@ -1080,7 +1100,21 @@ func (a *App) buildPreviewSection(result queryResult, snapshot viewSnapshot, wid
 	case "webview":
 		state = append(state, a.webView.webViewPreviewData, a.webView.webViewPreviewError)
 	}
-	return launcherPreparedSection("launcher-preview-section", "preview", launcherPreparedSectionProps{Signature: launcherSectionSignature(state...), Width: width, Height: height, Child: child})
+	props := launcherPreparedSectionProps{Signature: launcherSectionSignature(state...), Width: width, Height: height}
+	switch resolved.PreviewType {
+	case "text", "ai_stream", "url":
+		// These builders only read the resolved preview payload. Their inputs are captured here so a
+		// Boundary rebuild never re-reads mutable launcher state outside the signature; a hit skips
+		// them entirely. Other types register images, native previews, or WoxView lifecycle while
+		// building and must keep running every frame.
+		translations := a.language.translationSnapshot()
+		props.Build = func() woxwidget.Widget {
+			return a.buildResolvedTextPreview(result, resolved, snapshot.palette, density, translations, width, height, fullBleed)
+		}
+	default:
+		props.Child = build()
+	}
+	return launcherPreparedSection("launcher-preview-section", "preview", props)
 }
 
 // launcherPreviewVisible mirrors Flutter's grid preview exceptions for system-owned guidance.
@@ -1230,8 +1264,10 @@ func (a *App) resultTailViewProps(tails []resultTail, rowWidth float32, densityM
 			metrics, _ := a.window.MeasureText(tail.Text, style)
 			item.Width = min(maximumTextWidth, metrics.Size.Width+textPadding)
 			item.Height = textHeight
-			layout := woxwidget.LayoutTextBlock(a.window, tail.Text, style, max(float32(0), item.Width-textPadding), 1, 0)
-			if len(layout.Lines) > 0 {
+			// Text that fits on one line is already its own first line; wrapping is only needed to truncate.
+			if metrics.Size.Width+textPadding <= maximumTextWidth && !strings.ContainsAny(tail.Text, "\r\n") {
+				item.Text = tail.Text
+			} else if layout := woxwidget.LayoutTextBlock(a.window, tail.Text, style, max(float32(0), item.Width-textPadding), 1, 0); len(layout.Lines) > 0 {
 				item.Text = layout.Lines[0]
 			}
 		case "image":

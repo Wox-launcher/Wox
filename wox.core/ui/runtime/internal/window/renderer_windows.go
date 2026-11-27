@@ -209,13 +209,16 @@ func (r *nativeRenderer) residentBytes() int64 {
 
 // measureText uses DirectWrite without opening a draw transaction.
 func (r *nativeRenderer) measureText(text string, style TextStyle) (TextMetrics, error) {
-	nativeText := C.CString(text)
-	defer C.free(unsafe.Pointer(nativeText))
+	if text == "" {
+		return TextMetrics{}, nil
+	}
+	// The native side takes an explicit length, so the Go string bytes are read in place.
+	nativeText := (*C.char)(unsafe.Pointer(unsafe.StringData(text)))
 	var width C.float
 	var height C.float
 	var baseline C.float
 	traceNativeCall("renderer measure enter handle=%p textLen=%d size=%.2f weight=%d", r.handle, len(text), style.Size, style.Weight)
-	result := C.wox_renderer_measure_text(r.handle, nativeText, C.float(style.Size), C.uint8_t(style.Weight), C.uint8_t(style.Family), C.uint8_t(boolByte(style.Italic)), &width, &height, &baseline)
+	result := C.wox_renderer_measure_text_utf8(r.handle, nativeText, C.int32_t(len(text)), C.float(style.Size), C.uint8_t(style.Weight), C.uint8_t(style.Family), C.uint8_t(boolByte(style.Italic)), &width, &height, &baseline)
 	traceNativeCall("renderer measure exit handle=%p result=%d", r.handle, result)
 	if result < 0 {
 		return TextMetrics{}, hresultError("measure text", result)
@@ -272,6 +275,8 @@ func (r *nativeRenderer) render(displayList *DisplayList, scale float32) error {
 	var encodeErr error
 	transform := IdentityTransform()
 	backdropGroups := displayBackdropGroups(displayList)
+	// The trace flag reads an environment variable, so resolve it once per frame instead of per command.
+	traceEnabled := util.IsDev() && windowsRenderTraceEnabled()
 	displayList.forEachCommand(func(command displayCommand) bool {
 		index++
 		nextTransform := IdentityTransform()
@@ -290,7 +295,9 @@ func (r *nativeRenderer) render(displayList *DisplayList, scale float32) error {
 		if index+1 == displayList.caretCapture {
 			C.wox_renderer_capture_caret(r.handle, C.float(command.rect.X), C.float(command.rect.Y), C.float(command.rect.Width), C.float(command.rect.Height))
 		}
-		traceNativeCall("renderer command enter frameId=%d handle=%p index=%d kind=%d", displayList.FrameMetricsID(), r.handle, index, command.kind)
+		if traceEnabled {
+			traceNativeCall("renderer command enter frameId=%d handle=%p index=%d kind=%d", displayList.FrameMetricsID(), r.handle, index, command.kind)
+		}
 		var commandResult C.int32_t
 		switch command.kind {
 		case displayCommandFillRoundedRect:
@@ -331,10 +338,13 @@ func (r *nativeRenderer) render(displayList *DisplayList, scale float32) error {
 				C.uint8_t(command.color.A),
 			)
 		case displayCommandDrawText:
-			text := C.CString(command.text)
-			commandResult = C.wox_renderer_draw_text(
+			if command.text == "" {
+				break
+			}
+			commandResult = C.wox_renderer_draw_text_utf8(
 				r.handle,
-				text,
+				(*C.char)(unsafe.Pointer(unsafe.StringData(command.text))),
+				C.int32_t(len(command.text)),
 				C.float(command.rect.X),
 				C.float(command.rect.Y),
 				C.float(command.rect.Width),
@@ -348,7 +358,6 @@ func (r *nativeRenderer) render(displayList *DisplayList, scale float32) error {
 				C.uint8_t(command.color.B),
 				C.uint8_t(command.color.A),
 			)
-			C.free(unsafe.Pointer(text))
 		case displayCommandDrawImage:
 			region := command.sourceRect()
 			commandResult = C.wox_renderer_draw_image(
@@ -543,5 +552,5 @@ func testWindowsOpacity(scale, opacity float32) ([]byte, int) {
 func (r *nativeRenderer) resourceStats() FrameRendererResourceMetrics {
 	var stats C.WoxRendererResourceStats
 	C.wox_renderer_resource_stats(r.handle, &stats)
-	return FrameRendererResourceMetrics{ImageCreates: int(stats.image_creates), ImageUploads: int(stats.image_uploads), CacheHits: int(stats.cache_hits), CacheEvictions: int(stats.cache_evictions), ResidentBytes: int64(stats.resident_bytes)}
+	return FrameRendererResourceMetrics{TextRasterizations: int(stats.text_rasterizations), ImageCreates: int(stats.image_creates), ImageUploads: int(stats.image_uploads), CacheHits: int(stats.cache_hits), CacheEvictions: int(stats.cache_evictions), ResidentBytes: int64(stats.resident_bytes)}
 }

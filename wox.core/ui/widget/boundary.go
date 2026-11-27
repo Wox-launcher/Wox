@@ -159,7 +159,7 @@ func (w boundaryLayout[T]) layout(ctx context, available constraints) *node {
 	if oldBounds == (woxui.Rect{}) && state.node != nil {
 		oldBounds = state.node.bounds
 	}
-	cacheHit := !incrementalDisabled() && state.hasCache && state.node != nil && !w.dirty && state.constraints == available && w.boundary.Props.Equal(state.props) && state.dynamic.matches(ctx)
+	cacheHit := !ctx.incrementalDisabledFor() && state.hasCache && state.node != nil && !w.dirty && state.constraints == available && w.boundary.Props.Equal(state.props) && state.dynamic.matches(ctx)
 	if cacheHit && ctx.elements != nil && state.reusedAt == ctx.elements.generation {
 		ctx.elements.diagnostics = append(ctx.elements.diagnostics, fmt.Sprintf("boundary %q reused the same cached subtree more than once in frame %d", boundaryLabel(w.boundary), ctx.elements.generation))
 		cacheHit = false

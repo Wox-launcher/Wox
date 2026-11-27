@@ -48,7 +48,7 @@ func linuxAccessibilityWindowFocused(window *platformWindow, _ AccessibilityTree
 
 // updateLinuxAccessibility queues the latest mirror. Applying it on the current
 // frame blocks the GTK thread inside ATK for the whole settings tree.
-func updateLinuxAccessibility(window *platformWindow, tree AccessibilityTree) error {
+func updateLinuxAccessibility(window *platformWindow, tree AccessibilityTree, _ uint64) error {
 	if C.wox_linux_accessibility_enabled() == 0 {
 		return nil
 	}

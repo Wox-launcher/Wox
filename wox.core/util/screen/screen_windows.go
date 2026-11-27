@@ -105,24 +105,30 @@ void enableProcessPerMonitorDpiAwareness() {
 //   - Logical calculation: x = 1706 + 1920/2 = 2666, y = 360 + 1080/2 = 900
 //   - We return logical coordinates and the native window converts them with the monitor DPI
 
+// Shcore.dll is resolved once. Loading and freeing it for every monitor made each display
+// enumeration pay for repeated module lookups on the launcher's show path.
+typedef HRESULT (WINAPI *GetDpiForMonitorFunc)(HMONITOR, int, UINT*, UINT*);
+static INIT_ONCE getDpiForMonitorOnce = INIT_ONCE_STATIC_INIT;
+static GetDpiForMonitorFunc cachedGetDpiForMonitor = NULL;
+
+static BOOL CALLBACK resolveGetDpiForMonitor(PINIT_ONCE once, PVOID parameter, PVOID* context) {
+    HMODULE shcore = LoadLibraryA("Shcore.dll");
+    if (shcore) {
+        cachedGetDpiForMonitor = (GetDpiForMonitorFunc)GetProcAddress(shcore, "GetDpiForMonitor");
+    }
+    return TRUE;
+}
+
 // Get DPI for a monitor
 UINT GetDpiForMonitorCompat(HMONITOR hMonitor) {
     // Try to use GetDpiForMonitor (available on Windows 8.1+)
-    HMODULE shcore = LoadLibraryA("Shcore.dll");
-    if (shcore) {
-        typedef HRESULT (WINAPI *GetDpiForMonitorFunc)(HMONITOR, int, UINT*, UINT*);
-        GetDpiForMonitorFunc getDpiForMonitor =
-            (GetDpiForMonitorFunc)GetProcAddress(shcore, "GetDpiForMonitor");
-
-        if (getDpiForMonitor) {
-            UINT dpiX = 96, dpiY = 96;
-            // MDT_EFFECTIVE_DPI = 0
-            if (SUCCEEDED(getDpiForMonitor(hMonitor, 0, &dpiX, &dpiY))) {
-                FreeLibrary(shcore);
-                return dpiX;
-            }
+    InitOnceExecuteOnce(&getDpiForMonitorOnce, resolveGetDpiForMonitor, NULL, NULL);
+    if (cachedGetDpiForMonitor) {
+        UINT dpiX = 96, dpiY = 96;
+        // MDT_EFFECTIVE_DPI = 0
+        if (SUCCEEDED(cachedGetDpiForMonitor(hMonitor, 0, &dpiX, &dpiY))) {
+            return dpiX;
         }
-        FreeLibrary(shcore);
     }
 
     // Fallback to system DPI

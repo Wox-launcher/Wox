@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cstdint>
+#include <cstring>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -64,10 +65,10 @@ class Provider;
 struct TreeState {
   std::mutex mutex;
   Snapshot current;
-  Snapshot pending;
   std::unordered_map<uint64_t, Provider *> providers;
-  bool building = false;
   bool closing = false;
+  // Set once UI Automation asks this window for its root provider.
+  bool provider_requested = false;
 };
 
 Provider *retain_provider(HWND hwnd, const std::shared_ptr<TreeState> &state, uint64_t node_id);
@@ -75,17 +76,16 @@ Provider *retain_provider(HWND hwnd, const std::shared_ptr<TreeState> &state, ui
 std::mutex states_mutex;
 std::unordered_map<HWND, std::shared_ptr<TreeState>> states;
 
-std::wstring utf8_to_wide(const char *value) {
-  if (value == nullptr || value[0] == '\0') {
+std::wstring utf8_to_wide_len(const char *value, size_t length) {
+  if (value == nullptr || length == 0) {
     return {};
   }
-  int length = MultiByteToWideChar(CP_UTF8, 0, value, -1, nullptr, 0);
-  if (length <= 1) {
+  int wide_length = MultiByteToWideChar(CP_UTF8, 0, value, static_cast<int>(length), nullptr, 0);
+  if (wide_length <= 0) {
     return {};
   }
-  std::wstring result(static_cast<size_t>(length), L'\0');
-  MultiByteToWideChar(CP_UTF8, 0, value, -1, result.data(), length);
-  result.resize(static_cast<size_t>(length - 1));
+  std::wstring result(static_cast<size_t>(wide_length), L'\0');
+  MultiByteToWideChar(CP_UTF8, 0, value, static_cast<int>(length), result.data(), wide_length);
   return result;
 }
 
@@ -475,53 +475,118 @@ Provider *retain_provider(HWND hwnd, const std::shared_ptr<TreeState> &state, ui
 
 }  // namespace
 
-extern "C" int32_t wox_windows_accessibility_begin(uintptr_t owner, uint64_t generation) {
-  HWND hwnd = reinterpret_cast<HWND>(owner);
-  auto state = state_for(hwnd, true);
-  std::lock_guard<std::mutex> lock(state->mutex);
-  state->pending = Snapshot{};
-  state->pending.generation = generation;
-  state->building = true;
-  return 0;
-}
-
-extern "C" int32_t wox_windows_accessibility_add_node(uintptr_t owner, uint64_t id, uint64_t parent_id, const uint64_t *children, int32_t child_count, const char *automation_id, const char *role, const char *label, const char *description, const char *value, float x, float y, float width, float height, uint32_t state_flags, uint32_t action_flags, int32_t live_region) {
+// has_active_client reports whether anything can observe the native mirror. Without a UIA client
+// listening or a prior WM_GETOBJECT for this window, publishing the tree is wasted work, so Go
+// skips it and pushes the latest tree on the first query instead.
+extern "C" int32_t wox_windows_accessibility_has_active_client(uintptr_t owner) {
+  if (UiaClientsAreListening()) return 1;
   auto state = state_for(reinterpret_cast<HWND>(owner), false);
-  if (!state || id == 0 || child_count < 0) return -1;
-  Node node;
-  node.id = id;
-  node.parent_id = parent_id;
-  if (children != nullptr) node.children.assign(children, children + child_count);
-  node.automation_id = utf8_to_wide(automation_id);
-  node.role = role != nullptr ? role : "group";
-  node.label = utf8_to_wide(label);
-  node.description = utf8_to_wide(description);
-  node.value = utf8_to_wide(value);
-  node.x = x;
-  node.y = y;
-  node.width = width;
-  node.height = height;
-  node.state_flags = state_flags;
-  node.action_flags = action_flags;
-  node.live_region = live_region;
+  if (!state) return 0;
   std::lock_guard<std::mutex> lock(state->mutex);
-  if (!state->building) return -1;
-  state->pending.nodes[id] = std::move(node);
-  if (parent_id == 0) state->pending.roots.push_back(id);
-  return 0;
+  return state->provider_requested ? 1 : 0;
 }
 
-extern "C" int32_t wox_windows_accessibility_end(uintptr_t owner) {
+namespace {
+
+// PayloadReader decodes the little-endian tree payload with strict bounds checks.
+struct PayloadReader {
+  const uint8_t *cursor;
+  const uint8_t *end;
+  bool ok = true;
+
+  size_t remaining() const { return static_cast<size_t>(end - cursor); }
+
+  template <typename T>
+  T read() {
+    T value{};
+    if (!ok || remaining() < sizeof(T)) {
+      ok = false;
+      return value;
+    }
+    std::memcpy(&value, cursor, sizeof(T));
+    cursor += sizeof(T);
+    return value;
+  }
+
+  // read_bytes returns a pointer to a length-prefixed byte run without copying it.
+  const char *read_bytes(uint32_t *length) {
+    *length = read<uint32_t>();
+    if (!ok || remaining() < *length) {
+      ok = false;
+      *length = 0;
+      return nullptr;
+    }
+    const char *bytes = reinterpret_cast<const char *>(cursor);
+    cursor += *length;
+    return bytes;
+  }
+
+  std::wstring read_wide() {
+    uint32_t length = 0;
+    const char *bytes = read_bytes(&length);
+    return ok ? utf8_to_wide_len(bytes, length) : std::wstring();
+  }
+
+  std::string read_string() {
+    uint32_t length = 0;
+    const char *bytes = read_bytes(&length);
+    return ok && length > 0 ? std::string(bytes, length) : std::string();
+  }
+};
+
+}  // namespace
+
+// wox_windows_accessibility_update replaces the whole native mirror from one binary payload, so a
+// tree of hundreds of nodes costs one cgo call instead of five allocations and calls per node.
+extern "C" int32_t wox_windows_accessibility_update(uintptr_t owner, uint64_t generation, const uint8_t *payload, int32_t payload_len) {
   HWND hwnd = reinterpret_cast<HWND>(owner);
-  auto state = state_for(hwnd, false);
-  if (!state) return -1;
+  if (payload == nullptr || payload_len < static_cast<int32_t>(sizeof(uint32_t))) return -1;
+
+  PayloadReader reader{payload, payload + payload_len};
+  const uint32_t node_count = reader.read<uint32_t>();
+  // Every node needs far more than one byte, so a larger count can only be a corrupt payload.
+  if (!reader.ok || node_count > static_cast<uint32_t>(payload_len)) return -1;
+
+  Snapshot snapshot;
+  snapshot.generation = generation;
+  snapshot.nodes.reserve(node_count);
+  for (uint32_t index = 0; index < node_count; ++index) {
+    Node node;
+    node.id = reader.read<uint64_t>();
+    node.parent_id = reader.read<uint64_t>();
+    const uint32_t child_count = reader.read<uint32_t>();
+    if (!reader.ok || node.id == 0 || reader.remaining() / sizeof(uint64_t) < child_count) return -1;
+    node.children.resize(child_count);
+    if (child_count > 0) {
+      std::memcpy(node.children.data(), reader.cursor, static_cast<size_t>(child_count) * sizeof(uint64_t));
+      reader.cursor += static_cast<size_t>(child_count) * sizeof(uint64_t);
+    }
+    node.x = reader.read<float>();
+    node.y = reader.read<float>();
+    node.width = reader.read<float>();
+    node.height = reader.read<float>();
+    node.state_flags = reader.read<uint32_t>();
+    node.action_flags = reader.read<uint32_t>();
+    node.live_region = reader.read<int32_t>();
+    node.automation_id = reader.read_wide();
+    node.role = reader.read_string();
+    if (node.role.empty()) node.role = "group";
+    node.label = reader.read_wide();
+    node.description = reader.read_wide();
+    node.value = reader.read_wide();
+    if (!reader.ok) return -1;
+    if (node.parent_id == 0) snapshot.roots.push_back(node.id);
+    const uint64_t id = node.id;
+    snapshot.nodes[id] = std::move(node);
+  }
+
+  auto state = state_for(hwnd, true);
   uint64_t focused = 0;
   std::vector<Provider *> stale_providers;
   {
     std::lock_guard<std::mutex> lock(state->mutex);
-    if (!state->building) return -1;
-    state->current = std::move(state->pending);
-    state->building = false;
+    if (state->closing) return -1;
+    state->current = std::move(snapshot);
     for (auto provider = state->providers.begin(); provider != state->providers.end();) {
       if (provider->first != 0 && state->current.nodes.find(provider->first) == state->current.nodes.end()) {
         stale_providers.push_back(provider->second);
@@ -558,6 +623,10 @@ extern "C" uintptr_t wox_windows_accessibility_get_object(uintptr_t owner, uintp
   if (static_cast<LONG>(lparam) != UiaRootObjectId) return 0;
   auto state = state_for(hwnd, false);
   if (!state) return 0;
+  {
+    std::lock_guard<std::mutex> lock(state->mutex);
+    state->provider_requested = true;
+  }
   Provider *root = retain_provider(hwnd, state, 0);
   if (root == nullptr) return 0;
   LRESULT result = UiaReturnRawElementProvider(hwnd, static_cast<WPARAM>(wparam), static_cast<LPARAM>(lparam), root);
@@ -582,9 +651,7 @@ extern "C" void wox_windows_accessibility_remove(uintptr_t owner) {
     // Existing providers can be called re-entrantly while UI Automation drops
     // its event map, so make the whole tree unavailable before that call.
     state->closing = true;
-    state->building = false;
     state->current = Snapshot{};
-    state->pending = Snapshot{};
     for (const auto &entry : state->providers) providers.push_back(entry.second);
     state->providers.clear();
   }

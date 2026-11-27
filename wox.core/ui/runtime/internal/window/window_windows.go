@@ -37,7 +37,10 @@ const (
 	windowForceCloseMessage = win.WM_APP + 4
 	windowBlurGuardDuration = 300 * time.Millisecond
 	// Keep the renderer warm for quick launcher toggles before accepting the measured cold-show penalty.
-	windowsRendererTrimDelay       = 30 * time.Second
+	windowsRendererTrimDelay = 30 * time.Second
+	// A quick hide/show toggle keeps icon textures, shaped text, and D2D's glyph caches warm. Matching the
+	// launcher's own 10s idle image trim keeps hidden memory unchanged once the window stays hidden.
+	windowsRendererCacheClearDelay = 10 * time.Second
 	windowsForegroundRestoreDelay1 = 30 * time.Millisecond
 	windowsForegroundRestoreDelay2 = 200 * time.Millisecond
 	wsExNoRedirectionBitmap        = 0x00200000
@@ -158,6 +161,7 @@ const (
 	windowCommandHideNativeFilePreview
 	windowCommandSetNativeFilePreviewOcclusion
 	windowCommandTrimRenderer
+	windowCommandClearRendererCache
 	windowCommandRestoreForeground
 	windowCommandConfirmActivation
 	windowCommandClose
@@ -167,7 +171,9 @@ type windowCommand struct {
 	cornerRadius float32
 	customChrome bool
 
-	kind                        windowCommandKind
+	kind windowCommandKind
+	// epoch ties delayed hidden-window cleanup to the hide that scheduled it.
+	epoch                       FocusEpoch
 	bounds                      Rect
 	displayScale                float32
 	size                        Size
@@ -229,6 +235,17 @@ type platformWindow struct {
 
 	renderer                *nativeRenderer
 	rendererTrimTimer       *time.Timer
+	rendererCacheClearTimer *time.Timer
+	// a11ySyncedHash is the content hash of the last tree pushed to the native UIA mirror. The
+	// mirror is only filled while a client is attached or has asked for the root. Content is
+	// compared instead of Generation because some publishers (the screenshot editor) reuse a
+	// fixed Generation while the tree changes.
+	a11ySyncedHash uint64
+	a11ySynced     bool
+	// a11yClosing is set (under mu) at the start of WM_DESTROY so UIA queries re-entering during
+	// provider teardown cannot republish the snapshot and recreate native state for the dying HWND.
+	a11yClosing             bool
+	a11yPayloadBuf          []byte
 	foregroundRestoreTimers [2]*time.Timer
 	activationConfirmTimers [2]*time.Timer
 	webView                 *webviewruntime.Controller
@@ -1642,6 +1659,8 @@ func windowProcedure(hwnd win.HWND, message uint32, wParam, lParam uintptr) uint
 		// UI Automation requires its provider map to be disconnected while the
 		// HWND is still in WM_DESTROY. Waiting until WM_NCDESTROY can block the
 		// only message-pump thread after native teardown has already started.
+		// Mark closing first: removal can re-enter WM_GETOBJECT while Go state still exists.
+		window.markAccessibilityClosing()
 		removeWindowsAccessibility(uintptr(hwnd))
 		return win.DefWindowProc(hwnd, message, wParam, lParam)
 	case win.WM_NCDESTROY:
@@ -2155,6 +2174,13 @@ func (w *platformWindow) executeCommand(command windowCommand) windowCommandResu
 			w.webView = nil
 		}
 		return windowCommandResult{err: w.renderer.trim()}
+	case windowCommandClearRendererCache:
+		// Timer.Stop cannot revoke a callback that already fired, so a clear from an earlier hide
+		// may arrive after a show/hide cycle; only the hide that scheduled it may clear.
+		if w.focus.visible || w.focus.epoch != command.epoch || w.renderer == nil || w.renderer.handle == nil {
+			return windowCommandResult{}
+		}
+		return windowCommandResult{err: w.renderer.clearImageCache()}
 	case windowCommandRestoreForeground:
 		if w.focus.visible || !isRestorableForegroundWindow(command.restoreForeground) {
 			return windowCommandResult{}
@@ -2350,6 +2376,7 @@ func (w *platformWindow) showNative() (FocusEpoch, error) {
 		w.rendererTrimTimer.Stop()
 		w.rendererTrimTimer = nil
 	}
+	w.stopRendererCacheClearTimer()
 	if w.renderer == nil {
 		return w.focus.epoch, errors.New("window is closed")
 	}
@@ -2418,7 +2445,11 @@ func (w *platformWindow) showNative() (FocusEpoch, error) {
 		w.scheduleActivationConfirm()
 	}
 	w.synchronizeBackdropAfterShow()
-	win.InvalidateRect(w.hwnd, nil, false)
+	// The frame drawn before ShowWindow already presented this content; only a window that could
+	// not draw it (no renderer client area yet) still needs a paint request.
+	if frameID == 0 {
+		win.InvalidateRect(w.hwnd, nil, false)
+	}
 	return w.focus.epoch, nil
 }
 
@@ -2459,12 +2490,29 @@ func (w *platformWindow) hideNative() {
 	w.setActive(false)
 	_ = w.stopAnimationFrames()
 	win.ShowWindow(w.hwnd, win.SW_HIDE)
-	_ = w.renderer.clearImageCache()
+	w.scheduleRendererCacheClear()
 	w.scheduleRendererTrim()
 
 	if shouldRestore && isRestorableForegroundWindow(previous) {
 		activateWindow(previous)
 		w.scheduleForegroundRestore(previous)
+	}
+}
+
+// scheduleRendererCacheClear releases transient GPU and text caches once the window stays hidden.
+// Clearing on every hide made the next show re-upload icons and re-shape every label.
+func (w *platformWindow) scheduleRendererCacheClear() {
+	w.stopRendererCacheClearTimer()
+	epoch := w.focus.epoch
+	w.rendererCacheClearTimer = time.AfterFunc(windowsRendererCacheClearDelay, func() {
+		_ = w.call(windowCommand{kind: windowCommandClearRendererCache, epoch: epoch})
+	})
+}
+
+func (w *platformWindow) stopRendererCacheClearTimer() {
+	if w.rendererCacheClearTimer != nil {
+		w.rendererCacheClearTimer.Stop()
+		w.rendererCacheClearTimer = nil
 	}
 }
 
@@ -2803,6 +2851,9 @@ func windowsUpdateRect(hwnd win.HWND) (win.RECT, bool) {
 // destroyNativeResources releases GPU state before invalidating the HWND-backed command queue.
 func (w *platformWindow) destroyNativeResources() {
 	w.stopForegroundRestoreTimers()
+	w.stopRendererCacheClearTimer()
+	w.a11yPayloadBuf = nil
+	w.a11ySynced = false
 	if w.rendererTrimTimer != nil {
 		w.rendererTrimTimer.Stop()
 		w.rendererTrimTimer = nil

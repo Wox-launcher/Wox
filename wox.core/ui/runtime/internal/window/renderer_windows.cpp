@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <new>
 #include <mutex>
 #include <string>
@@ -51,6 +52,31 @@ struct CompositeLayer {
   D2D1_RECT_F bounds = {};
   D2D1_MATRIX_3X2_F transform = {};
   float opacity = 1;
+};
+
+// CachedTextFormat keeps the few text formats a launcher uses so each draw or measure does not
+// rebuild a DirectWrite format. The cache is tied to the renderer's font family.
+struct CachedTextFormat {
+  float font_size = 0;
+  uint8_t weight = 0;
+  uint8_t font_slot = 0;
+  uint8_t italic = 0;
+  IDWriteTextFormat *format = nullptr;
+};
+
+// CachedTextLayout retains one immutable shaped layout. Layouts are keyed by their complete
+// inputs, so a hit draws exactly what a fresh layout would draw.
+struct CachedTextLayout {
+  std::string utf8_text;
+  uint64_t hash = 0;
+  float font_size = 0;
+  uint8_t weight = 0;
+  uint8_t font_slot = 0;
+  uint8_t italic = 0;
+  float width = 0;
+  float height = 0;
+  uint64_t last_used = 0;
+  IDWriteTextLayout *layout = nullptr;
 };
 
 struct WoxRenderer {
@@ -91,6 +117,12 @@ struct WoxRenderer {
   ID2D1Effect *material_blur_effect = nullptr;
   ID2D1Effect *material_tone_effect = nullptr;
   IDWriteFactory *dwrite_factory = nullptr;
+  // Hard bounds: 32 formats and 256 layouts (see get_text_format and cache_text_layout).
+  std::vector<CachedTextFormat> cached_text_formats;
+  std::vector<CachedTextLayout> cached_text_layouts;
+  // Evicted layouts stay alive until EndDraw because the open frame may still reference them.
+  std::vector<IDWriteTextLayout *> retired_text_layouts;
+  uint64_t cached_text_layout_use_serial = 0;
 	std::wstring font_family = L"Segoe UI";
   bool uses_default_font_family = true;
   float scale = 1.0f;
@@ -190,6 +222,28 @@ static void release_shared_d3d_device(ID3D11Device **device) {
     shared_d3d_device->Release();
     shared_d3d_device = nullptr;
   }
+}
+
+// DirectWrite's shared factory is process-wide and holds no GPU memory. Keeping one reference
+// alive avoids re-creating the factory every time a hidden renderer is recreated on show.
+static std::mutex shared_dwrite_factory_mutex;
+static IDWriteFactory *shared_dwrite_factory = nullptr;
+
+static HRESULT acquire_shared_dwrite_factory(IDWriteFactory **factory_out) {
+  if (factory_out == nullptr) {
+    return E_INVALIDARG;
+  }
+  std::lock_guard<std::mutex> lock(shared_dwrite_factory_mutex);
+  if (shared_dwrite_factory == nullptr) {
+    const HRESULT result = DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory), reinterpret_cast<IUnknown **>(&shared_dwrite_factory));
+    if (FAILED(result)) {
+      shared_dwrite_factory = nullptr;
+      return result;
+    }
+  }
+  shared_dwrite_factory->AddRef();
+  *factory_out = shared_dwrite_factory;
+  return S_OK;
 }
 
 // WoxWebViewVisual keeps host placement separate from the visual subtree owned by WebView2.
@@ -497,20 +551,24 @@ static HRESULT ensure_embedded_surface_overlay(WoxRenderer *renderer) {
   return result;
 }
 
+static std::wstring utf8_to_wide_len(const char *text, int32_t text_len) {
+  if (text == nullptr || text_len <= 0) {
+    return {};
+  }
+  const int length = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text, text_len, nullptr, 0);
+  if (length <= 0) {
+    return {};
+  }
+  std::wstring result(static_cast<size_t>(length), L'\0');
+  MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text, text_len, result.data(), length);
+  return result;
+}
+
 static std::wstring utf8_to_wide(const char *text) {
   if (text == nullptr || *text == '\0') {
     return {};
   }
-
-  const int length = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text, -1, nullptr, 0);
-  if (length <= 1) {
-    return {};
-  }
-
-  std::wstring result(static_cast<size_t>(length), L'\0');
-  MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text, -1, result.data(), length);
-  result.resize(static_cast<size_t>(length - 1));
-  return result;
+  return utf8_to_wide_len(text, static_cast<int32_t>(std::strlen(text)));
 }
 
 static bool native_ui_font_weight(uint8_t font_weight, DWRITE_FONT_WEIGHT *native_font_weight) {
@@ -576,18 +634,36 @@ static_assert(!is_cjk_codepoint(L'A'));
 // overriding a configured application font. YaHei UI is required because the
 // print YaHei face has no Semibold; CJK then silently renders as Regular.
 static HRESULT apply_default_cjk_font(IDWriteTextLayout *layout, const std::wstring &text, DWRITE_FONT_WEIGHT font_weight) {
-  for (UINT32 index = 0; index < text.size();) {
-    const UINT32 run_start = index;
-    uint32_t codepoint = text[index++];
-    if (codepoint >= 0xD800 && codepoint <= 0xDBFF && index < text.size()) {
-      const uint32_t low = text[index];
-      if (low >= 0xDC00 && low <= 0xDFFF) {
-        codepoint = 0x10000 + ((codepoint - 0xD800) << 10) + (low - 0xDC00);
-        index++;
+  // Contiguous CJK code points share one range so a long Chinese title costs two DirectWrite
+  // calls instead of two per character.
+  UINT32 index = 0;
+  while (index < text.size()) {
+    UINT32 run_start = 0;
+    bool in_run = false;
+    while (index < text.size()) {
+      const UINT32 unit_start = index;
+      uint32_t codepoint = text[index++];
+      if (codepoint >= 0xD800 && codepoint <= 0xDBFF && index < text.size()) {
+        const uint32_t low = text[index];
+        if (low >= 0xDC00 && low <= 0xDFFF) {
+          codepoint = 0x10000 + ((codepoint - 0xD800) << 10) + (low - 0xDC00);
+          index++;
+        }
+      }
+      if (is_cjk_codepoint(codepoint)) {
+        if (!in_run) {
+          run_start = unit_start;
+          in_run = true;
+        }
+        continue;
+      }
+      if (in_run) {
+        index = unit_start;
+        break;
       }
     }
-    if (!is_cjk_codepoint(codepoint)) {
-      continue;
+    if (!in_run) {
+      break;
     }
     const DWRITE_TEXT_RANGE range = {run_start, index - run_start};
     HRESULT result = layout->SetFontFamilyName(L"Microsoft YaHei UI", range);
@@ -609,13 +685,25 @@ static const wchar_t kStableScriptSample[] = L"Ag\u4E2D\u3042\uD55C";
 
 // layout_line_box reads the tallest baseline and the deepest descent in a layout.
 static bool layout_line_box(IDWriteTextLayout *layout, float *baseline, float *height) {
+  // Most launcher labels are one line, so a stack buffer answers in a single call.
+  DWRITE_LINE_METRICS stack_lines[4];
+  std::vector<DWRITE_LINE_METRICS> heap_lines;
+  const DWRITE_LINE_METRICS *lines = stack_lines;
   UINT32 line_count = 0;
-  layout->GetLineMetrics(nullptr, 0, &line_count);
-  if (line_count == 0) {
+  const HRESULT line_result = layout->GetLineMetrics(stack_lines, 4, &line_count);
+  if (line_result == E_NOT_SUFFICIENT_BUFFER) {
+    if (line_count == 0) {
+      return false;
+    }
+    heap_lines.resize(line_count);
+    if (FAILED(layout->GetLineMetrics(heap_lines.data(), line_count, &line_count))) {
+      return false;
+    }
+    lines = heap_lines.data();
+  } else if (FAILED(line_result)) {
     return false;
   }
-  std::vector<DWRITE_LINE_METRICS> lines(line_count);
-  if (FAILED(layout->GetLineMetrics(lines.data(), line_count, &line_count))) {
+  if (line_count == 0) {
     return false;
   }
   float line_baseline = 0;
@@ -629,15 +717,132 @@ static bool layout_line_box(IDWriteTextLayout *layout, float *baseline, float *h
   return true;
 }
 
+// get_text_format returns a renderer-owned format; callers must not release it. The cache is
+// capped at 32 entries and dropped whenever the font family changes.
+static HRESULT get_text_format(WoxRenderer *renderer, float font_size, uint8_t font_weight, uint8_t font_family, uint8_t italic, IDWriteTextFormat **format) {
+  for (const CachedTextFormat &entry : renderer->cached_text_formats) {
+    if (entry.font_size == font_size && entry.weight == font_weight && entry.font_slot == font_family && entry.italic == italic) {
+      *format = entry.format;
+      return S_OK;
+    }
+  }
+  IDWriteTextFormat *created = nullptr;
+  const HRESULT result = create_text_format(renderer, font_size, font_weight, font_family, italic, &created);
+  if (FAILED(result)) {
+    return result;
+  }
+  constexpr size_t max_cached_text_formats = 32;
+  if (renderer->cached_text_formats.size() >= max_cached_text_formats) {
+    renderer->cached_text_formats.front().format->Release();
+    renderer->cached_text_formats.erase(renderer->cached_text_formats.begin());
+  }
+  renderer->cached_text_formats.push_back(CachedTextFormat{font_size, font_weight, font_family, italic, created});
+  *format = created;
+  return S_OK;
+}
+
+// retire_text_layout keeps a layout alive until EndDraw when a frame may still reference it.
+static void retire_text_layout(WoxRenderer *renderer, IDWriteTextLayout *layout) {
+  if (layout == nullptr) {
+    return;
+  }
+  if (renderer->frame_open) {
+    renderer->retired_text_layouts.push_back(layout);
+  } else {
+    layout->Release();
+  }
+}
+
+static void release_retired_text_layouts(WoxRenderer *renderer) {
+  for (IDWriteTextLayout *layout : renderer->retired_text_layouts) {
+    layout->Release();
+  }
+  renderer->retired_text_layouts.clear();
+}
+
+// clear_text_caches drops every cached layout and format, for hide, trim, and font changes.
+static void clear_text_caches(WoxRenderer *renderer) {
+  for (CachedTextLayout &entry : renderer->cached_text_layouts) {
+    retire_text_layout(renderer, entry.layout);
+  }
+  renderer->cached_text_layouts.clear();
+  for (CachedTextFormat &entry : renderer->cached_text_formats) {
+    release_com(&entry.format);
+  }
+  renderer->cached_text_formats.clear();
+  if (!renderer->frame_open) {
+    release_retired_text_layouts(renderer);
+  }
+}
+
+static uint64_t text_layout_hash(const char *text, int32_t text_len, float font_size, uint8_t font_weight, uint8_t font_family, uint8_t italic, float width, float height) {
+  uint64_t hash = 1469598103934665603ULL;
+  const auto mix = [&hash](const void *data, size_t size) {
+    const uint8_t *bytes = static_cast<const uint8_t *>(data);
+    for (size_t index = 0; index < size; index++) {
+      hash ^= bytes[index];
+      hash *= 1099511628211ULL;
+    }
+  };
+  mix(text, static_cast<size_t>(text_len));
+  mix(&font_size, sizeof(font_size));
+  mix(&width, sizeof(width));
+  mix(&height, sizeof(height));
+  mix(&font_weight, 1);
+  mix(&font_family, 1);
+  mix(&italic, 1);
+  return hash;
+}
+
+static IDWriteTextLayout *find_cached_text_layout(WoxRenderer *renderer, uint64_t hash, const char *text, int32_t text_len, float font_size, uint8_t font_weight, uint8_t font_family, uint8_t italic, float width, float height) {
+  for (CachedTextLayout &entry : renderer->cached_text_layouts) {
+    if (entry.hash == hash && entry.font_size == font_size && entry.weight == font_weight && entry.font_slot == font_family && entry.italic == italic &&
+        entry.width == width && entry.height == height && entry.utf8_text.size() == static_cast<size_t>(text_len) && std::memcmp(entry.utf8_text.data(), text, static_cast<size_t>(text_len)) == 0) {
+      entry.last_used = ++renderer->cached_text_layout_use_serial;
+      return entry.layout;
+    }
+  }
+  return nullptr;
+}
+
+// cache_text_layout takes ownership of one reference. Texts over 256 bytes are never retained so
+// long previews cannot pin memory; the cache holds at most 256 layouts and evicts the coldest.
+static bool cache_text_layout(WoxRenderer *renderer, uint64_t hash, const char *text, int32_t text_len, float font_size, uint8_t font_weight, uint8_t font_family, uint8_t italic, float width, float height, IDWriteTextLayout *layout) {
+  constexpr int32_t max_cached_text_bytes = 256;
+  constexpr size_t max_cached_text_layouts = 256;
+  if (text_len > max_cached_text_bytes) {
+    return false;
+  }
+  if (renderer->cached_text_layouts.size() >= max_cached_text_layouts) {
+    auto oldest = std::min_element(
+        renderer->cached_text_layouts.begin(), renderer->cached_text_layouts.end(),
+        [](const CachedTextLayout &left, const CachedTextLayout &right) { return left.last_used < right.last_used; });
+    retire_text_layout(renderer, oldest->layout);
+    renderer->cached_text_layouts.erase(oldest);
+  }
+  CachedTextLayout entry;
+  entry.utf8_text.assign(text, static_cast<size_t>(text_len));
+  entry.hash = hash;
+  entry.font_size = font_size;
+  entry.weight = font_weight;
+  entry.font_slot = font_family;
+  entry.italic = italic;
+  entry.width = width;
+  entry.height = height;
+  entry.last_used = ++renderer->cached_text_layout_use_serial;
+  entry.layout = layout;
+  renderer->cached_text_layouts.push_back(std::move(entry));
+  return true;
+}
+
 // create_text_layout_unpinned builds one layout on the same font path as drawing, without a stable line box.
 static HRESULT create_text_layout_unpinned(WoxRenderer *renderer, const std::wstring &text, float font_size, uint8_t font_weight, uint8_t font_family, uint8_t italic, float width, float height, IDWriteTextLayout **layout) {
   IDWriteTextFormat *format = nullptr;
-  HRESULT result = create_text_format(renderer, font_size, font_weight, font_family, italic, &format);
+  HRESULT result = get_text_format(renderer, font_size, font_weight, font_family, italic, &format);
   if (FAILED(result)) {
     return result;
   }
   result = renderer->dwrite_factory->CreateTextLayout(text.c_str(), static_cast<UINT32>(text.size()), format, width, height, layout);
-  format->Release();
   DWRITE_FONT_WEIGHT native_font_weight;
   if (SUCCEEDED(result) && renderer->uses_default_font_family && font_family == 0 && native_ui_font_weight(font_weight, &native_font_weight)) {
     result = apply_default_cjk_font(*layout, text, native_font_weight);
@@ -720,6 +925,8 @@ extern "C" int32_t wox_renderer_set_font_family(WoxRenderer *renderer, const cha
 		return E_INVALIDARG;
 	}
 	const std::wstring family = utf8_to_wide(font_family);
+	// Cached layouts and formats embed the previous family, so none may survive a change.
+	clear_text_caches(renderer);
 	renderer->uses_default_font_family = family.empty();
 	renderer->font_family = family.empty() ? L"Segoe UI" : family;
 	return S_OK;
@@ -740,6 +947,8 @@ static void destroy_renderer(WoxRenderer *renderer) {
     renderer->d2d_context->EndDraw();
   }
   release_retired_image_bitmaps(renderer);
+  clear_text_caches(renderer);
+  release_retired_text_layouts(renderer);
   finish_composite_bitmaps(renderer, true);
   if (renderer->d2d_context != nullptr) {
     renderer->d2d_context->SetTarget(nullptr);
@@ -806,7 +1015,7 @@ extern "C" int32_t wox_renderer_create(uintptr_t window_handle, uint32_t width, 
     result = renderer->d2d_device->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE, &renderer->d2d_context);
   }
   if (SUCCEEDED(result)) {
-    result = DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory), reinterpret_cast<IUnknown **>(&renderer->dwrite_factory));
+    result = acquire_shared_dwrite_factory(&renderer->dwrite_factory);
   }
 
   const DXGI_SWAP_CHAIN_DESC1 swap_chain_description = composition_swap_chain_description(width, height);
@@ -942,6 +1151,7 @@ extern "C" int32_t wox_renderer_trim(WoxRenderer *renderer) {
     return E_UNEXPECTED;
   }
   clear_cached_image_bitmaps(renderer);
+  clear_text_caches(renderer);
 
   IDXGIDevice3 *dxgi_device = nullptr;
   finish_composite_bitmaps(renderer, true);
@@ -962,6 +1172,7 @@ extern "C" int32_t wox_renderer_clear_image_cache(WoxRenderer *renderer) {
     return E_UNEXPECTED;
   }
   clear_cached_image_bitmaps(renderer);
+  clear_text_caches(renderer);
   release_material_resources(renderer);
   finish_composite_bitmaps(renderer, true);
   // Releasing our bitmap references is not enough: Direct2D keeps internal CPU-side resource
@@ -1136,28 +1347,44 @@ extern "C" int32_t wox_renderer_stroke_rounded_rect(WoxRenderer *renderer, float
   return S_OK;
 }
 
-extern "C" int32_t wox_renderer_draw_text(WoxRenderer *renderer, const char *text, float x, float y, float width, float height, float font_size, uint8_t font_weight, uint8_t font_family, uint8_t italic, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha) {
+// wox_renderer_draw_text_utf8 takes an explicit length so Go strings cross the boundary without a copy.
+// Shaped layouts are cached by their full inputs, so repeated labels skip DirectWrite shaping.
+extern "C" int32_t wox_renderer_draw_text_utf8(WoxRenderer *renderer, const char *text, int32_t text_len, float x, float y, float width, float height, float font_size, uint8_t font_weight, uint8_t font_family, uint8_t italic, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha) {
   if (renderer == nullptr || !renderer->frame_open || renderer->brush == nullptr || renderer->dwrite_factory == nullptr) {
     return E_UNEXPECTED;
   }
-
-  const std::wstring wide_text = utf8_to_wide(text);
-  if (wide_text.empty()) {
+  if (text == nullptr || text_len <= 0) {
     return S_OK;
   }
 
-  // ponytail: create layouts per invalidated frame; cache by text and style when animated text makes this measurable.
-  IDWriteTextLayout *layout = nullptr;
-  HRESULT result = create_text_layout(renderer, wide_text, font_size, font_weight, font_family, italic, width, height, &layout);
-  if (FAILED(result)) {
-    return result;
+  const uint64_t hash = text_layout_hash(text, text_len, font_size, font_weight, font_family, italic, width, height);
+  IDWriteTextLayout *layout = find_cached_text_layout(renderer, hash, text, text_len, font_size, font_weight, font_family, italic, width, height);
+  bool retained = layout != nullptr;
+  if (layout == nullptr) {
+    const std::wstring wide_text = utf8_to_wide_len(text, text_len);
+    if (wide_text.empty()) {
+      return S_OK;
+    }
+    renderer->resource_stats.text_rasterizations++;
+    const HRESULT result = create_text_layout(renderer, wide_text, font_size, font_weight, font_family, italic, width, height, &layout);
+    if (FAILED(result)) {
+      return result;
+    }
+    retained = cache_text_layout(renderer, hash, text, text_len, font_size, font_weight, font_family, italic, width, height, layout);
   }
 
   const D2D1_COLOR_F color = make_color(red, green, blue, alpha);
   renderer->brush->SetColor(color);
   renderer->d2d_context->DrawTextLayout(D2D1::Point2F(x, y), layout, renderer->brush, static_cast<D2D1_DRAW_TEXT_OPTIONS>(D2D1_DRAW_TEXT_OPTIONS_CLIP | D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT));
-  layout->Release();
+  if (!retained) {
+    retire_text_layout(renderer, layout);
+  }
   return S_OK;
+}
+
+extern "C" int32_t wox_renderer_draw_text(WoxRenderer *renderer, const char *text, float x, float y, float width, float height, float font_size, uint8_t font_weight, uint8_t font_family, uint8_t italic, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha) {
+  const int32_t text_len = text == nullptr ? 0 : static_cast<int32_t>(std::strlen(text));
+  return wox_renderer_draw_text_utf8(renderer, text, text_len, x, y, width, height, font_size, font_weight, font_family, italic, red, green, blue, alpha);
 }
 
 extern "C" int32_t wox_renderer_draw_image(WoxRenderer *renderer, uint64_t image_id, const uint8_t *pixels, uint32_t image_width, uint32_t image_height, uint32_t row_stride, uint8_t pixel_format, float x, float y, float width, float height, float rotation_radians, float corner_radius, float source_x, float source_y, float source_width, float source_height) {
@@ -1800,14 +2027,15 @@ extern "C" int32_t wox_renderer_end_edge_fade(WoxRenderer *renderer) {
   return result;
 }
 
-extern "C" int32_t wox_renderer_measure_text(WoxRenderer *renderer, const char *text, float font_size, uint8_t font_weight, uint8_t font_family, uint8_t italic, float *width, float *height, float *baseline) {
+// wox_renderer_measure_text_utf8 measures one line from an explicit-length UTF-8 buffer.
+extern "C" int32_t wox_renderer_measure_text_utf8(WoxRenderer *renderer, const char *text, int32_t text_len, float font_size, uint8_t font_weight, uint8_t font_family, uint8_t italic, float *width, float *height, float *baseline) {
   if (renderer == nullptr || text == nullptr || width == nullptr || height == nullptr || baseline == nullptr) {
     return E_INVALIDARG;
   }
   *width = 0.0f;
   *height = 0.0f;
   *baseline = 0.0f;
-  const std::wstring wide_text = utf8_to_wide(text);
+  const std::wstring wide_text = utf8_to_wide_len(text, text_len);
   if (wide_text.empty()) {
     return S_OK;
   }
@@ -1823,9 +2051,15 @@ extern "C" int32_t wox_renderer_measure_text(WoxRenderer *renderer, const char *
   if (SUCCEEDED(result)) {
     *width = metrics.widthIncludingTrailingWhitespace;
     *height = metrics.height;
+    // Single-line text, the common case, is answered by one call into a stack buffer.
+    DWRITE_LINE_METRICS stack_lines[4];
     UINT32 line_count = 0;
-    layout->GetLineMetrics(nullptr, 0, &line_count);
-    if (line_count > 0) {
+    const HRESULT line_result = layout->GetLineMetrics(stack_lines, 4, &line_count);
+    if (SUCCEEDED(line_result)) {
+      if (line_count > 0) {
+        *baseline = stack_lines[0].baseline;
+      }
+    } else if (line_result == E_NOT_SUFFICIENT_BUFFER && line_count > 0) {
       std::vector<DWRITE_LINE_METRICS> lines(line_count);
       result = layout->GetLineMetrics(lines.data(), line_count, &line_count);
       if (SUCCEEDED(result)) {
@@ -1835,6 +2069,13 @@ extern "C" int32_t wox_renderer_measure_text(WoxRenderer *renderer, const char *
   }
   layout->Release();
   return result;
+}
+
+extern "C" int32_t wox_renderer_measure_text(WoxRenderer *renderer, const char *text, float font_size, uint8_t font_weight, uint8_t font_family, uint8_t italic, float *width, float *height, float *baseline) {
+  if (text == nullptr) {
+    return E_INVALIDARG;
+  }
+  return wox_renderer_measure_text_utf8(renderer, text, static_cast<int32_t>(std::strlen(text)), font_size, font_weight, font_family, italic, width, height, baseline);
 }
 
 // wox_renderer_measure_default_text_for_test exercises the default UI font path without a window.
@@ -1850,6 +2091,7 @@ extern "C" int32_t wox_renderer_measure_default_text_for_test(const char *text, 
   renderer.font_family = L"Segoe UI";
   renderer.uses_default_font_family = true;
   result = wox_renderer_measure_text(&renderer, text, font_size, font_weight, 0, 0, width, height, baseline);
+  clear_text_caches(&renderer);
   release_com(&renderer.dwrite_factory);
   return result;
 }
@@ -1875,6 +2117,7 @@ extern "C" int32_t wox_renderer_end_frame(WoxRenderer *renderer) {
     result = renderer->d2d_context->EndDraw();
   }
   release_retired_image_bitmaps(renderer);
+  release_retired_text_layouts(renderer);
   finish_composite_bitmaps(renderer, false);
   renderer->last_end_draw_result = result;
   renderer->frame_open = false;
@@ -1891,13 +2134,16 @@ extern "C" int32_t wox_renderer_end_frame(WoxRenderer *renderer) {
     parameters.DirtyRectsCount = 1;
     parameters.pDirtyRects = &renderer->present_dirty_rect;
   }
-  result = renderer->swap_chain->Present1(1, 0, &parameters);
+  // DirectComposition flip-model swap chains are composited by DWM on its own vsync, so a sync
+  // interval of 1 only blocks the UI thread. Animations are already paced by DwmFlush in
+  // runWindowsAnimationVsync, which keeps the interval-0 present tear-free.
+  result = renderer->swap_chain->Present1(0, 0, &parameters);
   renderer->last_present_result = result;
   if (FAILED(result)) {
     return result;
   }
   if (renderer->overlay_swap_chain != nullptr) {
-    result = renderer->overlay_swap_chain->Present1(1, 0, &parameters);
+    result = renderer->overlay_swap_chain->Present1(0, 0, &parameters);
     renderer->last_present_result = result;
     return result;
   }

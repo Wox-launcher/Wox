@@ -38,7 +38,7 @@ func darwinAccessibilityWindowFocused(window *platformWindow, _ AccessibilityTre
 	return focused
 }
 
-func updateDarwinAccessibility(window *platformWindow, tree AccessibilityTree) error {
+func updateDarwinAccessibility(window *platformWindow, tree AccessibilityTree, _ uint64) error {
 	native, err := window.openNative()
 	if err != nil {
 		return err

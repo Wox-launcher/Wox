@@ -313,7 +313,8 @@ func (h *Host) Frame(displayList *woxui.DisplayList, frame woxui.FrameInfo) {
 	caretVisible := h.caretVisibleForFrame()
 	damageTracker := &frameDamageTracker{}
 	work := &frameWorkCounters{}
-	layoutCtx := context{window: h.window, animation: animation, damage: damageTracker, debug: debugFrame, elements: h.elements, element: h.elements.root, work: work}
+	incrementalOff := incrementalDisabled()
+	layoutCtx := context{window: h.window, animation: animation, damage: damageTracker, debug: debugFrame, elements: h.elements, element: h.elements.root, work: work, incrementalOff: incrementalOff}
 	layoutConstraints := constraints{width: frame.Size.Width, height: frame.Size.Height}
 	// Layout the base tree once so overlay ownership can be validated against this frame's keys
 	// before composing the already-built base node with a separately laid-out overlay.
@@ -351,7 +352,7 @@ func (h *Host) Frame(displayList *woxui.DisplayList, frame woxui.FrameInfo) {
 		damage = expandDamageRect(damage, 4)
 	}
 	damage = clipDamageRect(damage, frame.Size)
-	if incrementalDisabled() {
+	if incrementalOff {
 		damage = woxui.Rect{}
 	}
 	logicalDamage := damage
@@ -427,7 +428,7 @@ func (h *Host) Frame(displayList *woxui.DisplayList, frame woxui.FrameInfo) {
 	}
 	h.root.draw(displayList, h.focused, focusRingTarget, caretVisible, false, false, work)
 	if retainCaretScene {
-		h.caretScene = displayList.PrepareCaretPatch(h.caretScene, !fullDamage && !incrementalDisabled())
+		h.caretScene = displayList.PrepareCaretPatch(h.caretScene, !fullDamage && !incrementalOff)
 		if patch := displayList.CaretPatch(); patch.Width > 0 && patch.Height > 0 {
 			h.setCaretDamage(patch)
 			logicalDamage = patch

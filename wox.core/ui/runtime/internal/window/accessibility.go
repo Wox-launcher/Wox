@@ -188,7 +188,7 @@ func (w *Window) UpdateAccessibility(tree AccessibilityTree, handler Accessibili
 	if hadPrevious && previousValue.(accessibilityWindowState).contentHash == contentHash {
 		return nil
 	}
-	return updateNativeAccessibility(w.native, tree)
+	return updateNativeAccessibility(w.native, tree, contentHash)
 }
 
 // accessibilityTreeContentHash covers ordered tree content while intentionally excluding frame generation.

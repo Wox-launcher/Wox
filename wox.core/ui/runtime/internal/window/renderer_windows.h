@@ -46,6 +46,8 @@ int32_t wox_renderer_fill_rounded_rect(WoxRenderer *renderer, float x, float y, 
 int32_t wox_renderer_fill_convex_polygon(WoxRenderer *renderer, const float *points, int32_t point_count, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha);
 int32_t wox_renderer_stroke_rounded_rect(WoxRenderer *renderer, float x, float y, float width, float height, float radius, float stroke_width, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha);
 int32_t wox_renderer_draw_text(WoxRenderer *renderer, const char *text, float x, float y, float width, float height, float font_size, uint8_t font_weight, uint8_t font_family, uint8_t italic, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha);
+// The utf8 variant takes an explicit byte length so Go strings need no NUL-terminated copy.
+int32_t wox_renderer_draw_text_utf8(WoxRenderer *renderer, const char *text, int32_t text_len, float x, float y, float width, float height, float font_size, uint8_t font_weight, uint8_t font_family, uint8_t italic, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha);
 int32_t wox_renderer_draw_image(WoxRenderer *renderer, uint64_t image_id, const uint8_t *pixels, uint32_t image_width, uint32_t image_height, uint32_t row_stride, uint8_t pixel_format, float x, float y, float width, float height, float rotation_radians, float corner_radius, float source_x, float source_y, float source_width, float source_height);
 int32_t wox_renderer_floating_material(WoxRenderer *renderer, float x, float y, float width, float height, float radius, float blur_sigma, float blur_margin, float brightness, float saturation, uint8_t tint_red, uint8_t tint_green, uint8_t tint_blue, uint8_t tint_alpha, uint8_t edge_red, uint8_t edge_green, uint8_t edge_blue, uint8_t edge_alpha);
 int32_t wox_renderer_begin_embedded_surface_overlay(WoxRenderer *renderer);
@@ -60,6 +62,7 @@ int32_t wox_renderer_end_edge_fade(WoxRenderer *renderer);
 int32_t wox_renderer_begin_opacity(WoxRenderer *renderer, float x, float y, float width, float height, float opacity, int32_t backdrop);
 int32_t wox_renderer_clear_clip(WoxRenderer *renderer);
 int32_t wox_renderer_measure_text(WoxRenderer *renderer, const char *text, float font_size, uint8_t font_weight, uint8_t font_family, uint8_t italic, float *width, float *height, float *baseline);
+int32_t wox_renderer_measure_text_utf8(WoxRenderer *renderer, const char *text, int32_t text_len, float font_size, uint8_t font_weight, uint8_t font_family, uint8_t italic, float *width, float *height, float *baseline);
 // Measures with the default Segoe UI plus YaHei UI fallback, without a window.
 int32_t wox_renderer_measure_default_text_for_test(const char *text, float font_size, uint8_t font_weight, float *width, float *height, float *baseline);
 int32_t wox_renderer_end_frame(WoxRenderer *renderer);

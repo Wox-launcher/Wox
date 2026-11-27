@@ -1706,3 +1706,51 @@ func TestFromCoreShowOptionsPreservesRestoreWindow(t *testing.T) {
 		t.Fatalf("restore window = %#v, want %#v", params.RestoreWindow, source)
 	}
 }
+
+// TestTextPreviewSectionDefersBuildUntilBoundaryRebuilds keeps side-effect-free previews from
+// constructing a widget tree on a Boundary cache hit.
+func TestTextPreviewSectionDefersBuildUntilBoundaryRebuilds(t *testing.T) {
+	for _, kind := range []string{"text", "url"} {
+		app := bindTestApp(&App{})
+		result := queryResult{Preview: queryPreview{PreviewType: kind, PreviewData: "hello"}}
+		section, ok := app.buildPreviewSection(result, viewSnapshot{palette: defaultPalette()}, 700, 400, 1).(woxwidget.Boundary[launcherPreparedSectionProps])
+		if !ok {
+			t.Fatalf("%s preview was not wrapped in the prepared-section boundary", kind)
+		}
+		if section.Props.Build == nil || section.Props.Child != nil {
+			t.Fatalf("%s preview built eagerly: build=%t child=%t", kind, section.Props.Build != nil, section.Props.Child != nil)
+		}
+	}
+}
+
+// TestTextPreviewSectionSignatureCoversDensityAndFont keeps a Boundary from reusing a preview tree
+// laid out for another density or font when content and bounds are unchanged.
+func TestTextPreviewSectionSignatureCoversDensityAndFont(t *testing.T) {
+	app := bindTestApp(&App{})
+	result := queryResult{Preview: queryPreview{PreviewType: "text", PreviewData: "hello world"}}
+	signature := func(snapshot viewSnapshot) string {
+		section, ok := app.buildPreviewSection(result, snapshot, 700, 400, 1).(woxwidget.Boundary[launcherPreparedSectionProps])
+		if !ok || section.Props.Build == nil {
+			t.Fatal("text preview must be a deferred prepared-section boundary")
+		}
+		if section.Props.Build() == nil {
+			t.Fatal("deferred build returned no widget")
+		}
+		return section.Props.Signature
+	}
+	base := viewSnapshot{palette: defaultPalette(), densityMetrics: launcherDensityMetrics{scale: 1}}
+	baseline := signature(base)
+	if signature(base) != baseline {
+		t.Fatal("identical inputs must keep the signature stable")
+	}
+	denser := base
+	denser.densityMetrics = launcherDensityMetrics{scale: 1.25}
+	if signature(denser) == baseline {
+		t.Fatal("density change did not change the preview signature")
+	}
+	otherFont := base
+	otherFont.appFontFamily = "Consolas"
+	if signature(otherFont) == baseline {
+		t.Fatal("font family change did not change the preview signature")
+	}
+}

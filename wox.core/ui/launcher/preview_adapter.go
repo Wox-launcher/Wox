@@ -472,8 +472,13 @@ func (a *previewController) previewBodyTags(preview queryPreview) []previewTag {
 }
 
 func (a *previewController) buildScrollablePreviewText(scrollKey, value string, color woxui.Color, scrollPosition string, width, height float32, theme woxcomponent.Theme) woxwidget.Widget {
-	fontSize := a.appearance.densityMetrics.scaled(woxcomponent.PreviewBodyFontSize)
-	lineHeight := a.appearance.densityMetrics.scaled(22)
+	return a.buildScrollablePreviewTextWithDensity(scrollKey, value, color, scrollPosition, width, height, theme, a.appearance.densityMetrics)
+}
+
+// buildScrollablePreviewTextWithDensity takes typography input explicitly for deferred builders.
+func (a *previewController) buildScrollablePreviewTextWithDensity(scrollKey, value string, color woxui.Color, scrollPosition string, width, height float32, theme woxcomponent.Theme, density launcherDensityMetrics) woxwidget.Widget {
+	fontSize := density.scaled(woxcomponent.PreviewBodyFontSize)
+	lineHeight := density.scaled(22)
 	initialOffset := float32(0)
 	if scrollPosition == "bottom" {
 		initialOffset = float32(math.MaxFloat32)
@@ -485,18 +490,56 @@ func (a *previewController) buildScrollablePreviewText(scrollKey, value string, 
 }
 
 func (a *previewController) buildTextPreview(scrollKey, value, scrollPosition string, palette uiPalette, width, height float32) woxwidget.Widget {
+	return a.buildTextPreviewWithDensity(scrollKey, value, scrollPosition, palette, width, height, a.appearance.densityMetrics)
+}
+
+// buildTextPreviewWithDensity takes typography input explicitly for deferred builders.
+func (a *previewController) buildTextPreviewWithDensity(scrollKey, value, scrollPosition string, palette uiPalette, width, height float32, density launcherDensityMetrics) woxwidget.Widget {
 	if strings.TrimSpace(value) == "" {
 		value = "No preview available"
 	}
-	fontSize := a.appearance.densityMetrics.scaled(woxcomponent.PreviewQuoteFontSize)
-	lineHeight := a.appearance.densityMetrics.scaled(25)
+	fontSize := density.scaled(woxcomponent.PreviewQuoteFontSize)
+	lineHeight := density.scaled(25)
 	style := woxui.TextStyle{Size: fontSize}
 	theme := palette.componentTheme()
 	if !previewview.TextPreviewFits(value, a.window(), style, width, height, lineHeight) {
-		return a.buildScrollablePreviewText(scrollKey, value, previewColorWithOpacity(palette.previewText, 0.86), scrollPosition, width, height, theme)
+		return a.buildScrollablePreviewTextWithDensity(scrollKey, value, previewColorWithOpacity(palette.previewText, 0.86), scrollPosition, width, height, theme, density)
 	}
 	return previewview.TextPreview(previewview.TextPreviewProps{
 		ID: scrollKey, Value: value, Width: width, Height: height, FontSize: fontSize, LineHeight: lineHeight, Theme: theme, Window: a.window(),
+	})
+}
+
+// buildResolvedTextPreview builds text, ai_stream and url previews only from already-resolved inputs
+// so a Boundary rebuild never reads mutable launcher state beyond what its signature covers.
+func (a *App) buildResolvedTextPreview(result queryResult, preview queryPreview, palette uiPalette, density launcherDensityMetrics, translations map[string]string, width, height float32, fullBleed bool) woxwidget.Widget {
+	translate := func(value string) string { return translateFrom(translations, value) }
+	scrollKey := result.QueryID + "\x00" + result.ID + "\x00" + preview.PreviewType
+	tags := append(previewTagsWith(preview.PreviewTags, translate), previewTagsWith(a.previews.previewBodyTags(preview), translate)...)
+	layout := previewview.ResolvePreviewLayout(width, height, len(tags) > 0, palette.componentTheme(), fullBleed)
+	theme := palette.componentTheme()
+	scrollable := func(value string, color woxui.Color) woxwidget.Widget {
+		if strings.TrimSpace(value) == "" {
+			value = "No preview available"
+		}
+		return a.previews.buildScrollablePreviewTextWithDensity(scrollKey, value, color, preview.ScrollPosition, layout.BodyWidth, layout.BodyHeight, theme, density)
+	}
+	var body woxwidget.Widget
+	switch preview.PreviewType {
+	case "text":
+		body = a.previews.buildTextPreviewWithDensity(scrollKey, preview.PreviewData, preview.ScrollPosition, palette, layout.BodyWidth, layout.BodyHeight, density)
+	case "ai_stream":
+		data, err := decodeStructuredPreview[aiStreamPreviewData](preview.PreviewData)
+		if err != nil {
+			body = scrollable(fmt.Sprintf("Invalid AI stream preview: %v", err), theme.ErrorText)
+		} else {
+			body = scrollable(formatAIStreamPreview(data), palette.previewText)
+		}
+	default:
+		body = scrollable("URL preview\n\n"+preview.PreviewData+"\n\nThe embedded browser surface will be attached through the platform preview host.", palette.previewText)
+	}
+	return previewview.PreviewView(previewview.PreviewProps{
+		Width: width, Height: height, Tags: tags, Body: body, Theme: theme, Window: a.window, OnTagHover: a.previews.setPreviewTooltip, FullBleed: fullBleed,
 	})
 }
 
@@ -595,10 +638,15 @@ func (a *previewController) buildListPreview(data previewListData, palette uiPal
 }
 
 func (a *previewController) previewTags(tags []previewTag) []previewview.PreviewTag {
+	return previewTagsWith(tags, a.language.translate)
+}
+
+// previewTagsWith resolves tags through an explicit translator.
+func previewTagsWith(tags []previewTag, translate func(string) string) []previewview.PreviewTag {
 	resolved := make([]previewview.PreviewTag, 0, len(tags))
 	for _, tag := range tags {
-		label := strings.TrimSpace(a.language.translate(tag.Label))
-		tooltip := strings.TrimSpace(a.language.translate(tag.Tooltip))
+		label := strings.TrimSpace(translate(tag.Label))
+		tooltip := strings.TrimSpace(translate(tag.Tooltip))
 		if label == "" {
 			label = tooltip
 		}
