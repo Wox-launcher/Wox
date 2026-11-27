@@ -1,6 +1,8 @@
 .PHONY: clean build pack-resources help ui-resources sync-ai-skills window-hook-build crash-handler-build file-index-service-build woxmr-build
 
 SQLITE_BUILD_TAGS ?= sqlite_fts5
+comma := ,
+RELEASE_BUILD_TAGS := $(strip $(subst $(comma), ,$(SQLITE_BUILD_TAGS)) wox_release)
 
 # Determine the current platform
 ifeq ($(OS),Windows_NT)
@@ -76,7 +78,7 @@ sync-ai-skills:
 
 # Run after all helper builds/signing; the overlay contains the exact final bytes.
 pack-resources:
-	go run ./cmd/assetpack -tags "$(SQLITE_BUILD_TAGS)" -goos $(if $(filter macos,$(PLATFORM)),darwin,$(PLATFORM)) -goarch $(GOARCH)
+	go run ./cmd/assetpack -tags "$(RELEASE_BUILD_TAGS)" -goos $(if $(filter macos,$(PLATFORM)),darwin,$(PLATFORM)) -goarch $(GOARCH)
 
 build: clean sync-ai-skills
 	$(MAKE) woxmr-build
@@ -93,16 +95,16 @@ ifeq ($(PLATFORM),windows)
 		-product-version "$(VERSION)" -file-version "$(VERSION)" \
 		-propagate-ver-strings
 	# Keep Go symbols and DWARF data so crash minidumps can be symbolized against the exact release executable.
-	CGO_ENABLED=1 GOOS=windows GOARCH=$(GOARCH) go build -trimpath -overlay .build/assets/overlay.json -tags "$(SQLITE_BUILD_TAGS)" -ldflags "-s -w -H windowsgui -X 'wox/util.ProdEnv=true' -X 'wox/util/filesearchservice.EmbeddedVersion=$(FILE_INDEX_SERVICE_VERSION)'" -o $(RELEASE_DIR)/wox-windows-$(GOARCH).exe
+	CGO_ENABLED=1 GOOS=windows GOARCH=$(GOARCH) go build -trimpath -overlay .build/assets/overlay.json -tags "$(RELEASE_BUILD_TAGS)" -ldflags "-s -w -H windowsgui -X 'wox/util/filesearchservice.EmbeddedVersion=$(FILE_INDEX_SERVICE_VERSION)'" -o $(RELEASE_DIR)/wox-windows-$(GOARCH).exe
 endif
 
 ifeq ($(PLATFORM),linux)
 	# Keep symbols in release binaries so native crash reports retain actionable stack information.
-	CGO_ENABLED=1 GOOS=linux GOARCH=$(GOARCH) go build -trimpath -overlay .build/assets/overlay.json -tags "$(SQLITE_BUILD_TAGS)" -ldflags "-s -w -X 'wox/util.ProdEnv=true'" -o $(RELEASE_DIR)/wox-linux-$(GOARCH)
+	CGO_ENABLED=1 GOOS=linux GOARCH=$(GOARCH) go build -trimpath -overlay .build/assets/overlay.json -tags "$(RELEASE_BUILD_TAGS)" -ldflags "-s -w" -o $(RELEASE_DIR)/wox-linux-$(GOARCH)
 endif
 ifeq ($(PLATFORM),macos)
 	# Keep symbols in release binaries so macOS diagnostic reports can be symbolized with the shipped executable.
-	CGO_ENABLED=1 GOOS=darwin GOARCH=$(GOARCH) CGO_CFLAGS="-mmacosx-version-min=12.0" CGO_LDFLAGS="-mmacosx-version-min=12.0 -Wl,-no_warn_duplicate_libraries" go build -trimpath -overlay .build/assets/overlay.json -tags "$(SQLITE_BUILD_TAGS)" -ldflags "-s -w -X 'wox/util.ProdEnv=true'" -o $(RELEASE_DIR)/wox-mac-$(GOARCH)
+	CGO_ENABLED=1 GOOS=darwin GOARCH=$(GOARCH) CGO_CFLAGS="-mmacosx-version-min=12.0" CGO_LDFLAGS="-mmacosx-version-min=12.0 -Wl,-no_warn_duplicate_libraries" go build -trimpath -overlay .build/assets/overlay.json -tags "$(RELEASE_BUILD_TAGS)" -ldflags "-s -w" -o $(RELEASE_DIR)/wox-mac-$(GOARCH)
 endif
 
 WINDOW_HOOK_SOURCE := util/windowhook/hook/window_hook.c

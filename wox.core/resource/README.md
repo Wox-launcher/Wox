@@ -33,7 +33,7 @@ without a generation prerequisite. Release-mode checks can be run from `wox.core
 
 ```sh
 make pack-resources
-go test -overlay .build/assets/overlay.json -tags sqlite_fts5 ./internal/assetfs ./resource ./plugin/system/emoji
+go test -overlay .build/assets/overlay.json -tags sqlite_fts5,wox_release ./internal/assetfs ./resource ./plugin/system/emoji
 ```
 
 The runtime decompresses one file per read, checks gzip integrity, and does not

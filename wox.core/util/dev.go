@@ -2,11 +2,11 @@ package util
 
 const DefaultDevServerPort = 34987
 
-// will set by -X flag on build
+// ProdEnv lets untagged builds and tests opt into production behavior.
 var ProdEnv string
 
 func IsProd() bool {
-	return ProdEnv == "true"
+	return ReleaseBuild || ProdEnv == "true"
 }
 
 func IsDev() bool {

@@ -53,7 +53,8 @@ func New(stage string) *TimeTracker {
 }
 
 func (t *TimeTracker) Enabled() bool {
-	return t != nil && t.enabled
+	// Fold timing calls away in releases even when the tracker arrives via a pointer.
+	return !util.ReleaseBuild && t != nil && t.enabled
 }
 
 // Start returns a timing boundary only when tracking is active.
