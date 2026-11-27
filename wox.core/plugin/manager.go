@@ -74,6 +74,13 @@ type Manager struct {
 	autoQueryHistory             *autoQueryHistoryRecorder
 	aiProviders                  *util.HashMap[string, ai.Provider]
 	activeBrowserUrl             string // Active browser URL before Wox is activated.
+
+	systemActionOnce        sync.Once
+	pinInQueryActionFn      func(context.Context, ActionContext)
+	unpinInQueryActionFn    func(context.Context, ActionContext)
+	resetRankingActionFn    func(context.Context, ActionContext)
+	setResultHotkeySubmitFn func(context.Context, FormActionContext)
+	setResultAliasSubmitFn  func(context.Context, FormActionContext)
 }
 
 const (
@@ -516,7 +523,7 @@ func (m *Manager) finalizePluginQueryResponse(ctx context.Context, pluginInstanc
 	var resultsAggregate timetracking.ResultsPolishAggregate
 	collectResultTiming := util.IsDev()
 	openPluginSettingActionStart := time.Now()
-	openPluginSettingAction := m.newOpenPluginSettingAction(ctx, pluginInstance)
+	defaultActionBatch := m.newDefaultActionBatchContext(ctx, pluginInstance, query)
 	openPluginSettingActionUs := time.Since(openPluginSettingActionStart).Microseconds()
 	// Default and plugin actions often repeat the same icons across every result.
 	actionIconCache := make(map[common.WoxImage]common.WoxImage)
@@ -526,7 +533,7 @@ func (m *Manager) finalizePluginQueryResponse(ctx context.Context, pluginInstanc
 		resultTimingStart := time.Now()
 		defaultActionsStart := util.GetSystemTimestamp()
 		defaultActionsTimingStart := time.Now()
-		defaultActions := m.getDefaultActionsWithOpenPluginSettingAction(ctx, pluginInstance, query, response.Results[i], "", openPluginSettingAction)
+		defaultActions := m.getDefaultActionsWithBatchContext(ctx, pluginInstance, query, response.Results[i], "", defaultActionBatch)
 		defaultActionsCost := util.GetSystemTimestamp() - defaultActionsStart
 		defaultActionsCostUs := time.Since(defaultActionsTimingStart).Microseconds()
 		totalDefaultActionsCost += defaultActionsCost
@@ -649,11 +656,196 @@ func (m *Manager) GetResultForFailedQuery(ctx context.Context, pluginMetadata Me
 	}
 }
 
+type defaultActionBatchContext struct {
+	openPluginSettingAction QueryResultAction
+	pinAction               QueryResultAction
+	unpinAction             QueryResultAction
+	resetRankingAction      QueryResultAction
+	hasAddQueryAlias        bool
+	addQueryAliasAction     QueryResultAction
+	bindings                []setting.ResultBinding
+	setHotkeyAction         QueryResultAction
+	setAliasAction          QueryResultAction
+	emptyHotkeyForm         definition.PluginSettingDefinitions
+	emptyAliasForm          definition.PluginSettingDefinitions
+}
+
+// ensureSystemActionHandlers initializes shared closures once so per-result actions
+// do not allocate new closures or capture full QueryResult copies.
+func (m *Manager) ensureSystemActionHandlers() {
+	m.systemActionOnce.Do(func() {
+		settingManager := setting.GetSettingManager()
+		m.pinInQueryActionFn = func(ctx context.Context, actionContext ActionContext) {
+			if m == nil || m.resultStore == nil {
+				return
+			}
+			resultCache, found := m.resultStore.findWithContext(ctx, actionContext.ResultId)
+			if !found || resultCache.PluginInstance == nil {
+				return
+			}
+			resultHash := resultIdentityHash(resultCache.PluginInstance.Metadata.Id, resultCache.Result)
+			settingManager.PinResult(ctx, resultHash, resultCache.Query.RawQuery)
+			api := NewAPI(resultCache.PluginInstance)
+			api.ShowToastMsg(ctx, ShowToastMsgOption{Message: "i18n:plugin_manager_pin_in_query_success"})
+			api.RefreshQuery(ctx, RefreshQueryParam{SelectedResultId: actionContext.ResultId})
+		}
+		m.unpinInQueryActionFn = func(ctx context.Context, actionContext ActionContext) {
+			if m == nil || m.resultStore == nil {
+				return
+			}
+			resultCache, found := m.resultStore.findWithContext(ctx, actionContext.ResultId)
+			if !found || resultCache.PluginInstance == nil {
+				return
+			}
+			resultHash := resultIdentityHash(resultCache.PluginInstance.Metadata.Id, resultCache.Result)
+			settingManager.UnpinResult(ctx, resultHash, resultCache.Query.RawQuery)
+			api := NewAPI(resultCache.PluginInstance)
+			api.ShowToastMsg(ctx, ShowToastMsgOption{Message: "i18n:plugin_manager_unpin_in_query_success"})
+			api.RefreshQuery(ctx, RefreshQueryParam{SelectedResultId: actionContext.ResultId})
+		}
+		m.resetRankingActionFn = func(ctx context.Context, actionContext ActionContext) {
+			if m == nil || m.resultStore == nil {
+				return
+			}
+			resultCache, found := m.resultStore.findWithContext(ctx, actionContext.ResultId)
+			if !found || resultCache.PluginInstance == nil {
+				return
+			}
+			resultHash := resultIdentityHash(resultCache.PluginInstance.Metadata.Id, resultCache.Result)
+			settingManager.ClearActionedResults(ctx, resultHash)
+			api := NewAPI(resultCache.PluginInstance)
+			api.ShowToastMsg(ctx, ShowToastMsgOption{Message: "i18n:plugin_manager_reset_ranking_success"})
+			api.RefreshQuery(ctx, RefreshQueryParam{PreserveSelectedIndex: true})
+		}
+		m.setResultHotkeySubmitFn = func(ctx context.Context, actionContext FormActionContext) {
+			if m == nil || m.resultStore == nil {
+				return
+			}
+			resultCache, found := m.resultStore.findWithContext(ctx, actionContext.ResultId)
+			if !found || resultCache.PluginInstance == nil {
+				return
+			}
+			hash := m.resultBindingHash(ctx, resultCache.PluginInstance, resultCache.Query, resultCache.Result, resultCache.SourceMRUHash)
+			m.submitResultBindingField(ctx, resultCache.PluginInstance, resultCache.Result, hash, resultBindingFormHotkeyKey, actionContext.Values[resultBindingFormHotkeyKey], actionContext.ResultId)
+		}
+		m.setResultAliasSubmitFn = func(ctx context.Context, actionContext FormActionContext) {
+			if m == nil || m.resultStore == nil {
+				return
+			}
+			resultCache, found := m.resultStore.findWithContext(ctx, actionContext.ResultId)
+			if !found || resultCache.PluginInstance == nil {
+				return
+			}
+			hash := m.resultBindingHash(ctx, resultCache.PluginInstance, resultCache.Query, resultCache.Result, resultCache.SourceMRUHash)
+			m.submitResultBindingField(ctx, resultCache.PluginInstance, resultCache.Result, hash, resultBindingFormAliasKey, actionContext.Values[resultBindingFormAliasKey], actionContext.ResultId)
+		}
+	})
+}
+
+func (m *Manager) translateSingleResultAction(ctx context.Context, pluginInstance *Instance, action *QueryResultAction) {
+	if pluginInstance == nil || action == nil {
+		return
+	}
+	action.SearchAliases = appendActionEnglishAlias(ctx, pluginInstance, action.Name, action.SearchAliases)
+	action.Name = m.translatePlugin(ctx, pluginInstance, action.Name)
+	if action.Type == QueryResultActionTypeForm {
+		translator := func(c context.Context, key string) string {
+			return m.translatePlugin(c, pluginInstance, key)
+		}
+		if pluginInstance.API != nil {
+			translator = pluginInstance.API.GetTranslation
+		}
+		for definitionIndex := range action.Form {
+			orig := action.Form[definitionIndex].Value
+			if orig != nil {
+				if translated := orig.Translate(translator); translated != orig {
+					action.Form[definitionIndex].Value = translated
+				}
+			}
+		}
+	}
+}
+
+func (m *Manager) newDefaultActionBatchContext(ctx context.Context, pluginInstance *Instance, query Query) defaultActionBatchContext {
+	m.ensureSystemActionHandlers()
+	batch := defaultActionBatchContext{
+		openPluginSettingAction: m.newOpenPluginSettingAction(ctx, pluginInstance),
+		pinAction: QueryResultAction{
+			Id:                     systemActionPinInQueryID,
+			Name:                   "i18n:plugin_manager_pin_in_query",
+			Icon:                   icons.Get(icons.ActionPin),
+			IsSystemAction:         true,
+			PreventHideAfterAction: true,
+			Action:                 m.pinInQueryActionFn,
+		},
+		unpinAction: QueryResultAction{
+			Id:                     systemActionUnpinInQueryID,
+			Name:                   "i18n:plugin_manager_unpin_in_query",
+			Icon:                   icons.Get(icons.ActionUnpin),
+			IsSystemAction:         true,
+			PreventHideAfterAction: true,
+			Action:                 m.unpinInQueryActionFn,
+		},
+		resetRankingAction: QueryResultAction{
+			Id:                     systemActionResetRankingID,
+			Name:                   "i18n:plugin_manager_reset_ranking",
+			Icon:                   icons.Get(icons.ActionRevertRanking),
+			IsSystemAction:         true,
+			PreventHideAfterAction: true,
+			Action:                 m.resetRankingActionFn,
+		},
+	}
+	m.translateSingleResultAction(ctx, pluginInstance, &batch.pinAction)
+	m.translateSingleResultAction(ctx, pluginInstance, &batch.unpinAction)
+	m.translateSingleResultAction(ctx, pluginInstance, &batch.resetRankingAction)
+
+	if pluginInstance != nil && pluginInstance.Metadata.IsSupportFeature(MetadataFeatureMRU) && len(pluginInstance.MRURestoreCallbacks) > 0 {
+		batch.bindings = currentResultBindings()
+		batch.emptyHotkeyForm = newResultHotkeyForm("")
+		batch.emptyAliasForm = newResultAliasForm("")
+		batch.setHotkeyAction = QueryResultAction{
+			Id:                     systemActionSetResultHotkeyID,
+			Name:                   "i18n:plugin_manager_set_result_hotkey",
+			Type:                   QueryResultActionTypeForm,
+			Icon:                   icons.Get(icons.ActionHotkey),
+			IsSystemAction:         true,
+			PreventHideAfterAction: true,
+			Form:                   batch.emptyHotkeyForm,
+			OnSubmit:               m.setResultHotkeySubmitFn,
+		}
+		batch.setAliasAction = QueryResultAction{
+			Id:                     systemActionSetResultAliasID,
+			Name:                   "i18n:plugin_manager_set_result_alias",
+			Type:                   QueryResultActionTypeForm,
+			Icon:                   icons.Get(icons.ActionQueryAlias),
+			IsSystemAction:         true,
+			PreventHideAfterAction: true,
+			Form:                   batch.emptyAliasForm,
+			OnSubmit:               m.setResultAliasSubmitFn,
+		}
+		m.translateSingleResultAction(ctx, pluginInstance, &batch.setHotkeyAction)
+		m.translateSingleResultAction(ctx, pluginInstance, &batch.setAliasAction)
+	}
+
+	if queryText, ok := newQueryAliasText(query, setting.GetSettingManager().GetWoxSetting(ctx).QueryAliases.Get()); ok {
+		batch.hasAddQueryAlias = true
+		batch.addQueryAliasAction = m.newAddQueryAliasAction(pluginInstance, queryText)
+		m.translateSingleResultAction(ctx, pluginInstance, &batch.addQueryAliasAction)
+	}
+	return batch
+}
+
 func (m *Manager) getDefaultActions(ctx context.Context, pluginInstance *Instance, query Query, result QueryResult, sourceHash string) (defaultActions []QueryResultAction) {
 	return m.getDefaultActionsWithOpenPluginSettingAction(ctx, pluginInstance, query, result, sourceHash, m.newOpenPluginSettingAction(ctx, pluginInstance))
 }
 
 func (m *Manager) getDefaultActionsWithOpenPluginSettingAction(ctx context.Context, pluginInstance *Instance, query Query, result QueryResult, sourceHash string, openPluginSettingAction QueryResultAction) (defaultActions []QueryResultAction) {
+	batch := m.newDefaultActionBatchContext(ctx, pluginInstance, query)
+	batch.openPluginSettingAction = openPluginSettingAction
+	return m.getDefaultActionsWithBatchContext(ctx, pluginInstance, query, result, sourceHash, batch)
+}
+
+func (m *Manager) getDefaultActionsWithBatchContext(ctx context.Context, pluginInstance *Instance, query Query, result QueryResult, sourceHash string, batch defaultActionBatchContext) (defaultActions []QueryResultAction) {
 	// Pins and usage history share one identity. Translate first so an i18n title
 	// hashes the same way calculateResultScore does after polish.
 	scoreResult := result
@@ -661,70 +853,24 @@ func (m *Manager) getDefaultActionsWithOpenPluginSettingAction(ctx context.Conte
 	scoreResult.SubTitle = m.translatePlugin(ctx, pluginInstance, result.SubTitle)
 	resultHash := resultIdentityHash(pluginInstance.Metadata.Id, scoreResult)
 	settingManager := setting.GetSettingManager()
-	// Declare both actions first
-	var pinInQueryAction func(context.Context, ActionContext)
-	var unpinInQueryAction func(context.Context, ActionContext)
-
-	// Define pin in current query action. Refresh rebuilds scores so only this query moves the row up.
-	pinInQueryAction = func(ctx context.Context, actionContext ActionContext) {
-		settingManager.PinResult(ctx, resultHash, query.RawQuery)
-		api := NewAPI(pluginInstance)
-		api.ShowToastMsg(ctx, ShowToastMsgOption{Message: "i18n:plugin_manager_pin_in_query_success"})
-		api.RefreshQuery(ctx, RefreshQueryParam{SelectedResultId: actionContext.ResultId})
-	}
-
-	// Define unpin from current query action.
-	unpinInQueryAction = func(ctx context.Context, actionContext ActionContext) {
-		settingManager.UnpinResult(ctx, resultHash, query.RawQuery)
-		api := NewAPI(pluginInstance)
-		api.ShowToastMsg(ctx, ShowToastMsgOption{Message: "i18n:plugin_manager_unpin_in_query_success"})
-		api.RefreshQuery(ctx, RefreshQueryParam{SelectedResultId: actionContext.ResultId})
-	}
 
 	if settingManager.IsPinedResult(ctx, resultHash, query.RawQuery) {
-		defaultActions = append(defaultActions, QueryResultAction{
-			Id:                     systemActionUnpinInQueryID,
-			Name:                   "i18n:plugin_manager_unpin_in_query",
-			Icon:                   icons.Get(icons.ActionUnpin),
-			IsSystemAction:         true,
-			PreventHideAfterAction: true,
-			Action:                 unpinInQueryAction,
-		})
+		defaultActions = append(defaultActions, batch.unpinAction)
 	} else {
-		defaultActions = append(defaultActions, QueryResultAction{
-			Id:                     systemActionPinInQueryID,
-			Name:                   "i18n:plugin_manager_pin_in_query",
-			Icon:                   icons.Get(icons.ActionPin),
-			IsSystemAction:         true,
-			PreventHideAfterAction: true,
-			Action:                 pinInQueryAction,
-		})
+		defaultActions = append(defaultActions, batch.pinAction)
 	}
 
-	resetRankingAction := func(ctx context.Context, actionContext ActionContext) {
-		settingManager.ClearActionedResults(ctx, resultHash)
-
-		api := NewAPI(pluginInstance)
-		api.ShowToastMsg(ctx, ShowToastMsgOption{Message: "i18n:plugin_manager_reset_ranking_success"})
-		api.RefreshQuery(ctx, RefreshQueryParam{PreserveSelectedIndex: true})
-	}
 	actionedScore := m.calculateResultScore(ctx, pluginInstance.Metadata.Id, scoreResult, query)
-	defaultActions = append(defaultActions, QueryResultAction{
-		Id:                     systemActionResetRankingID,
-		Name:                   "i18n:plugin_manager_reset_ranking",
-		Icon:                   icons.Get(icons.ActionRevertRanking),
-		Tail:                   actionedRankingScoreTail(actionedScore),
-		IsSystemAction:         true,
-		PreventHideAfterAction: true,
-		Action:                 resetRankingAction,
-	})
+	resetRankingAction := batch.resetRankingAction
+	resetRankingAction.Tail = actionedRankingScoreTail(actionedScore)
+	defaultActions = append(defaultActions, resetRankingAction)
 
-	if queryText, ok := newQueryAliasText(query, settingManager.GetWoxSetting(ctx).QueryAliases.Get()); ok {
-		defaultActions = append(defaultActions, m.newAddQueryAliasAction(pluginInstance, queryText))
+	if batch.hasAddQueryAlias {
+		defaultActions = append(defaultActions, batch.addQueryAliasAction)
 	}
 
-	defaultActions = append(defaultActions, openPluginSettingAction)
-	defaultActions = append(defaultActions, m.newResultBindingActions(ctx, pluginInstance, query, result, sourceHash)...)
+	defaultActions = append(defaultActions, batch.openPluginSettingAction)
+	defaultActions = append(defaultActions, m.newResultBindingActionsWithBatch(ctx, pluginInstance, query, result, sourceHash, batch)...)
 
 	return defaultActions
 }

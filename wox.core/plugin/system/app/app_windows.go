@@ -30,15 +30,17 @@ var (
 	verQueryValue          = version.NewProc("VerQueryValueW")
 
 	// Load psapi.dll for process enumeration
-	psapi                = syscall.NewLazyDLL("psapi.dll")
-	enumProcesses        = psapi.NewProc("EnumProcesses")
-	getModuleFileNameExW = psapi.NewProc("GetModuleFileNameExW")
-	getProcessMemoryInfo = psapi.NewProc("GetProcessMemoryInfo")
-	kernel32             = syscall.NewLazyDLL("kernel32.dll")
-	openProcess          = kernel32.NewProc("OpenProcess")
-	closeHandle          = kernel32.NewProc("CloseHandle")
-	getProcessTimes      = kernel32.NewProc("GetProcessTimes")
-	getPackageFamilyName = kernel32.NewProc("GetPackageFamilyName")
+	psapi                     = syscall.NewLazyDLL("psapi.dll")
+	enumProcesses             = psapi.NewProc("EnumProcesses")
+	getModuleFileNameExW      = psapi.NewProc("GetModuleFileNameExW")
+	getProcessMemoryInfo      = psapi.NewProc("GetProcessMemoryInfo")
+	kernel32                  = syscall.NewLazyDLL("kernel32.dll")
+	openProcess               = kernel32.NewProc("OpenProcess")
+	closeHandle               = kernel32.NewProc("CloseHandle")
+	getProcessTimes           = kernel32.NewProc("GetProcessTimes")
+	getPackageFamilyName      = kernel32.NewProc("GetPackageFamilyName")
+	ntdll                     = syscall.NewLazyDLL("ntdll.dll")
+	ntQueryInformationProcess = ntdll.NewProc("NtQueryInformationProcess")
 )
 
 const (
@@ -46,7 +48,29 @@ const (
 	PROCESS_QUERY_INFORMATION         = 0x0400
 	PROCESS_VM_READ                   = 0x0010
 	PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+	processVmCounters                 = 3
 )
+
+type vmCountersEx struct {
+	peakVirtualSize            uintptr
+	virtualSize                uintptr
+	pageFaultCount             uint32
+	peakWorkingSetSize         uintptr
+	workingSetSize             uintptr
+	quotaPeakPagedPoolUsage    uintptr
+	quotaPagedPoolUsage        uintptr
+	quotaPeakNonPagedPoolUsage uintptr
+	quotaNonPagedPoolUsage     uintptr
+	pagefileUsage              uintptr
+	peakPagefileUsage          uintptr
+	privateUsage               uintptr
+}
+
+type vmCountersEx2 struct {
+	countersEx            vmCountersEx
+	privateWorkingSetSize uintptr
+	sharedCommitUsage     uintptr
+}
 
 // PROCESS_MEMORY_COUNTERS_EX structure for GetProcessMemoryInfo
 type PROCESS_MEMORY_COUNTERS_EX struct {
@@ -66,9 +90,33 @@ type PROCESS_MEMORY_COUNTERS_EX struct {
 var appRetriever = &WindowsRetriever{}
 
 type processInfo struct {
-	Pid           int
-	Path          string
-	PackageFamily string
+	Pid                int
+	Path               string
+	PathLower          string
+	BaseLower          string
+	PackageFamily      string
+	PackageFamilyLower string
+}
+
+func (p processInfo) pathLower() string {
+	if p.PathLower != "" {
+		return p.PathLower
+	}
+	return strings.ToLower(filepath.Clean(p.Path))
+}
+
+func (p processInfo) baseLower() string {
+	if p.BaseLower != "" {
+		return p.BaseLower
+	}
+	return filepath.Base(p.pathLower())
+}
+
+func (p processInfo) packageFamilyLower() string {
+	if p.PackageFamilyLower != "" {
+		return p.PackageFamilyLower
+	}
+	return strings.ToLower(p.PackageFamily)
 }
 
 type cpuSample struct {
@@ -467,63 +515,21 @@ func (a *WindowsRetriever) GetExtraApps(ctx context.Context) ([]appInfo, error) 
 	return append(append(settingsApps, controlPanelApps...), appsFolderApps...), nil
 }
 
-// getPrivateWorkingSet calculates the private (non-shared) working set size for a process
+// getPrivateWorkingSet returns the private working set size via NtQueryInformationProcess
+// without allocating a full QueryWorkingSet page-entry buffer on every sample.
 func getPrivateWorkingSet(handle syscall.Handle) (uintptr, error) {
-	type PSAPI_WORKING_SET_BLOCK struct {
-		Flags uintptr
-	}
-
-	type PSAPI_WORKING_SET_INFORMATION struct {
-		NumberOfEntries uintptr
-		WorkingSetInfo  [1]PSAPI_WORKING_SET_BLOCK
-	}
-
-	psapi := syscall.NewLazyDLL("psapi.dll")
-	queryWorkingSet := psapi.NewProc("QueryWorkingSet")
-
-	// First call to get the required buffer size
-	var wsInfo PSAPI_WORKING_SET_INFORMATION
-	queryWorkingSet.Call(
+	var counters vmCountersEx2
+	status, _, _ := ntQueryInformationProcess.Call(
 		uintptr(handle),
-		uintptr(unsafe.Pointer(&wsInfo)),
-		unsafe.Sizeof(wsInfo),
+		processVmCounters,
+		uintptr(unsafe.Pointer(&counters)),
+		unsafe.Sizeof(counters),
+		0,
 	)
-
-	if wsInfo.NumberOfEntries == 0 || wsInfo.NumberOfEntries > 1000000 {
-		return 0, fmt.Errorf("invalid number of entries: %d", wsInfo.NumberOfEntries)
+	if int32(status) != 0 {
+		return 0, fmt.Errorf("NtQueryInformationProcess failed with status 0x%x", uint32(status))
 	}
-
-	// Allocate buffer for all entries
-	bufferSize := unsafe.Sizeof(uintptr(0)) + wsInfo.NumberOfEntries*unsafe.Sizeof(PSAPI_WORKING_SET_BLOCK{})
-	buffer := make([]byte, bufferSize)
-
-	// Second call to get actual data
-	ret, _, _ := queryWorkingSet.Call(
-		uintptr(handle),
-		uintptr(unsafe.Pointer(&buffer[0])),
-		bufferSize,
-	)
-
-	if ret == 0 {
-		return 0, fmt.Errorf("QueryWorkingSet failed")
-	}
-
-	// Parse working set entries and count private pages
-	actualEntries := *(*uintptr)(unsafe.Pointer(&buffer[0]))
-	pageSize := uintptr(4096)
-	var privateBytes uintptr
-
-	// Bit 8 of flags indicates if page is shared (1) or private (0)
-	offset := unsafe.Sizeof(uintptr(0))
-	for i := uintptr(0); i < actualEntries; i++ {
-		flags := *(*uintptr)(unsafe.Pointer(&buffer[offset+i*unsafe.Sizeof(uintptr(0))]))
-		isShared := (flags & (1 << 8)) != 0
-		if !isShared {
-			privateBytes += pageSize
-		}
-	}
-
-	return privateBytes, nil
+	return counters.privateWorkingSetSize, nil
 }
 
 func (a *WindowsRetriever) GetProcessStat(ctx context.Context, app appInfo) (*ProcessStat, error) {
@@ -569,11 +575,11 @@ func (a *WindowsRetriever) GetProcessStat(ctx context.Context, app appInfo) (*Pr
 	a.runningProcessesMutex.RUnlock()
 
 	for _, proc := range processes {
-		procPathLower := strings.ToLower(filepath.Clean(proc.Path))
+		procPathLower := proc.pathLower()
 		matched := false
 		if app.Type == AppTypeUWP && uwpFamilyLower != "" {
 			if proc.PackageFamily != "" {
-				matched = strings.ToLower(proc.PackageFamily) == uwpFamilyLower
+				matched = proc.packageFamilyLower() == uwpFamilyLower
 			} else {
 				matched = strings.Contains(procPathLower, "\\windowsapps\\") && strings.Contains(procPathLower, uwpFamilyLower)
 			}
@@ -613,27 +619,25 @@ func (a *WindowsRetriever) GetProcessStat(ctx context.Context, app appInfo) (*Pr
 
 			// Try to get private working set
 			privateWS, err := getPrivateWorkingSet(syscall.Handle(hProcess))
+			if err == nil && privateWS > 0 {
+				totalMemory += float64(privateWS)
+				processCount++
+			} else {
+				var memCounters PROCESS_MEMORY_COUNTERS_EX
+				memCounters.cb = uint32(unsafe.Sizeof(memCounters))
 
-			var memCounters PROCESS_MEMORY_COUNTERS_EX
-			memCounters.cb = uint32(unsafe.Sizeof(memCounters))
-
-			ret, _, _ = getProcessMemoryInfo.Call(
-				hProcess,
-				uintptr(unsafe.Pointer(&memCounters)),
-				uintptr(memCounters.cb),
-			)
+				ret, _, _ = getProcessMemoryInfo.Call(
+					hProcess,
+					uintptr(unsafe.Pointer(&memCounters)),
+					uintptr(memCounters.cb),
+				)
+				if ret != 0 {
+					totalMemory += float64(memCounters.PagefileUsage)
+					processCount++
+				}
+			}
 
 			closeHandle.Call(hProcess)
-
-			if ret != 0 {
-				// Use Private Working Set if available, otherwise fall back to Commit Size
-				if err == nil && privateWS > 0 {
-					totalMemory += float64(privateWS)
-				} else {
-					totalMemory += float64(memCounters.PagefileUsage)
-				}
-				processCount++
-			}
 		}
 	}
 
@@ -1110,12 +1114,13 @@ func (a *WindowsRetriever) GetPid(ctx context.Context, app appInfo) int {
 		appFile, _ = os.Stat(appPathLower)
 	}
 
+	appBaseLower := filepath.Base(appPathLower)
 	// For desktop apps, match by path; for UWP apps, match by package family name
 	for _, proc := range processes {
-		procPathLower := strings.ToLower(filepath.Clean(proc.Path))
+		procPathLower := proc.pathLower()
 		if app.Type == AppTypeUWP && uwpFamilyLower != "" {
 			if proc.PackageFamily != "" {
-				if strings.ToLower(proc.PackageFamily) == uwpFamilyLower {
+				if proc.packageFamilyLower() == uwpFamilyLower {
 					return proc.Pid
 				}
 			} else if strings.Contains(procPathLower, "\\windowsapps\\") && strings.Contains(procPathLower, uwpFamilyLower) {
@@ -1125,7 +1130,7 @@ func (a *WindowsRetriever) GetPid(ctx context.Context, app appInfo) int {
 			if procPathLower == appPathLower {
 				return proc.Pid
 			}
-			if appFile != nil && filepath.Base(procPathLower) == filepath.Base(appPathLower) {
+			if appFile != nil && proc.baseLower() == appBaseLower {
 				if procFile, err := os.Stat(proc.Path); err == nil && os.SameFile(appFile, procFile) {
 					return proc.Pid
 				}
@@ -1206,10 +1211,22 @@ func (a *WindowsRetriever) getRunningProcesses(ctx context.Context) []processInf
 			continue
 		}
 
+		var pathLower, baseLower string
+		if path != "" {
+			pathLower = strings.ToLower(filepath.Clean(path))
+			baseLower = filepath.Base(pathLower)
+		}
+		var packageFamilyLower string
+		if packageFamily != "" {
+			packageFamilyLower = strings.ToLower(packageFamily)
+		}
 		infos = append(infos, processInfo{
-			Pid:           int(pid),
-			Path:          path,
-			PackageFamily: packageFamily,
+			Pid:                int(pid),
+			Path:               path,
+			PathLower:          pathLower,
+			BaseLower:          baseLower,
+			PackageFamily:      packageFamily,
+			PackageFamilyLower: packageFamilyLower,
 		})
 	}
 

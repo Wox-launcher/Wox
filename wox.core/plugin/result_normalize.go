@@ -221,17 +221,8 @@ func normalizeResultActionDefaults(actions []QueryResultAction) {
 
 // translateResultActions keeps names, English search aliases and form labels consistent.
 func (m *Manager) translateResultActions(ctx context.Context, pluginInstance *Instance, actions []QueryResultAction) {
-	// translate action names
 	for actionIndex := range actions {
-		actions[actionIndex].SearchAliases = appendActionEnglishAlias(ctx, pluginInstance, actions[actionIndex].Name, actions[actionIndex].SearchAliases)
-		actions[actionIndex].Name = m.translatePlugin(ctx, pluginInstance, actions[actionIndex].Name)
-		if actions[actionIndex].Type == QueryResultActionTypeForm {
-			for definitionIndex := range actions[actionIndex].Form {
-				if actions[actionIndex].Form[definitionIndex].Value != nil {
-					actions[actionIndex].Form[definitionIndex].Value = actions[actionIndex].Form[definitionIndex].Value.Translate(pluginInstance.API.GetTranslation)
-				}
-			}
-		}
+		m.translateSingleResultAction(ctx, pluginInstance, &actions[actionIndex])
 	}
 }
 

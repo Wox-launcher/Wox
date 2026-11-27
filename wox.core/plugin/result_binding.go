@@ -194,8 +194,66 @@ func (m *Manager) applyResultBindingTitleTags(ctx context.Context, pluginInstanc
 	result.TitleTags = tags
 }
 
+func newResultHotkeyForm(defaultValue string) definition.PluginSettingDefinitions {
+	return definition.PluginSettingDefinitions{
+		{
+			Type: definition.PluginSettingDefinitionTypeHotkey,
+			Value: &definition.PluginSettingValueHotkey{
+				Key:          resultBindingFormHotkeyKey,
+				Label:        "i18n:plugin_manager_set_result_hotkey_label",
+				Tooltip:      "i18n:plugin_manager_set_result_hotkey_tooltip",
+				DefaultValue: defaultValue,
+			},
+		},
+	}
+}
+
+func newResultAliasForm(defaultValue string) definition.PluginSettingDefinitions {
+	return definition.PluginSettingDefinitions{
+		{
+			Type: definition.PluginSettingDefinitionTypeTextBox,
+			Value: &definition.PluginSettingValueTextBox{
+				Key:          resultBindingFormAliasKey,
+				Label:        "i18n:plugin_manager_set_result_alias_label",
+				Tooltip:      "i18n:plugin_manager_set_result_alias_tooltip",
+				DefaultValue: defaultValue,
+			},
+		},
+	}
+}
+
 // newResultBindingActions exposes binding forms only for restorable plugin results.
 func (m *Manager) newResultBindingActions(ctx context.Context, pluginInstance *Instance, query Query, result QueryResult, sourceHash string) []QueryResultAction {
+	m.ensureSystemActionHandlers()
+	batch := defaultActionBatchContext{
+		bindings:        currentResultBindings(),
+		emptyHotkeyForm: newResultHotkeyForm(""),
+		emptyAliasForm:  newResultAliasForm(""),
+		setHotkeyAction: QueryResultAction{
+			Id:                     systemActionSetResultHotkeyID,
+			Name:                   "i18n:plugin_manager_set_result_hotkey",
+			Icon:                   icons.Get(icons.ActionHotkey),
+			Type:                   QueryResultActionTypeForm,
+			IsSystemAction:         true,
+			PreventHideAfterAction: true,
+			OnSubmit:               m.setResultHotkeySubmitFn,
+		},
+		setAliasAction: QueryResultAction{
+			Id:                     systemActionSetResultAliasID,
+			Name:                   "i18n:plugin_manager_set_result_alias",
+			Icon:                   icons.Get(icons.ActionQueryAlias),
+			Type:                   QueryResultActionTypeForm,
+			IsSystemAction:         true,
+			PreventHideAfterAction: true,
+			OnSubmit:               m.setResultAliasSubmitFn,
+		},
+	}
+	batch.setHotkeyAction.Form = batch.emptyHotkeyForm
+	batch.setAliasAction.Form = batch.emptyAliasForm
+	return m.newResultBindingActionsWithBatch(ctx, pluginInstance, query, result, sourceHash, batch)
+}
+
+func (m *Manager) newResultBindingActionsWithBatch(ctx context.Context, pluginInstance *Instance, query Query, result QueryResult, sourceHash string, batch defaultActionBatchContext) []QueryResultAction {
 	if pluginInstance == nil || !pluginInstance.Metadata.IsSupportFeature(MetadataFeatureMRU) {
 		return nil
 	}
@@ -208,7 +266,7 @@ func (m *Manager) newResultBindingActions(ctx context.Context, pluginInstance *I
 		return nil
 	}
 
-	binding, found := setting.FindResultBinding(currentResultBindings(), hash)
+	binding, found := setting.FindResultBinding(batch.bindings, hash)
 	defaultAction := defaultPluginAction(result)
 	canSetHotkey := canBindResultHotkey(pluginInstance, result) || strings.TrimSpace(binding.Hotkey) != ""
 	if !found && defaultAction == nil {
@@ -217,63 +275,18 @@ func (m *Manager) newResultBindingActions(ctx context.Context, pluginInstance *I
 
 	var actions []QueryResultAction
 	if canSetHotkey {
-		actions = append(actions, m.newSetResultHotkeyAction(pluginInstance, result, hash, binding))
+		hotkeyAction := batch.setHotkeyAction
+		if binding.Hotkey != "" {
+			hotkeyAction.Form = newResultHotkeyForm(binding.Hotkey)
+		}
+		actions = append(actions, hotkeyAction)
 	}
-	actions = append(actions, m.newSetResultAliasAction(pluginInstance, result, hash, binding))
+	aliasAction := batch.setAliasAction
+	if binding.Alias != "" {
+		aliasAction.Form = newResultAliasForm(binding.Alias)
+	}
+	actions = append(actions, aliasAction)
 	return actions
-}
-
-// newSetResultHotkeyAction edits the hotkey without replacing the alias.
-func (m *Manager) newSetResultHotkeyAction(pluginInstance *Instance, result QueryResult, hash string, binding setting.ResultBinding) QueryResultAction {
-	action := QueryResultAction{
-		Id:                     systemActionSetResultHotkeyID,
-		Name:                   "i18n:plugin_manager_set_result_hotkey",
-		Icon:                   icons.Get(icons.ActionHotkey),
-		Type:                   QueryResultActionTypeForm,
-		IsSystemAction:         true,
-		PreventHideAfterAction: true,
-		Form: definition.PluginSettingDefinitions{
-			{
-				Type: definition.PluginSettingDefinitionTypeHotkey,
-				Value: &definition.PluginSettingValueHotkey{
-					Key:          resultBindingFormHotkeyKey,
-					Label:        "i18n:plugin_manager_set_result_hotkey_label",
-					Tooltip:      "i18n:plugin_manager_set_result_hotkey_tooltip",
-					DefaultValue: binding.Hotkey,
-				},
-			},
-		},
-		OnSubmit: func(ctx context.Context, actionContext FormActionContext) {
-			m.submitResultBindingField(ctx, pluginInstance, result, hash, resultBindingFormHotkeyKey, actionContext.Values[resultBindingFormHotkeyKey], actionContext.ResultId)
-		},
-	}
-	return action
-}
-
-// newSetResultAliasAction edits the alias without replacing the hotkey.
-func (m *Manager) newSetResultAliasAction(pluginInstance *Instance, result QueryResult, hash string, binding setting.ResultBinding) QueryResultAction {
-	return QueryResultAction{
-		Id:                     systemActionSetResultAliasID,
-		Name:                   "i18n:plugin_manager_set_result_alias",
-		Icon:                   icons.Get(icons.ActionQueryAlias),
-		Type:                   QueryResultActionTypeForm,
-		IsSystemAction:         true,
-		PreventHideAfterAction: true,
-		Form: definition.PluginSettingDefinitions{
-			{
-				Type: definition.PluginSettingDefinitionTypeTextBox,
-				Value: &definition.PluginSettingValueTextBox{
-					Key:          resultBindingFormAliasKey,
-					Label:        "i18n:plugin_manager_set_result_alias_label",
-					Tooltip:      "i18n:plugin_manager_set_result_alias_tooltip",
-					DefaultValue: binding.Alias,
-				},
-			},
-		},
-		OnSubmit: func(ctx context.Context, actionContext FormActionContext) {
-			m.submitResultBindingField(ctx, pluginInstance, result, hash, resultBindingFormAliasKey, actionContext.Values[resultBindingFormAliasKey], actionContext.ResultId)
-		},
-	}
 }
 
 // ResultBindingQuery is the plugin query used to find one imported shortcut target.

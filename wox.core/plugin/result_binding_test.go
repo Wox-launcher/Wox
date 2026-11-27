@@ -293,3 +293,97 @@ func TestUpsertResultBindingKeepsTheOtherField(t *testing.T) {
 		t.Fatalf("repeat = %s %v", status, err)
 	}
 }
+
+type systemActionTestUI struct {
+	presentationTestUI
+	refreshes int
+}
+
+func (ui *systemActionTestUI) ShowToast(context.Context, common.ToastMsg) {}
+func (ui *systemActionTestUI) RefreshQuery(context.Context, common.RefreshQueryOptions) {
+	ui.refreshes++
+}
+func (ui *systemActionTestUI) UpdateResult(context.Context, any) bool { return true }
+
+// TestSharedSystemActionHandlersResolveResultStore checks that shared system
+// action closures resolve cached results and execute pin/unpin/reset/binding edits.
+func TestSharedSystemActionHandlersResolveResultStore(t *testing.T) {
+	initPluginManagerLoadTest(t)
+	ctx := context.Background()
+	if err := setting.GetSettingManager().Init(ctx); err != nil {
+		t.Fatalf("init setting manager: %v", err)
+	}
+
+	manager := newPresentationTestManager()
+	ui := &systemActionTestUI{}
+	manager.AttachUI(ui)
+	previousSingletonUI := GetPluginManager().GetUI()
+	GetPluginManager().AttachUI(ui)
+	t.Cleanup(func() { GetPluginManager().AttachUI(previousSingletonUI) })
+
+	var saved []setting.ResultBinding
+	currentResultBindingsForTest = func() []setting.ResultBinding { return saved }
+	t.Cleanup(func() { currentResultBindingsForTest = nil })
+	manager.applyResultBindings = func(_ context.Context, bindings []setting.ResultBinding) error {
+		saved = setting.CloneResultBindings(bindings)
+		return nil
+	}
+
+	instance := &Instance{
+		Metadata: Metadata{
+			Id:       "test-plugin",
+			Name:     "Test Plugin",
+			Features: []MetadataFeature{{Name: MetadataFeatureMRU}},
+		},
+		MRURestoreCallbacks: []func(context.Context, MRUData) (*QueryResult, error){
+			func(context.Context, MRUData) (*QueryResult, error) { return nil, nil },
+		},
+	}
+	instance.API = NewAPI(instance)
+
+	query := Query{Id: "q-shared", SessionId: "s-shared", Type: QueryTypeInput, RawQuery: "notes", Search: "notes"}
+	manager.resultStore.startQuery(ctx, query)
+	resp := QueryResponse{
+		Results: []QueryResult{
+			{
+				Id: "r-1", Title: "Notes", SubTitle: "Sub",
+				Actions: []QueryResultAction{{Name: "Open", IsDefault: true, Action: func(context.Context, ActionContext) {}}},
+			},
+			{
+				Id: "r-2", Title: "Second", SubTitle: "Sub2",
+				Actions: []QueryResultAction{{Name: "Open", IsDefault: true, Action: func(context.Context, ActionContext) {}}},
+			},
+		},
+	}
+	manager.finalizePluginQueryResponse(ctx, instance, query, resp, QueryLayout{}, QueryContext{}, 1)
+
+	if err := manager.ExecuteAction(ctx, query.SessionId, query.Id, "r-1", systemActionPinInQueryID); err != nil {
+		t.Fatalf("ExecuteAction pin: %v", err)
+	}
+	hash := resultIdentityHash(instance.Metadata.Id, QueryResult{Title: "Notes", SubTitle: "Sub"})
+	if !setting.GetSettingManager().IsPinedResult(ctx, hash, query.RawQuery) {
+		t.Fatal("shared pin handler did not pin r-1")
+	}
+
+	if err := manager.SubmitFormAction(ctx, query.SessionId, query.Id, "r-1", systemActionSetResultAliasID, map[string]string{resultBindingFormAliasKey: "nt"}); err != nil {
+		t.Fatalf("SubmitFormAction alias: %v", err)
+	}
+	if len(saved) != 1 || saved[0].Alias != "nt" {
+		t.Fatalf("saved alias bindings = %+v, want alias nt", saved)
+	}
+
+	if err := manager.SubmitFormAction(ctx, query.SessionId, query.Id, "r-2", systemActionSetResultHotkeyID, map[string]string{resultBindingFormHotkeyKey: "alt+s"}); err != nil {
+		t.Fatalf("SubmitFormAction hotkey: %v", err)
+	}
+	if len(saved) != 2 || saved[1].Hotkey != "alt+s" {
+		t.Fatalf("saved hotkey bindings = %+v, want hotkey alt+s on r-2", saved)
+	}
+
+	if err := manager.ExecuteAction(ctx, query.SessionId, query.Id, "r-1", systemActionResetRankingID); err != nil {
+		t.Fatalf("ExecuteAction reset ranking: %v", err)
+	}
+	if ui.refreshes < 2 {
+		t.Fatalf("refreshes = %d, want at least 2", ui.refreshes)
+	}
+	time.Sleep(50 * time.Millisecond)
+}

@@ -96,7 +96,7 @@ func TestUnsupportedNewWindowUsesDefaultOpen(t *testing.T) {
 			t.Fatal("fallback lost action context")
 		}
 	}}
-	action := app.buildNewWindowAction(appInfo{Path: "unsupported", Type: AppTypeWindowsSetting}, "Unsupported", nil, openAction)
+	action := app.buildNewWindowAction(appInfo{Path: "unsupported", Type: AppTypeWindowsSetting}, "Unsupported", nil, openAction.Action)
 	action.Action(ctx, plugin.ActionContext{})
 	if calls != 1 || api.message != "" {
 		t.Fatalf("fallback calls=%d notification=%q", calls, api.message)

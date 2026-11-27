@@ -262,6 +262,12 @@ type appDirectory struct {
 	trackChanges      bool     // internal: true for roots whose precise file changes should update the app cache
 }
 
+type trackedAppResult struct {
+	sessionID string
+	queryID   string
+	info      appInfo
+}
+
 func init() {
 	plugin.AllSystemPlugin = append(plugin.AllSystemPlugin, &ApplicationPlugin{})
 }
@@ -298,7 +304,8 @@ type ApplicationPlugin struct {
 	ignoredApps            []ignoredApp
 
 	// Track results that need periodic refresh (running apps with CPU/memory stats)
-	trackedResults *util.HashMap[string, appInfo] // resultId -> appInfo
+	trackedResults     *util.HashMap[string, trackedAppResult] // resultId -> trackedAppResult
+	latestTrackedQuery *util.HashMap[string, string]           // sessionID -> latest queryID
 
 	// unparsableApps remembers paths whose ParseAppInfo failed, keyed by path cache key
 	// with the file mtime seen at failure. Shell-namespace shortcuts such as "Run.lnk"
@@ -416,7 +423,8 @@ func (a *ApplicationPlugin) Init(ctx context.Context, initParams plugin.InitPara
 	a.runtimeCtx = runtimeCtx
 	a.retriever = a.getRetriever(ctx)
 	a.retriever.UpdateAPI(a.api)
-	a.trackedResults = util.NewHashMap[string, appInfo]()
+	a.trackedResults = util.NewHashMap[string, trackedAppResult]()
+	a.latestTrackedQuery = util.NewHashMap[string, string]()
 	a.querySessionCache = util.NewHashMap[string, appQuerySessionCache]()
 	a.unparsableApps = util.NewHashMap[string, int64]()
 	a.rebuildIgnoreRuleMatchers(ctx)
@@ -717,6 +725,9 @@ func (a *ApplicationPlugin) Query(ctx context.Context, query plugin.Query) plugi
 	var maxBuildActionUs int64
 	var maxBuildIconUs int64
 	var maxBuildTrackUs int64
+	if !isLaunchpadQuery {
+		a.advanceTrackedQuery(query.SessionId, query.Id)
+	}
 	results := make([]plugin.QueryResult, 0, len(selectedMatches))
 	for _, match := range selectedMatches {
 		resultBuildStart := time.Now()
@@ -751,7 +762,7 @@ func (a *ApplicationPlugin) Query(ctx context.Context, query plugin.Query) plugi
 		// but those running-state updates make a Launchpad-style grid noisy and can resize cells while browsing.
 		if !isLaunchpadQuery {
 			trackedStoreStart := time.Now()
-			a.trackedResults.Store(result.Id, entry.info)
+			a.trackResult(query.SessionId, query.Id, result.Id, entry.info)
 			resultTrackStoreUs = time.Since(trackedStoreStart).Microseconds()
 			trackedStoreUs += resultTrackStoreUs
 		}
@@ -939,7 +950,7 @@ func (a *ApplicationPlugin) buildAppActions(info appInfo, displayName string, co
 		},
 	}
 
-	actions = append(actions, a.buildNewWindowAction(info, displayName, contextData, actions[0]))
+	actions = append(actions, a.buildNewWindowAction(info, displayName, contextData, actions[0].Action))
 
 	if util.IsWindows() {
 		extension := strings.ToLower(filepath.Ext(info.Path))
@@ -2767,14 +2778,66 @@ func (a *ApplicationPlugin) handleMRURestore(ctx context.Context, mruData plugin
 	}
 
 	// Track this result for periodic refresh (refreshRunningApps will handle running state)
-	a.trackedResults.Store(result.Id, *appInfo)
+	a.trackResult(util.GetContextSessionId(ctx), util.GetContextQueryId(ctx), result.Id, *appInfo)
 
 	return result, nil
+}
+
+func (a *ApplicationPlugin) ensureTrackedMaps() {
+	if a.trackedResults == nil {
+		a.trackedResults = util.NewHashMap[string, trackedAppResult]()
+	}
+	if a.latestTrackedQuery == nil {
+		a.latestTrackedQuery = util.NewHashMap[string, string]()
+	}
+}
+
+// advanceTrackedQuery drops tracked results from superseded queries in the same session
+// so refreshRunningApps never polls rows from stale keystrokes.
+func (a *ApplicationPlugin) advanceTrackedQuery(sessionID, queryID string) {
+	if sessionID == "" || queryID == "" {
+		return
+	}
+	a.ensureTrackedMaps()
+	var changed bool
+	a.latestTrackedQuery.Compute(sessionID, func(previous string, exists bool) (string, bool) {
+		changed = !exists || previous != queryID
+		return queryID, true
+	})
+	if !changed {
+		return
+	}
+	var stale []string
+	a.trackedResults.Range(func(resultID string, item trackedAppResult) bool {
+		if item.sessionID == sessionID && item.queryID != queryID {
+			stale = append(stale, resultID)
+		}
+		return true
+	})
+	for _, resultID := range stale {
+		a.trackedResults.Delete(resultID)
+	}
+}
+
+func (a *ApplicationPlugin) trackResult(sessionID, queryID, resultID string, info appInfo) {
+	if resultID == "" {
+		return
+	}
+	a.advanceTrackedQuery(sessionID, queryID)
+	a.ensureTrackedMaps()
+	a.trackedResults.Store(resultID, trackedAppResult{
+		sessionID: sessionID,
+		queryID:   queryID,
+		info:      info,
+	})
 }
 
 func (a *ApplicationPlugin) refreshRunningApps(ctx context.Context) {
 	// Skip refresh unless the primary launcher is visible.
 	if !a.api.IsVisible(context.Background()) {
+		return
+	}
+	if a.trackedResults == nil {
 		return
 	}
 
@@ -2786,21 +2849,34 @@ func (a *ApplicationPlugin) refreshRunningApps(ctx context.Context) {
 
 	type updateItem struct {
 		resultId string
-		app      appInfo
+		tracked  trackedAppResult
 	}
 
 	var toRemove []string
 	var toUpdate []updateItem
 
-	for resultId, appInfo := range trackedResultsSnapshot {
+	for resultId, tracked := range trackedResultsSnapshot {
+		if tracked.sessionID != "" && tracked.queryID != "" && a.latestTrackedQuery != nil {
+			if latest, ok := a.latestTrackedQuery.Load(tracked.sessionID); ok && latest != tracked.queryID {
+				toRemove = append(toRemove, resultId)
+				continue
+			}
+		}
+
+		resultCtx := ctx
+		if tracked.sessionID != "" && tracked.queryID != "" {
+			resultCtx = util.WithQueryIdContext(util.WithSessionContext(ctx, tracked.sessionID), tracked.queryID)
+		}
+
 		// Try to get the result, if it returns nil, the result is no longer visible
-		updatableResult := a.api.GetUpdatableResult(ctx, resultId)
+		updatableResult := a.api.GetUpdatableResult(resultCtx, resultId)
 		if updatableResult == nil {
 			// Mark for removal from tracking queue
 			toRemove = append(toRemove, resultId)
 			continue
 		}
 
+		appInfo := tracked.info
 		// Update Pid first (app may have been restarted with a new Pid, or started for the first time)
 		currentPid := a.retriever.GetPid(ctx, appInfo)
 		pidChanged := currentPid != appInfo.Pid
@@ -2808,7 +2884,14 @@ func (a *ApplicationPlugin) refreshRunningApps(ctx context.Context) {
 
 		if pidChanged {
 			// Don't call Store here (would cause deadlock), collect for later update
-			toUpdate = append(toUpdate, updateItem{resultId, appInfo})
+			toUpdate = append(toUpdate, updateItem{
+				resultId: resultId,
+				tracked: trackedAppResult{
+					sessionID: tracked.sessionID,
+					queryID:   tracked.queryID,
+					info:      appInfo,
+				},
+			})
 		}
 
 		// Only populate fields changed by this refresh tick. GetUpdatableResult
@@ -2892,7 +2975,7 @@ func (a *ApplicationPlugin) refreshRunningApps(ctx context.Context) {
 		// Only push update to UI if something actually changed
 		if needsUpdate {
 			// If UpdateResult returns false, the result is no longer visible in UI
-			if !a.api.UpdateResult(ctx, update) {
+			if !a.api.UpdateResult(resultCtx, update) {
 				toRemove = append(toRemove, resultId)
 			}
 		}
@@ -2901,7 +2984,7 @@ func (a *ApplicationPlugin) refreshRunningApps(ctx context.Context) {
 	// Write back after the snapshot walk so query-time stores are not blocked by
 	// refresh work.
 	for _, item := range toUpdate {
-		a.trackedResults.Store(item.resultId, item.app)
+		a.trackedResults.Store(item.resultId, item.tracked)
 	}
 
 	// Clean up results that are no longer visible

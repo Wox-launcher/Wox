@@ -36,8 +36,13 @@ func (p *PluginSettingValueHotkey) GetDefaultValue() string {
 }
 
 func (p *PluginSettingValueHotkey) Translate(translator func(ctx context.Context, key string) string) PluginSettingDefinitionValue {
+	label := translator(context.Background(), p.Label)
+	tooltip := translator(context.Background(), p.Tooltip)
+	if label == p.Label && tooltip == p.Tooltip {
+		return p
+	}
 	copy := *p
-	copy.Label = translator(context.Background(), p.Label)
-	copy.Tooltip = translator(context.Background(), p.Tooltip)
+	copy.Label = label
+	copy.Tooltip = tooltip
 	return &copy
 }

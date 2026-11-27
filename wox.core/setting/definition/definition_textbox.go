@@ -30,9 +30,15 @@ func (p *PluginSettingValueTextBox) GetDefaultValue() string {
 }
 
 func (p *PluginSettingValueTextBox) Translate(translator func(ctx context.Context, key string) string) PluginSettingDefinitionValue {
+	label := translator(context.Background(), p.Label)
+	suffix := translator(context.Background(), p.Suffix)
+	tooltip := translator(context.Background(), p.Tooltip)
+	if label == p.Label && suffix == p.Suffix && tooltip == p.Tooltip {
+		return p
+	}
 	copy := *p
-	copy.Label = translator(context.Background(), p.Label)
-	copy.Suffix = translator(context.Background(), p.Suffix)
-	copy.Tooltip = translator(context.Background(), p.Tooltip)
+	copy.Label = label
+	copy.Suffix = suffix
+	copy.Tooltip = tooltip
 	return &copy
 }

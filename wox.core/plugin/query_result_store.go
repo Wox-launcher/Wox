@@ -18,7 +18,10 @@ type queryResultStore struct {
 	lazyResultIcons *util.HashMap[string, *lazyResultIconEntry]
 }
 
-const maxCachedQueriesPerSession = 32
+// Keep 4 queries per session: the active query, the previous query during the
+// 400ms refresh/transition window, and concurrent in-flight queries without
+// pinning dozens of full result snapshots during active typing.
+const maxCachedQueriesPerSession = 4
 
 // newQueryResultStore initializes both maps before any query or image work starts.
 func newQueryResultStore() *queryResultStore {

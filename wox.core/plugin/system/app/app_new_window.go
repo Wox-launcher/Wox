@@ -14,7 +14,7 @@ import (
 var errNewWindowUnsupported = errors.New("application does not expose a supported new-window command")
 
 // buildNewWindowAction keeps explicit window creation separate from normal window activation.
-func (a *ApplicationPlugin) buildNewWindowAction(info appInfo, displayName string, contextData map[string]string, openAction plugin.QueryResultAction) plugin.QueryResultAction {
+func (a *ApplicationPlugin) buildNewWindowAction(info appInfo, displayName string, contextData map[string]string, openFn func(context.Context, plugin.ActionContext)) plugin.QueryResultAction {
 	return plugin.QueryResultAction{
 		Name:        "i18n:plugin_app_open_new_window",
 		Icon:        icons.Get(icons.ActionNewWindow),
@@ -27,7 +27,9 @@ func (a *ApplicationPlugin) buildNewWindowAction(info appInfo, displayName strin
 				if errors.Is(err, errNewWindowUnsupported) {
 					util.GetLogger().Debug(ctx, fmt.Sprintf("app_new_window stage=fallback path=%q reason=%s", info.Path, err))
 					// Reuse Open itself so activation, platform routing and error handling remain identical.
-					openAction.Action(ctx, actionContext)
+					if openFn != nil {
+						openFn(ctx, actionContext)
+					}
 					return
 				}
 				util.GetLogger().Error(ctx, fmt.Sprintf("error opening new app window %q: %s", info.Path, err))

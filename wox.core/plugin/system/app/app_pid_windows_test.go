@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"syscall"
 	"testing"
 	"wox/util"
 )
@@ -41,5 +42,19 @@ func TestWindowsGetPidResolvesCurrentJunction(t *testing.T) {
 	}
 	if got := r.GetPid(context.Background(), appInfo{Path: otherExe, Type: AppTypeDesktop}); got != 0 {
 		t.Fatalf("different installation matched pid=%d", got)
+	}
+}
+
+func TestWindowsGetPrivateWorkingSetCurrentProcess(t *testing.T) {
+	handle, err := syscall.GetCurrentProcess()
+	if err != nil {
+		t.Fatalf("GetCurrentProcess: %v", err)
+	}
+	privateWS, err := getPrivateWorkingSet(handle)
+	if err != nil {
+		t.Fatalf("getPrivateWorkingSet: %v", err)
+	}
+	if privateWS == 0 {
+		t.Fatal("getPrivateWorkingSet returned 0 for current process")
 	}
 }
