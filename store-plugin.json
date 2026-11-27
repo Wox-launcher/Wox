@@ -2385,5 +2385,93 @@
     },
     "DateCreated": "2026-11-15 09:52:41",
     "DateUpdated": "2026-11-15 09:52:41"
+  },
+  {
+    "Id": "fcbabbac-21ce-4c2c-b848-9d09926575cc",
+    "Name": "portkill",
+    "Author": "raphaelabl",
+    "Version": "1.0.0",
+    "MinWoxVersion": "2.4.5",
+    "Runtime": "nodejs",
+    "Description": "Find processes listening on TCP/UDP ports and kill them after confirmation",
+    "IconUrl": "https://gist.githubusercontent.com/raphaelabl/d7de113a887162c72e29d397b59ffcc4/raw/portkill-icon.png",
+    "Website": "https://gist.github.com/raphaelabl/38f5c43e8ebb4ea108c3bac3b142f1eb",
+    "DownloadUrl": "https://gist.githubusercontent.com/raphaelabl/38f5c43e8ebb4ea108c3bac3b142f1eb/raw/Wox.Plugin.portkill.js",
+    "ScreenshotUrls": [
+      "https://gist.githubusercontent.com/raphaelabl/d7de113a887162c72e29d397b59ffcc4/raw/portkill-screenshot.png"
+    ],
+    "SupportedOS": [
+      "Windows",
+      "Linux",
+      "Darwin"
+    ],
+    "DateCreated": "2026-11-27 21:41:23",
+    "DateUpdated": "2026-11-27 20:41:23"
+  },
+  {
+    "Id": "aa00cb62-d6b7-4da6-b02d-a7f2f884551b",
+    "Name": "Docker",
+    "Author": "raphaelabl",
+    "Version": "1.0.0",
+    "MinWoxVersion": "2.4.5",
+    "Runtime": "nodejs",
+    "Description": "Manage Docker containers, images, compose projects, volumes and networks, and start common dev services (Postgres, Keycloak, Redis, …) in one step",
+    "IconUrl": "https://gist.githubusercontent.com/raphaelabl/d7de113a887162c72e29d397b59ffcc4/raw/docker-icon.png",
+    "Website": "https://gist.github.com/raphaelabl/37ee78251e9505523f1065235e2f0edd",
+    "DownloadUrl": "https://gist.githubusercontent.com/raphaelabl/37ee78251e9505523f1065235e2f0edd/raw/Wox.Plugin.docker.js",
+    "ScreenshotUrls": [
+      "https://gist.githubusercontent.com/raphaelabl/d7de113a887162c72e29d397b59ffcc4/raw/docker-screenshot.png"
+    ],
+    "SupportedOS": [
+      "Windows",
+      "Linux",
+      "Darwin"
+    ],
+    "DateCreated": "2026-11-27 21:41:23",
+    "DateUpdated": "2026-11-27 20:41:23"
+  },
+  {
+    "Id": "50b53b21-3ab6-48c4-90f6-f7a9a30e0a8e",
+    "Name": "Projects",
+    "Author": "raphaelabl",
+    "Version": "1.0.0",
+    "MinWoxVersion": "2.4.5",
+    "Runtime": "nodejs",
+    "Description": "Keep code projects in one folder: open them in the right IDE, start/end work sessions, archive and restore them, or store them on GitHub and clone them back",
+    "IconUrl": "https://gist.githubusercontent.com/raphaelabl/d7de113a887162c72e29d397b59ffcc4/raw/projects-icon.png",
+    "Website": "https://gist.github.com/raphaelabl/95d1871d1f5a147f99ea9651ccbecb06",
+    "DownloadUrl": "https://gist.githubusercontent.com/raphaelabl/95d1871d1f5a147f99ea9651ccbecb06/raw/Wox.Plugin.projects.js",
+    "ScreenshotUrls": [
+      "https://gist.githubusercontent.com/raphaelabl/d7de113a887162c72e29d397b59ffcc4/raw/projects-screenshot.png"
+    ],
+    "SupportedOS": [
+      "Windows",
+      "Linux",
+      "Darwin"
+    ],
+    "DateCreated": "2026-11-27 21:41:23",
+    "DateUpdated": "2026-11-27 20:41:23"
+  },
+  {
+    "Id": "bf107b81-705c-49e5-ba29-22ec572a98b5",
+    "Name": "Docs",
+    "Author": "raphaelabl",
+    "Version": "1.0.0",
+    "MinWoxVersion": "2.4.5",
+    "Runtime": "nodejs",
+    "Description": "Personal Markdown docs: create, search, quick-edit in Wox, open in Obsidian or VS Code, and hand them to Claude Code",
+    "IconUrl": "https://gist.githubusercontent.com/raphaelabl/d7de113a887162c72e29d397b59ffcc4/raw/docs-icon.png",
+    "Website": "https://gist.github.com/raphaelabl/2327085e7fd421bbef328d1f34e35b55",
+    "DownloadUrl": "https://gist.githubusercontent.com/raphaelabl/2327085e7fd421bbef328d1f34e35b55/raw/Wox.Plugin.docs.js",
+    "ScreenshotUrls": [
+      "https://gist.githubusercontent.com/raphaelabl/d7de113a887162c72e29d397b59ffcc4/raw/docs-screenshot.png"
+    ],
+    "SupportedOS": [
+      "Windows",
+      "Linux",
+      "Darwin"
+    ],
+    "DateCreated": "2026-11-27 21:41:23",
+    "DateUpdated": "2026-11-27 20:41:23"
   }
 ]
