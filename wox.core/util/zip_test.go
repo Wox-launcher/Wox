@@ -58,6 +58,30 @@ func TestUnzipRejectsUnsafePaths(t *testing.T) {
 	}
 }
 
+func TestUnzipEmptyDirectoriesAndNestedFiles(t *testing.T) {
+	entries := map[string]string{
+		"empty-dir/":           "",
+		"nested/dir/":          "",
+		"nested/dir/hello.txt": "world",
+	}
+	source := writeTestZip(t, entries)
+	destination := filepath.Join(t.TempDir(), "out")
+	if err := Unzip(source, destination); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(filepath.Join(destination, "empty-dir"))
+	if err != nil || !info.IsDir() {
+		t.Fatalf("empty-dir missing or not a dir: %v", err)
+	}
+	got, err := os.ReadFile(filepath.Join(destination, "nested", "dir", "hello.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "world" {
+		t.Fatalf("nested file = %q, want %q", got, "world")
+	}
+}
+
 // writeTestZip creates an archive without normalizing its entry names.
 func writeTestZip(t *testing.T, entries map[string]string) string {
 	t.Helper()

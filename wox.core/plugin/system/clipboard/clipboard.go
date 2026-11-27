@@ -33,7 +33,6 @@ import (
 	"wox/util/shell"
 	"wox/util/window"
 
-	"github.com/cdfmlr/ellipsis"
 	"github.com/disintegration/imaging"
 	"github.com/google/uuid"
 	"golang.org/x/image/bmp"
@@ -1802,7 +1801,7 @@ func (c *ClipboardPlugin) convertTextRecord(ctx context.Context, record Clipboar
 	if record.Alias != nil && *record.Alias != "" {
 		title = *record.Alias
 	} else {
-		title = strings.TrimSpace(ellipsis.Centering(record.Content, 80))
+		title = strings.TrimSpace(util.EllipsisMiddle(record.Content, 80))
 	}
 
 	previewType := plugin.WoxPreviewTypeText

@@ -17,11 +17,10 @@ import (
 	"sync/atomic"
 	"testing"
 	"wox/common"
+	"wox/common/jsonschema"
 	"wox/network"
 	"wox/setting"
 	"wox/util"
-
-	"github.com/tmc/langchaingo/jsonschema"
 )
 
 func TestConvertToolsOmitsNonObjectProperties(t *testing.T) {

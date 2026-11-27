@@ -13,8 +13,6 @@ import (
 	"wox/plugin/system"
 	"wox/util"
 	"wox/util/browser"
-
-	"github.com/mitchellh/go-homedir"
 )
 
 var chromeBookmarkProfiles = []string{"Default", "Profile 1", "Profile 2", "Profile 3"}
@@ -101,7 +99,7 @@ func (c *BrowserBookmarkPlugin) loadBookmarkFromFile(ctx context.Context, bookma
 		bookmarkLocation = strings.Replace(bookmarkPath, "%%LOCALAPPDATA%%", localAppData, 1)
 	} else {
 		// Unix-style path
-		bookmarkLocation, err = homedir.Expand(bookmarkPath)
+		bookmarkLocation, err = util.ExpandHomeDir(bookmarkPath)
 		if err != nil {
 			c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("error expanding %s bookmark path: %s", browserName, err.Error()))
 			return []Bookmark{}

@@ -16,7 +16,6 @@ import (
 	"wox/util/shell"
 
 	"github.com/Masterminds/semver/v3"
-	"github.com/mitchellh/go-homedir"
 )
 
 const nodejsInstallUrl = "https://nodejs.org/"
@@ -330,7 +329,7 @@ func collectNodejsPathsForWindows() []string {
 		}
 	}
 
-	if homeDir, err := homedir.Dir(); err == nil {
+	if homeDir, err := os.UserHomeDir(); err == nil {
 		for _, scoopPackage := range []string{"nodejs", "nodejs-lts"} {
 			candidates = append(candidates, util.CollectExecutables(filepath.Join(homeDir, "scoop", "apps", scoopPackage), binaries, nil)...)
 		}
@@ -345,7 +344,7 @@ func collectNodejsPathsFromNvmUnix() []string {
 	nvmDir := os.Getenv("NVM_DIR")
 	if nvmDir == "" {
 		var err error
-		nvmDir, err = homedir.Expand("~/.nvm")
+		nvmDir, err = util.ExpandHomeDir("~/.nvm")
 		if err != nil {
 			return nil
 		}
@@ -372,7 +371,7 @@ func collectNodejsPathsFromNvmUnix() []string {
 func collectVoltaNodePaths() []string {
 	voltaHome := os.Getenv("VOLTA_HOME")
 	if voltaHome == "" {
-		if homeDir, err := homedir.Dir(); err == nil {
+		if homeDir, err := os.UserHomeDir(); err == nil {
 			voltaHome = filepath.Join(homeDir, ".volta")
 		}
 	}
@@ -399,7 +398,7 @@ func collectMisePaths(tool string) []string {
 			if localAppData := os.Getenv("LOCALAPPDATA"); localAppData != "" {
 				dataDir = filepath.Join(localAppData, "mise")
 			}
-		} else if home, err := homedir.Dir(); err == nil {
+		} else if home, err := os.UserHomeDir(); err == nil {
 			dataDir = filepath.Join(home, ".local", "share", "mise")
 		}
 	}

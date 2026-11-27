@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/tmc/langchaingo/jsonschema"
+	"wox/common/jsonschema"
 )
 
 type ConversationRole string

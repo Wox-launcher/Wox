@@ -9,8 +9,6 @@ import (
 	"wox/plugin/system"
 	"wox/util"
 	"wox/util/clipboard"
-
-	"github.com/cdfmlr/ellipsis"
 )
 
 const (
@@ -87,7 +85,7 @@ func clipboardRecordDescription(record ClipboardRecord) string {
 		return strings.TrimSpace(*record.Alias)
 	}
 	if record.Type == string(clipboard.ClipboardTypeText) {
-		return strings.TrimSpace(ellipsis.Centering(record.Content, 80))
+		return strings.TrimSpace(util.EllipsisMiddle(record.Content, 80))
 	}
 	return strings.TrimSpace(record.Content)
 }

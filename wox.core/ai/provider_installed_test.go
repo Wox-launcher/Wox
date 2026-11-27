@@ -16,11 +16,11 @@ import (
 	"testing"
 	"time"
 	"wox/common"
+	"wox/common/jsonschema"
 	"wox/setting"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/tidwall/gjson"
-	"github.com/tmc/langchaingo/jsonschema"
 )
 
 // TestInstalledStreamConversationOrder covers multiple tool rounds within one CLI turn.

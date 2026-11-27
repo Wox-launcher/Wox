@@ -1,6 +1,7 @@
 package util
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path"
@@ -8,9 +9,22 @@ import (
 	"runtime"
 	"strings"
 	"sync"
-
-	"github.com/mitchellh/go-homedir"
 )
+
+// ExpandHomeDir expands a leading "~" path segment using the current user's home directory.
+func ExpandHomeDir(targetPath string) (string, error) {
+	if len(targetPath) == 0 || targetPath[0] != '~' {
+		return targetPath, nil
+	}
+	if len(targetPath) > 1 && targetPath[1] != '/' && targetPath[1] != '\\' {
+		return "", errors.New("cannot expand user-specific home dir")
+	}
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(homeDir, targetPath[1:]), nil
+}
 
 var locationInstance *Location
 var locationOnce sync.Once
@@ -91,7 +105,7 @@ func (l *Location) Init() error {
 		if readFileErr != nil {
 			return fmt.Errorf("failed to read shortcut file: %w", readFileErr)
 		}
-		userDataDirectory, _ := homedir.Expand(string(readFile))
+		userDataDirectory, _ := ExpandHomeDir(string(readFile))
 		userDataDirectory = strings.ReplaceAll(userDataDirectory, "\n", "")
 		l.userDataDirectory = userDataDirectory
 	}

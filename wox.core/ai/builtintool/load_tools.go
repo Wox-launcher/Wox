@@ -7,8 +7,7 @@ import (
 
 	"wox/ai"
 	"wox/common"
-
-	"github.com/tmc/langchaingo/jsonschema"
+	"wox/common/jsonschema"
 )
 
 func init() {

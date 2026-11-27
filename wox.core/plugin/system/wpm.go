@@ -26,7 +26,6 @@ import (
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/google/uuid"
-	cp "github.com/otiai10/copy"
 	"github.com/samber/lo"
 )
 
@@ -1432,7 +1431,7 @@ func (w *WPMPlugin) createPlugin(ctx context.Context, template pluginTemplate, p
 	pluginDirectory := path.Join(pluginDirectories[0], pluginName)
 	w.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("Creating plugin in directory: %s", pluginDirectory))
 
-	cpErr := cp.Copy(path.Join(tempPluginDirectory, template.Name+"-main"), pluginDirectory)
+	cpErr := util.CopyPath(path.Join(tempPluginDirectory, template.Name+"-main"), pluginDirectory)
 	if cpErr != nil {
 		w.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("Failed to copy template: %s", cpErr.Error()))
 		w.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: fmt.Sprintf("Failed to copy template: %s", cpErr.Error())})

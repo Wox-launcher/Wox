@@ -35,7 +35,6 @@ import (
 	"wox/util/imagecache"
 	"wox/util/shell"
 
-	"github.com/mitchellh/go-homedir"
 	"github.com/struCoder/pidusage"
 	"github.com/tidwall/gjson"
 	"howett.net/plist"
@@ -74,7 +73,7 @@ func (a *MacRetriever) GetPlatform() string {
 }
 
 func (a *MacRetriever) GetAppDirectories(ctx context.Context) []appDirectory {
-	userHomeApps, _ := homedir.Expand("~/Applications")
+	userHomeApps, _ := util.ExpandHomeDir("~/Applications")
 	return []appDirectory{
 		{
 			Path: userHomeApps, Recursive: false, trackChanges: true,

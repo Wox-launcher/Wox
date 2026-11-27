@@ -16,7 +16,6 @@ import (
 	"wox/util"
 
 	"github.com/google/uuid"
-	cp "github.com/otiai10/copy"
 )
 
 type BackupType string
@@ -294,8 +293,8 @@ func (m *Manager) Backup(ctx context.Context, backupType BackupType) (err error)
 // A later failure inside plugins/ is skipped. The database and the rest of the user data
 // still have to copy, so one plugin cannot reject the whole backup.
 func copyUserDataForBackup(ctx context.Context, userDataDir, backupPath string) error {
-	return cp.Copy(userDataDir, backupPath, cp.Options{
-		OnSymlink: func(string) cp.SymlinkAction { return cp.Skip },
+	return util.CopyPath(userDataDir, backupPath, util.CopyOptions{
+		SkipSymlinks: true,
 		Skip: func(info os.FileInfo, srcPath, _ string) (bool, error) {
 			if filepath.Dir(srcPath) == filepath.Clean(userDataDir) {
 				name := info.Name()
@@ -454,7 +453,7 @@ func RestoreUserDataDirectory(ctx context.Context, backupPath string, userDataDi
 		return err
 	}
 	defer os.RemoveAll(staging)
-	if err := cp.Copy(backupPath, staging); err != nil {
+	if err := util.CopyPath(backupPath, staging); err != nil {
 		return err
 	}
 	if err := database.CheckDatabaseFile(ctx, filepath.Join(staging, database.FileName)); err != nil {

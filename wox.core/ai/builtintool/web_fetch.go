@@ -13,9 +13,8 @@ import (
 
 	"wox/ai"
 	"wox/common"
+	"wox/common/jsonschema"
 	"wox/setting"
-
-	"github.com/tmc/langchaingo/jsonschema"
 )
 
 var (

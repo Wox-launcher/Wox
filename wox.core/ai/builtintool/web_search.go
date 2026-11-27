@@ -10,11 +10,11 @@ import (
 
 	"wox/ai"
 	"wox/common"
+	"wox/common/jsonschema"
 	"wox/setting"
 	"wox/util"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/tmc/langchaingo/jsonschema"
 )
 
 const exaWebSearchToolName = "web_search_exa"

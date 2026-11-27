@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"wox/common"
 	"wox/common/icons"
 	"wox/i18n"
@@ -18,7 +19,7 @@ import (
 	"wox/util"
 	"wox/util/browser"
 
-	"github.com/olahol/melody"
+	"github.com/gorilla/websocket"
 	"github.com/samber/lo"
 )
 
@@ -30,9 +31,12 @@ func init() {
 }
 
 type BrowserPlugin struct {
-	api    plugin.API
-	m      *melody.Melody
-	server *http.Server
+	api          plugin.API
+	sessions     *util.HashMap[*browserWSSession, struct{}]
+	sessionsOnce sync.Once
+	wsReady      atomic.Bool
+	server       *http.Server
+	serverMu     sync.Mutex
 
 	openedTabs []browserTab
 	activeTab  browserTab
@@ -44,6 +48,65 @@ type websocketMsg struct {
 	Data   string `json:"data"`
 }
 
+type browserWSSession struct {
+	conn    *websocket.Conn
+	req     *http.Request
+	writeMu sync.Mutex
+
+	metaMu    sync.RWMutex
+	browserID string
+	tabs      []browserTab
+}
+
+func (s *browserWSSession) writeText(msg []byte) error {
+	if s == nil || s.conn == nil {
+		return fmt.Errorf("websocket session is closed")
+	}
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+	return s.conn.WriteMessage(websocket.TextMessage, msg)
+}
+
+func (s *browserWSSession) close() error {
+	if s == nil || s.conn == nil {
+		return nil
+	}
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+	return s.conn.Close()
+}
+
+func (s *browserWSSession) getBrowserID() string {
+	s.metaMu.RLock()
+	defer s.metaMu.RUnlock()
+	return s.browserID
+}
+
+func (s *browserWSSession) setBrowserID(id string) {
+	s.metaMu.Lock()
+	s.browserID = id
+	s.metaMu.Unlock()
+}
+
+func (s *browserWSSession) getTabs() []browserTab {
+	s.metaMu.RLock()
+	defer s.metaMu.RUnlock()
+	return append([]browserTab(nil), s.tabs...)
+}
+
+func (s *browserWSSession) setTabs(tabs []browserTab) {
+	s.metaMu.Lock()
+	s.tabs = tabs
+	s.metaMu.Unlock()
+}
+
+func (c *BrowserPlugin) sessionMap() *util.HashMap[*browserWSSession, struct{}] {
+	c.sessionsOnce.Do(func() {
+		c.sessions = util.NewHashMap[*browserWSSession, struct{}]()
+	})
+	return c.sessions
+}
+
 type browserTab struct {
 	TabId       int    `json:"tabId"`
 	WindowId    int    `json:"windowId"`
@@ -53,7 +116,7 @@ type browserTab struct {
 	Pinned      bool   `json:"pinned"`
 	Highlighted bool   `json:"highlighted"`
 	Browser     string `json:"browser"`
-	session     *melody.Session
+	session     *browserWSSession
 }
 
 func (c *BrowserPlugin) GetMetadata() plugin.Metadata {
@@ -182,10 +245,10 @@ func (c *BrowserPlugin) Query(ctx context.Context, query plugin.Query) plugin.Qu
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						msg := []byte(fmt.Sprintf(`{"method":"highlightTab","data":"{\"tabId\":%d,\"windowId\":%d,\"tabIndex\": %d}"}`, tab.TabId, tab.WindowId, tab.TabIndex))
 						if tab.session != nil {
-							_ = tab.session.Write(msg)
+							_ = tab.session.writeText(msg)
 							return
 						}
-						_ = c.m.Broadcast(msg)
+						_ = c.broadcastWS(msg)
 					},
 				},
 			},
@@ -207,93 +270,29 @@ func (c *BrowserPlugin) newWebsocketServer(ctx context.Context) error {
 
 	c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("Starting browser websocket server at port %d", port))
 
-	// close the existing server
-	if c.server != nil {
+	c.serverMu.Lock()
+	existingServer := c.server
+	c.server = nil
+	c.serverMu.Unlock()
+	if existingServer != nil {
 		c.api.Log(ctx, plugin.LogLevelInfo, "closing existing server")
-		closeErr := c.server.Shutdown(ctx)
-		if closeErr != nil {
+		if closeErr := existingServer.Shutdown(ctx); closeErr != nil {
 			c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to close server: %s", closeErr.Error()))
 			return fmt.Errorf("failed to close server: %s", closeErr.Error())
 		}
 	}
-	if c.m != nil {
-		c.api.Log(ctx, plugin.LogLevelInfo, "closing existing melody")
-		closeErr := c.m.Close()
-		if closeErr != nil {
-			c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to close melody: %s", closeErr.Error()))
-			return fmt.Errorf("failed to close melody: %s", closeErr.Error())
-		}
-	}
+	c.closeAllSessions(ctx)
 
-	c.m = melody.New()
-	c.m.Config.MaxMessageSize = 1024 * 1024 * 10 // 10MB
-
-	c.m.HandleConnect(func(s *melody.Session) {
-		ctxNew := util.NewTraceContext()
-		origin := ""
-		ua := ""
-		remote := ""
-		if s.Request != nil {
-			origin = s.Request.Header.Get("Origin")
-			ua = s.Request.UserAgent()
-			remote = s.Request.RemoteAddr
-		}
-		browserID := browser.BrowserIDFromExtensionRequest(origin, ua)
-		s.Set("browser", browserID)
-		c.api.Log(ctxNew, plugin.LogLevelInfo, fmt.Sprintf("browser extension connected browser=%s origin=%s remote=%s ua=%s", browserID, origin, remote, ua))
-	})
-	c.m.HandleDisconnect(func(s *melody.Session) {
-		ctxNew := util.NewTraceContext()
-		s.Set("tabs", []browserTab(nil))
-		c.refreshOpenedTabs()
-		c.api.Log(ctxNew, plugin.LogLevelInfo, "browser extension disconnected")
-	})
-	c.m.HandleError(func(s *melody.Session, err error) {
-		ctxNew := util.NewTraceContext()
-		c.api.Log(ctxNew, plugin.LogLevelError, fmt.Sprintf("browser extension websocket error: %s", err.Error()))
-	})
-
-	mux := http.NewServeMux()
-	mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
-		ctxNew := util.NewTraceContext()
-		c.api.Log(ctxNew, plugin.LogLevelInfo, fmt.Sprintf("ws handshake origin=%s remote=%s ua=%s", r.Header.Get("Origin"), r.RemoteAddr, r.UserAgent()))
-		if handleErr := c.m.HandleRequest(w, r); handleErr != nil {
-			c.api.Log(ctxNew, plugin.LogLevelError, fmt.Sprintf("ws handshake failed: %s", handleErr.Error()))
-		}
-	})
-
-	c.m.HandleMessage(func(s *melody.Session, msg []byte) {
-		ctxNew := util.NewTraceContext()
-		//c.api.Log(ctxNew, plugin.LogLevelInfo, fmt.Sprintf("received message: %s", string(msg)))
-
-		var request websocketMsg
-		unmarshalErr := json.Unmarshal(msg, &request)
-		if unmarshalErr != nil {
-			c.api.Log(ctxNew, plugin.LogLevelError, fmt.Sprintf("failed to unmarshal websocket request: %s", unmarshalErr.Error()))
-			return
-		}
-
-		util.Go(ctxNew, "handle chrome extension request", func() {
-			switch request.Method {
-			case "ping":
-				err := c.m.Broadcast([]byte(`{"method":"pong"}`))
-				if err != nil {
-					c.api.Log(ctxNew, plugin.LogLevelError, fmt.Sprintf("failed to broadcast pong: %s", err.Error()))
-					return
-				}
-			case "tabs":
-				c.onUpdateTabs(ctxNew, s, request.Data)
-			default:
-				c.api.Log(ctxNew, plugin.LogLevelError, fmt.Sprintf("unknown websocket method: %s", request.Method))
-			}
-		})
-	})
-
+	mux := c.newWebsocketMux()
 	// Do not wrap the WebSocket endpoint with CORS. rs/cors writes
 	// Access-Control-* headers onto the 101 upgrade response, and Firefox
 	// rejects that handshake while Chrome accepts it.
-	c.server = &http.Server{Addr: fmt.Sprintf("127.0.0.1:%d", port), Handler: mux}
-	err := c.server.ListenAndServe()
+	server := &http.Server{Addr: fmt.Sprintf("127.0.0.1:%d", port), Handler: mux}
+	c.serverMu.Lock()
+	c.server = server
+	c.serverMu.Unlock()
+
+	err := server.ListenAndServe()
 	if err != nil && !errors.Is(err, http.ErrServerClosed) {
 		c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to start server: %s", err.Error()))
 		return fmt.Errorf("failed to start server: %s", err.Error())
@@ -302,7 +301,121 @@ func (c *BrowserPlugin) newWebsocketServer(ctx context.Context) error {
 	return nil
 }
 
-func (c *BrowserPlugin) onUpdateTabs(ctx context.Context, s *melody.Session, data string) {
+func (c *BrowserPlugin) newWebsocketMux() *http.ServeMux {
+	c.wsReady.Store(true)
+	upgrader := websocket.Upgrader{
+		ReadBufferSize:  1024,
+		WriteBufferSize: 1024,
+		CheckOrigin: func(r *http.Request) bool {
+			return true
+		},
+	}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
+		ctxNew := util.NewTraceContext()
+		origin := r.Header.Get("Origin")
+		ua := r.UserAgent()
+		remote := r.RemoteAddr
+		c.api.Log(ctxNew, plugin.LogLevelInfo, fmt.Sprintf("ws handshake origin=%s remote=%s ua=%s", origin, remote, ua))
+
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			c.api.Log(ctxNew, plugin.LogLevelError, fmt.Sprintf("ws handshake failed: %s", err.Error()))
+			return
+		}
+		conn.SetReadLimit(1024 * 1024 * 10) // 10MB
+
+		browserID := browser.BrowserIDFromExtensionRequest(origin, ua)
+		session := &browserWSSession{
+			conn:      conn,
+			req:       r,
+			browserID: browserID,
+		}
+		c.sessionMap().Store(session, struct{}{})
+		c.api.Log(ctxNew, plugin.LogLevelInfo, fmt.Sprintf("browser extension connected browser=%s origin=%s remote=%s ua=%s", browserID, origin, remote, ua))
+
+		defer func() {
+			c.sessionMap().Delete(session)
+			session.setTabs(nil)
+			_ = session.close()
+			c.refreshOpenedTabs()
+			c.api.Log(util.NewTraceContext(), plugin.LogLevelInfo, "browser extension disconnected")
+		}()
+
+		for {
+			msgType, msg, readErr := conn.ReadMessage()
+			if readErr != nil {
+				if !websocket.IsCloseError(readErr, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
+					c.api.Log(util.NewTraceContext(), plugin.LogLevelError, fmt.Sprintf("browser extension websocket error: %s", readErr.Error()))
+				}
+				return
+			}
+			if msgType != websocket.TextMessage && msgType != websocket.BinaryMessage {
+				continue
+			}
+			c.handleWebsocketMessage(session, msg)
+		}
+	})
+	return mux
+}
+
+func (c *BrowserPlugin) handleWebsocketMessage(session *browserWSSession, msg []byte) {
+	ctxNew := util.NewTraceContext()
+	var request websocketMsg
+	if unmarshalErr := json.Unmarshal(msg, &request); unmarshalErr != nil {
+		c.api.Log(ctxNew, plugin.LogLevelError, fmt.Sprintf("failed to unmarshal websocket request: %s", unmarshalErr.Error()))
+		return
+	}
+
+	util.Go(ctxNew, "handle chrome extension request", func() {
+		switch request.Method {
+		case "ping":
+			if err := c.broadcastWS([]byte(`{"method":"pong"}`)); err != nil {
+				c.api.Log(ctxNew, plugin.LogLevelError, fmt.Sprintf("failed to broadcast pong: %s", err.Error()))
+				return
+			}
+		case "tabs":
+			c.onUpdateTabs(ctxNew, session, request.Data)
+		default:
+			c.api.Log(ctxNew, plugin.LogLevelError, fmt.Sprintf("unknown websocket method: %s", request.Method))
+		}
+	})
+}
+
+func (c *BrowserPlugin) closeAllSessions(ctx context.Context) {
+	sessions := c.sessionMap()
+	if sessions.Len() == 0 {
+		return
+	}
+	c.api.Log(ctx, plugin.LogLevelInfo, "closing existing websocket sessions")
+	var toClose []*browserWSSession
+	sessions.Range(func(s *browserWSSession, _ struct{}) bool {
+		toClose = append(toClose, s)
+		return true
+	})
+	sessions.Clear()
+	for _, s := range toClose {
+		s.setTabs(nil)
+		if closeErr := s.close(); closeErr != nil {
+			c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to close websocket session: %s", closeErr.Error()))
+		}
+	}
+	c.refreshOpenedTabs()
+}
+
+func (c *BrowserPlugin) broadcastWS(msg []byte) error {
+	var firstErr error
+	c.sessionMap().Range(func(s *browserWSSession, _ struct{}) bool {
+		if err := s.writeText(msg); err != nil && firstErr == nil {
+			firstErr = err
+		}
+		return true
+	})
+	return firstErr
+}
+
+func (c *BrowserPlugin) onUpdateTabs(ctx context.Context, s *browserWSSession, data string) {
 	var tabs []browserTab
 	err := json.Unmarshal([]byte(data), &tabs)
 	if err != nil {
@@ -337,7 +450,7 @@ func (c *BrowserPlugin) onUpdateTabs(ctx context.Context, s *melody.Session, dat
 		return tab.Url != ""
 	})
 	if s != nil {
-		s.Set("tabs", filtered)
+		s.setTabs(filtered)
 	}
 	c.refreshOpenedTabs()
 
@@ -348,18 +461,16 @@ func (c *BrowserPlugin) onUpdateTabs(ctx context.Context, s *melody.Session, dat
 	})
 }
 
-func sessionBrowserID(s *melody.Session) string {
+func sessionBrowserID(s *browserWSSession) string {
 	if s == nil {
 		return browser.BrowserIDChrome
 	}
-	if v, ok := s.Get("browser"); ok {
-		if id, ok := v.(string); ok && id != "" {
-			return id
-		}
+	if id := s.getBrowserID(); id != "" {
+		return id
 	}
-	if s.Request != nil {
-		id := browser.BrowserIDFromExtensionRequest(s.Request.Header.Get("Origin"), s.Request.UserAgent())
-		s.Set("browser", id)
+	if s.req != nil {
+		id := browser.BrowserIDFromExtensionRequest(s.req.Header.Get("Origin"), s.req.UserAgent())
+		s.setBrowserID(id)
 		return id
 	}
 	return browser.BrowserIDChrome
@@ -367,21 +478,10 @@ func sessionBrowserID(s *melody.Session) string {
 
 func (c *BrowserPlugin) refreshOpenedTabs() {
 	var merged []browserTab
-	if c.m != nil {
-		if sessions, err := c.m.Sessions(); err == nil {
-			for _, sess := range sessions {
-				v, ok := sess.Get("tabs")
-				if !ok {
-					continue
-				}
-				tabs, ok := v.([]browserTab)
-				if !ok {
-					continue
-				}
-				merged = append(merged, tabs...)
-			}
-		}
-	}
+	c.sessionMap().Range(func(sess *browserWSSession, _ struct{}) bool {
+		merged = append(merged, sess.getTabs()...)
+		return true
+	})
 	uniqueTabs := lo.UniqBy(merged, func(tab browserTab) string {
 		return fmt.Sprintf("%s|%d|%d|%s", tab.Browser, tab.WindowId, tab.TabId, tab.Url)
 	})
@@ -417,31 +517,27 @@ func (c *BrowserPlugin) GetOpenedTabs() []browser.TabInfo {
 // IsExtensionConnected reports whether the browser extension WebSocket has
 // at least one active session.
 func (c *BrowserPlugin) IsExtensionConnected() bool {
-	if c.m == nil {
+	if !c.wsReady.Load() {
 		return false
 	}
-	sessions, err := c.m.Sessions()
-	if err != nil {
-		return false
-	}
-	return len(sessions) > 0
+	return c.sessionMap().Len() > 0
 }
 
 // OpenUrlViaExtension sends an openUrl command to the browser extension so it
 // creates a new tab with the given URL. This opens the tab inside the already
 // running browser instance instead of launching a new process.
 func (c *BrowserPlugin) OpenUrlViaExtension(url string) error {
-	if c.m == nil {
+	if !c.wsReady.Load() {
 		return fmt.Errorf("browser extension websocket not started")
 	}
 	msg := fmt.Sprintf(`{"method":"openUrl","data":%s}`, mustJSONString(url))
-	return c.m.Broadcast([]byte(msg))
+	return c.broadcastWS([]byte(msg))
 }
 
 // HighlightTab sends a highlightTab command to the browser extension so it
 // switches focus to the specified tab within the specified window.
 func (c *BrowserPlugin) HighlightTab(tabId, windowId, tabIndex int) error {
-	if c.m == nil {
+	if !c.wsReady.Load() {
 		return fmt.Errorf("browser extension websocket not started")
 	}
 	msg := fmt.Sprintf(`{"method":"highlightTab","data":"{\"tabId\":%d,\"windowId\":%d,\"tabIndex\":%d}"}`, tabId, windowId, tabIndex)
@@ -450,11 +546,11 @@ func (c *BrowserPlugin) HighlightTab(tabId, windowId, tabIndex int) error {
 		if tab.TabId == tabId && tab.WindowId == windowId && tab.TabIndex == tabIndex && tab.session != nil {
 			session := tab.session
 			c.tabsMu.RUnlock()
-			return session.Write([]byte(msg))
+			return session.writeText([]byte(msg))
 		}
 	}
 	c.tabsMu.RUnlock()
-	return c.m.Broadcast([]byte(msg))
+	return c.broadcastWS([]byte(msg))
 }
 
 // mustJSONString encodes a string as a JSON string literal (with surrounding
@@ -501,10 +597,10 @@ func (c *BrowserPlugin) handleMRURestore(ctx context.Context, mruData plugin.MRU
 					Action: func(ctx context.Context, actionContext plugin.ActionContext) {
 						msg := []byte(fmt.Sprintf(`{"method":"highlightTab","data":"{\"tabId\":%d,\"windowId\":%d,\"tabIndex\": %d}"}`, current.TabId, current.WindowId, current.TabIndex))
 						if current.session != nil {
-							_ = current.session.Write(msg)
+							_ = current.session.writeText(msg)
 							return
 						}
-						_ = c.m.Broadcast(msg)
+						_ = c.broadcastWS(msg)
 					},
 				},
 			},

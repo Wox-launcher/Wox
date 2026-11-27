@@ -16,7 +16,6 @@ import (
 	"wox/util/shell"
 
 	"github.com/Masterminds/semver/v3"
-	"github.com/mitchellh/go-homedir"
 )
 
 const pythonInstallUrl = "https://www.python.org/downloads/"
@@ -342,7 +341,7 @@ func collectPythonPathsForWindows() []string {
 		}
 	}
 
-	if homeDir, err := homedir.Dir(); err == nil {
+	if homeDir, err := os.UserHomeDir(); err == nil {
 		candidates = append(candidates, util.CollectExecutables(filepath.Join(homeDir, "scoop", "apps", "python"), binaries, nil)...)
 	}
 
@@ -352,7 +351,7 @@ func collectPythonPathsForWindows() []string {
 }
 
 func collectPythonPathsFromPyenvUnix() []string {
-	pyenvPaths, _ := homedir.Expand("~/.pyenv/versions")
+	pyenvPaths, _ := util.ExpandHomeDir("~/.pyenv/versions")
 	if !util.IsDirExists(pyenvPaths) {
 		return nil
 	}
@@ -371,7 +370,7 @@ func collectPythonPathsFromPyenvUnix() []string {
 }
 
 func collectPythonPathsFromPyenvWin() []string {
-	pyenvWinPaths, _ := homedir.Expand("~/.pyenv/pyenv-win/versions")
+	pyenvWinPaths, _ := util.ExpandHomeDir("~/.pyenv/pyenv-win/versions")
 	if !util.IsDirExists(pyenvWinPaths) {
 		return nil
 	}

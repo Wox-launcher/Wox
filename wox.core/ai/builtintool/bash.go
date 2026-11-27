@@ -14,10 +14,9 @@ import (
 
 	"wox/ai"
 	"wox/common"
+	"wox/common/jsonschema"
 	"wox/network"
 	"wox/util/shell"
-
-	"github.com/tmc/langchaingo/jsonschema"
 )
 
 const (

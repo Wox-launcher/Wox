@@ -20,7 +20,6 @@ import (
 	"wox/util/screenshotedit"
 
 	"github.com/google/uuid"
-	"github.com/mitchellh/go-homedir"
 )
 
 const screenshotSaveDirectorySettingKey = "save_directory"
@@ -119,7 +118,7 @@ func (p *ScreenshotPlugin) HandleSettingUpdate(ctx context.Context, key, value s
 		return true, errors.New(p.api.GetTranslation(ctx, "plugin_screenshot_directory_migration_busy"))
 	}
 	oldDirectory := p.screenshotDirectoryLocked()
-	directory, err := homedir.Expand(strings.TrimSpace(value))
+	directory, err := util.ExpandHomeDir(strings.TrimSpace(value))
 	if err != nil || directory == "" || !filepath.IsAbs(directory) {
 		return true, errors.New(p.api.GetTranslation(ctx, "plugin_screenshot_directory_invalid"))
 	}

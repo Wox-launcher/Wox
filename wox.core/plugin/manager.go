@@ -31,7 +31,6 @@ import (
 	"wox/util/window"
 
 	"github.com/samber/lo"
-	"github.com/wissance/stringFormatter"
 )
 
 var managerInstance *Manager
@@ -1940,7 +1939,7 @@ func (m *Manager) expandQueryAlias(ctx context.Context, query string, queryAlias
 				placeholderCount := alias.PlaceholderCount()
 				var paramsCount = 0
 
-				var params []any
+				var params []string
 				var nonPrams string
 				for _, param := range parameters {
 					if paramsCount < placeholderCount {
@@ -1950,7 +1949,15 @@ func (m *Manager) expandQueryAlias(ctx context.Context, query string, queryAlias
 						nonPrams += " " + param
 					}
 				}
-				newQuery = stringFormatter.Format(alias.Query, params...) + nonPrams
+				if len(params) == 0 {
+					newQuery = alias.Query + nonPrams
+				} else {
+					replacerArgs := make([]string, 0, len(params)*2)
+					for i, param := range params {
+						replacerArgs = append(replacerArgs, fmt.Sprintf("{%d}", i), param)
+					}
+					newQuery = strings.NewReplacer(replacerArgs...).Replace(alias.Query) + nonPrams
+				}
 				break
 			}
 		}

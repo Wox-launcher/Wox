@@ -9,8 +9,7 @@ import (
 
 	"wox/ai"
 	"wox/common"
-
-	"github.com/tmc/langchaingo/jsonschema"
+	"wox/common/jsonschema"
 )
 
 const readMaxBytes = 256 * 1024 // 256KB

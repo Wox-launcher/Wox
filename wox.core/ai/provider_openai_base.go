@@ -11,10 +11,9 @@ import (
 	"strings"
 	"unicode"
 	"wox/common"
+	"wox/common/jsonschema"
 	"wox/setting"
 	"wox/util"
-
-	"github.com/tmc/langchaingo/jsonschema"
 )
 
 type OpenAIBaseProviderOptions struct {
@@ -203,9 +202,9 @@ func toolInputSchema(tool common.Tool) map[string]any {
 	return jsonSchemaDefinitionToMap(tool.Parameters)
 }
 
-// jsonSchemaDefinitionToMap copies a tool schema without langchaingo's empty
-// `properties` on non-object types. Strict OpenAI-compatible hosts such as
-// SiliconFlow reject that extra field with HTTP 400.
+// jsonSchemaDefinitionToMap copies a tool schema and omits empty `properties` on
+// non-object types. Strict OpenAI-compatible hosts such as SiliconFlow reject that
+// extra field with HTTP 400.
 func jsonSchemaDefinitionToMap(def jsonschema.Definition) map[string]any {
 	result := map[string]any{}
 	if def.Type != "" {

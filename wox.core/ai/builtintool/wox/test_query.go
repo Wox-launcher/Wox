@@ -6,8 +6,7 @@ import (
 
 	"wox/ai"
 	"wox/common"
-
-	"github.com/tmc/langchaingo/jsonschema"
+	"wox/common/jsonschema"
 )
 
 // TestQueryHook is wired by the system chat plugin because silent queries need plugin manager access.

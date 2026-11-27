@@ -9,9 +9,8 @@ import (
 
 	"wox/ai"
 	"wox/common"
+	"wox/common/jsonschema"
 	"wox/util"
-
-	"github.com/tmc/langchaingo/jsonschema"
 )
 
 func init() {

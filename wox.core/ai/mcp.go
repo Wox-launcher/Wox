@@ -6,13 +6,13 @@ import (
 	"strings"
 	"time"
 	"wox/common"
+	"wox/common/jsonschema"
 	"wox/network"
 	"wox/util"
 	"wox/util/shell"
 
 	"github.com/google/uuid"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/tmc/langchaingo/jsonschema"
 )
 
 var mcpSessions = util.NewHashMap[string, *mcp.ClientSession]()

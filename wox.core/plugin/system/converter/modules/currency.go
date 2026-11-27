@@ -17,7 +17,7 @@ import (
 	"wox/network"
 	"wox/util"
 
-	"github.com/PuerkitoBio/goquery"
+	"golang.org/x/net/html"
 )
 
 type CurrencyModule struct {
@@ -312,82 +312,83 @@ func (m *CurrencyModule) LastRateUpdatedAt() int64 {
 func (m *CurrencyModule) parseExchangeRateFromHKAB(ctx context.Context) (rates map[string]float64, err error) {
 	util.GetLogger().Info(ctx, "Starting to parse exchange rates from HKAB")
 
-	// Initialize maps
-	rates = make(map[string]float64)
-	rawRates := make(map[string]float64)
-
 	body, err := util.HttpGet(ctx, "https://www.hkab.org.hk/en/rates/exchange-rates")
 	if err != nil {
 		util.GetLogger().Error(ctx, fmt.Sprintf("Failed to get exchange rates from HKAB: %s", err.Error()))
 		return nil, err
 	}
 
-	doc, err := goquery.NewDocumentFromReader(bytes.NewReader(body))
+	return parseHKABExchangeRateHTML(ctx, body)
+}
+
+// parseHKABExchangeRateHTML extracts USD-normalized fiat exchange rates from HKAB's HTML page.
+func parseHKABExchangeRateHTML(ctx context.Context, body []byte) (map[string]float64, error) {
+	doc, err := html.Parse(bytes.NewReader(body))
 	if err != nil {
 		util.GetLogger().Error(ctx, fmt.Sprintf("Failed to parse HTML: %s", err.Error()))
 		return nil, err
 	}
 
-	// Find the first general_table_container
-	firstTable := doc.Find(".general_table_container").First()
-	if firstTable.Length() == 0 {
+	firstTable := findFirstElementWithClasses(doc, "general_table_container")
+	if firstTable == nil {
 		util.GetLogger().Error(ctx, "Failed to find exchange rate table")
 		return nil, fmt.Errorf("exchange rate table not found")
 	}
 
+	rates := make(map[string]float64)
+	rawRates := make(map[string]float64)
+
 	// First pass: collect all raw rates from the first table only
-	firstTable.Find(".general_table_row.exchange_rate").Each(func(i int, s *goquery.Selection) {
-		// Get currency code
-		currencyCode := strings.TrimSpace(s.Find(".exchange_rate_1 div:last-child").Text())
+	for _, row := range findElementsWithClasses(firstTable, "general_table_row", "exchange_rate") {
+		codeContainer := findFirstElementWithClasses(row, "exchange_rate_1")
+		if codeContainer == nil {
+			continue
+		}
+		currencyCode := strings.TrimSpace(collectLastChildDivText(codeContainer))
 		if currencyCode == "" {
-			return
+			continue
 		}
 
-		// Get selling rate and buying rate
 		var sellingRateStr, buyingRateStr string
-		s.Find("div").Each(func(j int, sel *goquery.Selection) {
-			text := strings.TrimSpace(sel.Text())
+		for _, div := range findElementsByTag(row, "div") {
+			text := strings.TrimSpace(collectNodeText(div))
 			if text == "Selling:" {
-				sellingRateStr = strings.TrimSpace(sel.Parent().Find("div:last-child").Text())
+				sellingRateStr = strings.TrimSpace(collectLastChildDivText(div.Parent))
 			} else if text == "Buying TT:" {
-				buyingRateStr = strings.TrimSpace(sel.Parent().Find("div:last-child").Text())
+				buyingRateStr = strings.TrimSpace(collectLastChildDivText(div.Parent))
 			}
-		})
+		}
 
 		if sellingRateStr == "" || buyingRateStr == "" {
-			return
+			continue
 		}
 
-		// Clean up rate strings and parse
 		sellingRate, err := strconv.ParseFloat(strings.ReplaceAll(sellingRateStr, ",", ""), 64)
 		if err != nil {
 			util.GetLogger().Error(ctx, fmt.Sprintf("Failed to parse selling rate for %s: %v", currencyCode, err))
-			return
+			continue
 		}
 
 		buyingRate, err := strconv.ParseFloat(strings.ReplaceAll(buyingRateStr, ",", ""), 64)
 		if err != nil {
 			util.GetLogger().Error(ctx, fmt.Sprintf("Failed to parse buying rate for %s: %v", currencyCode, err))
-			return
+			continue
 		}
 
 		if sellingRate <= 0 || buyingRate <= 0 {
-			return
+			continue
 		}
 
-		// Calculate middle rate
 		middleRate := (sellingRate + buyingRate) / 2
 		rawRates[strings.ToUpper(currencyCode)] = middleRate
-	})
+	}
 
-	// Find USD rate first
 	usdRate, exists := rawRates["USD"]
 	if !exists {
 		util.GetLogger().Error(ctx, "USD rate not found")
 		return nil, fmt.Errorf("USD rate not found")
 	}
 
-	// Set base USD rate
 	rates["USD"] = 1.0
 	usdToHkd := usdRate / 100.0
 
@@ -397,12 +398,9 @@ func (m *CurrencyModule) parseExchangeRateFromHKAB(ctx context.Context) (rates m
 	// queries use the same live snapshot as the other HKAB currencies.
 	rates["HKD"] = usdToHkd
 
-	// Second pass: calculate all rates relative to USD
 	for currency, rate := range rawRates {
-		// Convert rates relative to USD
 		currencyToHkd := rate / 100.0
-		currencyPerUsd := usdToHkd / currencyToHkd
-		rates[currency] = currencyPerUsd
+		rates[currency] = usdToHkd / currencyToHkd
 	}
 
 	if len(rates) < 2 {
@@ -412,6 +410,129 @@ func (m *CurrencyModule) parseExchangeRateFromHKAB(ctx context.Context) (rates m
 
 	util.GetLogger().Info(ctx, fmt.Sprintf("Successfully parsed %d exchange rates", len(rates)))
 	return rates, nil
+}
+
+func elementHasAllClasses(node *html.Node, classes ...string) bool {
+	if node == nil || node.Type != html.ElementNode {
+		return false
+	}
+	var classAttr string
+	for _, attr := range node.Attr {
+		if attr.Key == "class" {
+			classAttr = attr.Val
+			break
+		}
+	}
+	if classAttr == "" {
+		return false
+	}
+	present := strings.Fields(classAttr)
+	for _, target := range classes {
+		found := false
+		for _, candidate := range present {
+			if candidate == target {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+	return true
+}
+
+func findFirstElementWithClasses(root *html.Node, classes ...string) *html.Node {
+	if root == nil {
+		return nil
+	}
+	var match *html.Node
+	var walk func(*html.Node)
+	walk = func(n *html.Node) {
+		if match != nil {
+			return
+		}
+		if n != root && elementHasAllClasses(n, classes...) {
+			match = n
+			return
+		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			walk(c)
+		}
+	}
+	walk(root)
+	return match
+}
+
+func findElementsWithClasses(root *html.Node, classes ...string) []*html.Node {
+	var matches []*html.Node
+	var walk func(*html.Node)
+	walk = func(n *html.Node) {
+		if n != root && elementHasAllClasses(n, classes...) {
+			matches = append(matches, n)
+		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			walk(c)
+		}
+	}
+	if root != nil {
+		walk(root)
+	}
+	return matches
+}
+
+func findElementsByTag(root *html.Node, tag string) []*html.Node {
+	var matches []*html.Node
+	var walk func(*html.Node)
+	walk = func(n *html.Node) {
+		if n != root && n.Type == html.ElementNode && strings.EqualFold(n.Data, tag) {
+			matches = append(matches, n)
+		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			walk(c)
+		}
+	}
+	if root != nil {
+		walk(root)
+	}
+	return matches
+}
+
+func isLastElementSibling(node *html.Node) bool {
+	for s := node.NextSibling; s != nil; s = s.NextSibling {
+		if s.Type == html.ElementNode {
+			return false
+		}
+	}
+	return true
+}
+
+func collectLastChildDivText(root *html.Node) string {
+	var b strings.Builder
+	for _, div := range findElementsByTag(root, "div") {
+		if isLastElementSibling(div) {
+			b.WriteString(collectNodeText(div))
+		}
+	}
+	return b.String()
+}
+
+func collectNodeText(node *html.Node) string {
+	if node == nil {
+		return ""
+	}
+	var b strings.Builder
+	var walk func(*html.Node)
+	walk = func(n *html.Node) {
+		if n.Type == html.TextNode {
+			b.WriteString(n.Data)
+		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			walk(c)
+		}
+	}
+	walk(node)
+	return b.String()
 }
 
 // parseExchangeRateFromECB parses exchange rates from European Central Bank

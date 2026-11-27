@@ -53,8 +53,6 @@ import (
 	"wox/util/window"
 
 	"github.com/google/uuid"
-	"github.com/mitchellh/go-homedir"
-	cp "github.com/otiai10/copy"
 	"github.com/samber/lo"
 )
 
@@ -2422,7 +2420,7 @@ func (m *Manager) ChangeUserDataDirectory(ctx context.Context, newDirectory stri
 	}
 
 	// Expand tilde if present in the path
-	expandedDir, expandErr := homedir.Expand(newDirectory)
+	expandedDir, expandErr := util.ExpandHomeDir(newDirectory)
 	if expandErr != nil {
 		return fmt.Errorf("failed to expand directory path: %w", expandErr)
 	}
@@ -2472,7 +2470,7 @@ func (m *Manager) ChangeUserDataDirectory(ctx context.Context, newDirectory stri
 			}
 
 			logger.Info(ctx, fmt.Sprintf("Copying directory from %s to %s", dir.srcPath, dir.dstPath))
-			if err := cp.Copy(dir.srcPath, dir.dstPath); err != nil {
+			if err := util.CopyPath(dir.srcPath, dir.dstPath); err != nil {
 				return fmt.Errorf("failed to copy directory %s: %w", dir.srcPath, err)
 			}
 		}

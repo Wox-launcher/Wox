@@ -14,7 +14,6 @@ import (
 	"wox/util/browser"
 
 	_ "github.com/mattn/go-sqlite3"
-	"github.com/mitchellh/go-homedir"
 )
 
 func init() {
@@ -78,7 +77,7 @@ func (c *BrowserBookmarkPlugin) resolveFirefoxProfileDirs(ctx context.Context, r
 	}
 
 	for _, rootDir := range rootDirs {
-		resolvedRoot, err := homedir.Expand(rootDir)
+		resolvedRoot, err := util.ExpandHomeDir(rootDir)
 		if err != nil {
 			c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("error expanding %s root path: %s", browserName, err.Error()))
 			continue

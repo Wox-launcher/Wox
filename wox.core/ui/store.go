@@ -19,7 +19,6 @@ import (
 	"wox/util/trash"
 
 	"github.com/samber/lo"
-	"github.com/tidwall/pretty"
 )
 
 type storeManifest struct {
@@ -170,11 +169,6 @@ func (s *Store) install(ctx context.Context, theme common.Theme, syncInstall boo
 	theme.IsInstalled = true
 	theme.IsSystem = false
 
-	themeJson, err := json.Marshal(theme)
-	if err != nil {
-		return err
-	}
-
 	var writeErr error
 	if len(theme.AssetFiles) > 0 {
 		writeErr = GetUIManager().persistThemePackage(util.GetLocation().GetThemeDirectory(), theme)
@@ -185,11 +179,15 @@ func (s *Store) install(ctx context.Context, theme common.Theme, syncInstall boo
 			themePath = filepath.Join(util.GetLocation().GetThemeDirectory(), theme.ThemeId, "theme.json")
 		}
 	} else {
+		themeJson, err := json.MarshalIndent(theme, "", "  ")
+		if err != nil {
+			return err
+		}
 		packagePath := filepath.Join(util.GetLocation().GetThemeDirectory(), theme.ThemeId, "theme.json")
 		if util.IsFileExists(packagePath) {
 			themePath = packagePath
 		}
-		writeErr = os.WriteFile(themePath, pretty.Pretty(themeJson), os.ModePerm)
+		writeErr = os.WriteFile(themePath, append(themeJson, '\n'), os.ModePerm)
 	}
 	if writeErr != nil {
 		return writeErr

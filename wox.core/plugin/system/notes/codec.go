@@ -11,12 +11,12 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/PuerkitoBio/goquery"
 	"github.com/google/uuid"
 	"github.com/yuin/goldmark/ast"
 	extast "github.com/yuin/goldmark/extension/ast"
 	"github.com/yuin/goldmark/text"
 	goldmarkutil "github.com/yuin/goldmark/util"
+	xhtml "golang.org/x/net/html"
 
 	"wox/common"
 	"wox/util/markdown"
@@ -1256,29 +1256,36 @@ func ParseClipboard(value string) common.NoteDocument {
 
 // ParseHTML converts Notes export HTML and pasted table markup into the block model.
 func ParseHTML(value string) common.NoteDocument {
-	document, err := goquery.NewDocumentFromReader(strings.NewReader(value))
+	document, err := xhtml.Parse(strings.NewReader(value))
 	if err != nil {
 		return ParseMarkdown(value)
 	}
-	root := document.Find("article")
-	if root.Length() == 0 {
-		root = document.Selection
+	roots := findHTMLElementsByTag(document, "article")
+	if len(roots) == 0 {
+		roots = []*xhtml.Node{document}
 	}
 	parsed := common.NoteDocument{Version: documentVersion}
-	root.Children().Each(func(_ int, node *goquery.Selection) {
-		parsed.Blocks = append(parsed.Blocks, htmlBlocks(node)...)
-	})
+	for _, root := range roots {
+		for child := root.FirstChild; child != nil; child = child.NextSibling {
+			if child.Type == xhtml.ElementNode {
+				parsed.Blocks = append(parsed.Blocks, htmlBlocks(child)...)
+			}
+		}
+	}
 	if len(parsed.Blocks) == 0 {
-		if table := htmlTable(document.Find("table").First()); table != nil {
-			parsed.Blocks = append(parsed.Blocks, common.NoteBlock{ID: uuid.NewString(), Type: common.NoteBlockTable, Table: table})
+		if tables := findHTMLElementsByTag(document, "table"); len(tables) > 0 {
+			if table := htmlTable(tables[0]); table != nil {
+				parsed.Blocks = append(parsed.Blocks, common.NoteBlock{ID: uuid.NewString(), Type: common.NoteBlockTable, Table: table})
+			}
 		}
 	}
 	return NormalizeDocument(parsed)
 }
 
-func htmlBlocks(node *goquery.Selection) []common.NoteBlock {
+func htmlBlocks(node *xhtml.Node) []common.NoteBlock {
 	block := common.NoteBlock{ID: uuid.NewString(), Type: common.NoteBlockParagraph}
-	switch strings.ToLower(goquery.NodeName(node)) {
+	tag := strings.ToLower(node.Data)
+	switch tag {
 	case "h1":
 		block.Type = common.NoteBlockHeading1
 		block.Text, block.Spans = htmlSelectionText(node)
@@ -1306,11 +1313,11 @@ func htmlBlocks(node *goquery.Selection) []common.NoteBlock {
 		block.Type = common.NoteBlockQuote
 		block.Text, block.Spans = htmlSelectionText(node)
 	case "pre":
-		block.Type, block.Text = common.NoteBlockCode, node.Text()
+		block.Type, block.Text = common.NoteBlockCode, htmlTextExcluding(node)
 	case "hr":
 		block.Type = common.NoteBlockDivider
 	case "ul", "ol":
-		return htmlListBlocks(node, strings.ToLower(goquery.NodeName(node)) == "ol", 0)
+		return htmlListBlocks(node, tag == "ol", 0)
 	case "table":
 		if table := htmlTable(node); table != nil {
 			block.Type, block.Table = common.NoteBlockTable, table
@@ -1319,62 +1326,79 @@ func htmlBlocks(node *goquery.Selection) []common.NoteBlock {
 		return nil
 	default:
 		var blocks []common.NoteBlock
-		node.Children().Each(func(_ int, child *goquery.Selection) {
-			blocks = append(blocks, htmlBlocks(child)...)
-		})
+		for child := node.FirstChild; child != nil; child = child.NextSibling {
+			if child.Type == xhtml.ElementNode {
+				blocks = append(blocks, htmlBlocks(child)...)
+			}
+		}
 		return blocks
 	}
 	return []common.NoteBlock{block}
 }
 
-func htmlListBlocks(list *goquery.Selection, ordered bool, indent int) []common.NoteBlock {
+func htmlListBlocks(list *xhtml.Node, ordered bool, indent int) []common.NoteBlock {
 	var blocks []common.NoteBlock
-	list.ChildrenFiltered("li").Each(func(_ int, item *goquery.Selection) {
+	for item := list.FirstChild; item != nil; item = item.NextSibling {
+		if item.Type != xhtml.ElementNode || !strings.EqualFold(item.Data, "li") {
+			continue
+		}
 		text, spans := htmlSelectionText(item)
 		block := common.NoteBlock{ID: uuid.NewString(), Type: common.NoteBlockBullet, Text: text, Spans: spans, Indent: indent}
 		if ordered {
 			block.Type = common.NoteBlockOrdered
 		}
-		if task, _ := item.Attr("data-task"); task == "true" {
+		if task, ok := htmlAttr(item, "data-task"); ok && task == "true" {
 			block.Type = common.NoteBlockTask
-			block.Checked = item.AttrOr("data-checked", "") == "true"
+			checked, _ := htmlAttr(item, "data-checked")
+			block.Checked = checked == "true"
 		}
 		blocks = append(blocks, block)
-		item.ChildrenFiltered("ul,ol").Each(func(_ int, nested *goquery.Selection) {
-			blocks = append(blocks, htmlListBlocks(nested, goquery.NodeName(nested) == "ol", min(common.NoteMaximumIndent, indent+1))...)
-		})
-	})
+		for child := item.FirstChild; child != nil; child = child.NextSibling {
+			if child.Type != xhtml.ElementNode {
+				continue
+			}
+			childTag := strings.ToLower(child.Data)
+			if childTag == "ul" || childTag == "ol" {
+				blocks = append(blocks, htmlListBlocks(child, childTag == "ol", min(common.NoteMaximumIndent, indent+1))...)
+			}
+		}
+	}
 	return blocks
 }
 
-func htmlSelectionText(node *goquery.Selection) (string, []common.NoteSpan) {
-	clone := node.Clone()
-	clone.Find("ul,ol,table").Remove()
-	return markdownInlineContentFromPlain(strings.TrimSpace(clone.Text()))
+func htmlSelectionText(node *xhtml.Node) (string, []common.NoteSpan) {
+	return markdownInlineContentFromPlain(strings.TrimSpace(htmlTextExcluding(node, "ul", "ol", "table")))
 }
 
 func markdownInlineContentFromPlain(value string) (string, []common.NoteSpan) {
 	return value, nil
 }
 
-func htmlTable(node *goquery.Selection) *common.NoteTable {
-	if node == nil || node.Length() == 0 {
+func htmlTable(node *xhtml.Node) *common.NoteTable {
+	if node == nil {
 		return nil
 	}
 	table := common.NoteTable{}
-	node.Find("tr").Each(func(_ int, row *goquery.Selection) {
+	for _, row := range findHTMLElementsByTag(node, "tr") {
 		cells := make([]common.NoteTableCell, 0)
-		row.ChildrenFiltered("th,td").Each(func(_ int, cell *goquery.Selection) {
-			text, spans := markdownInlineContentFromPlain(strings.TrimSpace(cell.Text()))
-			if cell.Is("th") && table.HeaderRows == 0 {
+		for cell := row.FirstChild; cell != nil; cell = cell.NextSibling {
+			if cell.Type != xhtml.ElementNode {
+				continue
+			}
+			cellTag := strings.ToLower(cell.Data)
+			if cellTag != "th" && cellTag != "td" {
+				continue
+			}
+			text, spans := markdownInlineContentFromPlain(strings.TrimSpace(htmlTextExcluding(cell)))
+			if cellTag == "th" && table.HeaderRows == 0 {
 				table.HeaderRows = 1
 			}
 			cells = append(cells, common.NoteTableCell{Text: text, Spans: spans})
-		})
+		}
 		if len(cells) > 0 {
 			table.Rows = append(table.Rows, cells)
 		}
-	})
+	}
 	if len(table.Rows) == 0 {
 		return nil
 	}
@@ -1828,62 +1852,119 @@ func safeNoteImageURL(value string) string {
 	}
 }
 
-func standaloneHTMLImage(node *goquery.Selection) *common.NoteImage {
+func standaloneHTMLImage(node *xhtml.Node) *common.NoteImage {
 	img := node
-	if !strings.EqualFold(goquery.NodeName(node), "img") {
-		img = node.Find("img").First()
-		if img.Length() == 0 {
+	if !strings.EqualFold(node.Data, "img") {
+		imgs := findHTMLElementsByTag(node, "img")
+		if len(imgs) == 0 {
 			return nil
 		}
-		clone := node.Clone()
-		clone.Find("img").Remove()
-		if strings.TrimSpace(clone.Text()) != "" {
+		img = imgs[0]
+		if strings.TrimSpace(htmlTextExcluding(node, "img")) != "" {
 			return nil
 		}
 	}
-	ref := parsedNoteImageRef{ID: SanitizeNoteImageID(img.AttrOr("data-notes-image", ""))}
+	dataNotesImage, _ := htmlAttr(img, "data-notes-image")
+	srcAttr, _ := htmlAttr(img, "src")
+	altAttr, _ := htmlAttr(img, "alt")
+	scaleAttr, _ := htmlAttr(img, "data-notes-image-scale")
+	widthAttr, _ := htmlAttr(img, "data-notes-image-width")
+	heightAttr, _ := htmlAttr(img, "data-notes-image-height")
+
+	ref := parsedNoteImageRef{ID: SanitizeNoteImageID(dataNotesImage)}
 	if ref.ID == "" {
-		ref = parseNoteImageDestination(img.AttrOr("src", ""))
+		ref = parseNoteImageDestination(srcAttr)
 	}
 	if ref.ID == "" {
-		image, ok := parseRemoteNoteImage(img.AttrOr("src", ""))
+		image, ok := parseRemoteNoteImage(srcAttr)
 		if !ok {
 			return nil
 		}
-		image.FileName = strings.TrimSpace(img.AttrOr("alt", ""))
-		if value := strings.TrimSpace(img.AttrOr("data-notes-image-scale", "")); value != "" {
+		image.FileName = strings.TrimSpace(altAttr)
+		if value := strings.TrimSpace(scaleAttr); value != "" {
 			if parsed, err := strconv.Atoi(value); err == nil {
 				image.Scale = ClampNoteImageScale(parsed)
 			}
 		}
-		if value := strings.TrimSpace(img.AttrOr("data-notes-image-width", "")); value != "" {
+		if value := strings.TrimSpace(widthAttr); value != "" {
 			if parsed, err := strconv.Atoi(value); err == nil && parsed > 0 {
 				image.Width = parsed
 			}
 		}
-		if value := strings.TrimSpace(img.AttrOr("data-notes-image-height", "")); value != "" {
+		if value := strings.TrimSpace(heightAttr); value != "" {
 			if parsed, err := strconv.Atoi(value); err == nil && parsed > 0 {
 				image.Height = parsed
 			}
 		}
 		return &image
 	}
-	if value := strings.TrimSpace(img.AttrOr("data-notes-image-scale", "")); value != "" {
+	if value := strings.TrimSpace(scaleAttr); value != "" {
 		if parsed, err := strconv.Atoi(value); err == nil {
 			ref.Scale = ClampNoteImageScale(parsed)
 		}
 	}
-	if value := strings.TrimSpace(img.AttrOr("data-notes-image-width", "")); value != "" {
+	if value := strings.TrimSpace(widthAttr); value != "" {
 		if parsed, err := strconv.Atoi(value); err == nil {
 			ref.Width = parsed
 		}
 	}
-	if value := strings.TrimSpace(img.AttrOr("data-notes-image-height", "")); value != "" {
+	if value := strings.TrimSpace(heightAttr); value != "" {
 		if parsed, err := strconv.Atoi(value); err == nil {
 			ref.Height = parsed
 		}
 	}
-	return &common.NoteImage{ID: ref.ID, FileName: strings.TrimSpace(img.AttrOr("alt", "")), Scale: ref.Scale, Width: ref.Width, Height: ref.Height}
+	return &common.NoteImage{ID: ref.ID, FileName: strings.TrimSpace(altAttr), Scale: ref.Scale, Width: ref.Width, Height: ref.Height}
+}
+
+func htmlAttr(node *xhtml.Node, key string) (string, bool) {
+	for _, attr := range node.Attr {
+		if strings.EqualFold(attr.Key, key) {
+			return attr.Val, true
+		}
+	}
+	return "", false
+}
+
+func findHTMLElementsByTag(root *xhtml.Node, tag string) []*xhtml.Node {
+	var matches []*xhtml.Node
+	var walk func(*xhtml.Node)
+	walk = func(n *xhtml.Node) {
+		if n != root && n.Type == xhtml.ElementNode && strings.EqualFold(n.Data, tag) {
+			matches = append(matches, n)
+		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			walk(c)
+		}
+	}
+	if root != nil {
+		walk(root)
+	}
+	return matches
+}
+
+func htmlTextExcluding(node *xhtml.Node, skipTags ...string) string {
+	if node == nil {
+		return ""
+	}
+	var b strings.Builder
+	var walk func(*xhtml.Node)
+	walk = func(n *xhtml.Node) {
+		if n != node && n.Type == xhtml.ElementNode {
+			for _, tag := range skipTags {
+				if strings.EqualFold(n.Data, tag) {
+					return
+				}
+			}
+		}
+		if n.Type == xhtml.TextNode {
+			b.WriteString(n.Data)
+		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			walk(c)
+		}
+	}
+	walk(node)
+	return b.String()
 }
 
 func nonEmptyLines(value string) []string {

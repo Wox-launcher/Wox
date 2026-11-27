@@ -2,6 +2,7 @@ package modules
 
 import (
 	"encoding/json"
+	"math"
 	"math/big"
 	"os"
 	"testing"
@@ -104,5 +105,41 @@ func TestParseExchangeRateFromHKAB(t *testing.T) {
 	cnyRate := rates["CNY"]
 	if cnyRate < 6.0 || cnyRate > 8.0 {
 		t.Errorf("CNY rate %f is outside expected range [6.0, 8.0]", cnyRate)
+	}
+}
+
+func TestParseHKABExchangeRateHTML(t *testing.T) {
+	sample := `
+	<div class="general_table_container">
+	  <div class="general_table_row exchange_rate">
+	    <div class="exchange_rate_1"><div>Flag</div><div>USD</div></div>
+	    <div><div>Selling:</div><div>785.00</div></div>
+	    <div><div>Buying TT:</div><div>775.00</div></div>
+	  </div>
+	  <div class="general_table_row exchange_rate">
+	    <div class="exchange_rate_1"><div>Flag</div><div>CNY</div></div>
+	    <div><div>Selling:</div><div>110.00</div></div>
+	    <div><div>Buying TT:</div><div>106.00</div></div>
+	  </div>
+	</div>`
+
+	ctx := util.NewTraceContext()
+	rates, err := parseHKABExchangeRateHTML(ctx, []byte(sample))
+	if err != nil {
+		t.Fatalf("parseHKABExchangeRateHTML failed: %v", err)
+	}
+	if rates["USD"] != 1.0 {
+		t.Fatalf("USD rate = %v, want 1.0", rates["USD"])
+	}
+	if math.Abs(rates["HKD"]-7.8) > 1e-9 {
+		t.Fatalf("HKD rate = %v, want 7.8", rates["HKD"])
+	}
+	wantCNY := 7.8 / 1.08
+	if math.Abs(rates["CNY"]-wantCNY) > 1e-9 {
+		t.Fatalf("CNY rate = %v, want %v", rates["CNY"], wantCNY)
+	}
+
+	if _, err := parseHKABExchangeRateHTML(ctx, []byte(`<div>no table</div>`)); err == nil {
+		t.Fatal("expected error when exchange rate table is missing")
 	}
 }

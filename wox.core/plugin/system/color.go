@@ -191,16 +191,16 @@ func (c *ColorPlugin) buildColorResult(ctx context.Context, color parsedColor, i
 	hsl := color.hslText()
 
 	return plugin.QueryResult{
-		Id:         "color-" + strings.TrimPrefix(color.Hex, "#"),
-		Title:      title,
-		SubTitle:   fmt.Sprintf("%s  %s  %s", color.Hex, rgb, hsl),
-		Icon:       color.swatchIcon(),
-		Score:      item.LastSeenAt,
-		Group:      group,
-		GroupScore: groupScore,
-		IdentityKey:   color.Hex,
-		Tails:      c.buildColorTails(ctx, complement, analogousLeft, analogousRight),
-		Actions:    attachColorMRUContext(c.buildColorActions(ctx, color, item, complement, analogousLeft, analogousRight, rgb, hsl), color.Hex),
+		Id:          "color-" + strings.TrimPrefix(color.Hex, "#"),
+		Title:       title,
+		SubTitle:    fmt.Sprintf("%s  %s  %s", color.Hex, rgb, hsl),
+		Icon:        color.swatchIcon(),
+		Score:       item.LastSeenAt,
+		Group:       group,
+		GroupScore:  groupScore,
+		IdentityKey: color.Hex,
+		Tails:       c.buildColorTails(ctx, complement, analogousLeft, analogousRight),
+		Actions:     attachColorMRUContext(c.buildColorActions(ctx, color, item, complement, analogousLeft, analogousRight, rgb, hsl), color.Hex),
 	}
 }
 
