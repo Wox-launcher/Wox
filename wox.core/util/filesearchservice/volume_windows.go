@@ -12,10 +12,21 @@ const (
 	fsctlQueryUSNJournal   = 0x000900f4
 	fsctlReadUSNJournal    = 0x000900bb
 	usnReadBufferSize      = 1 << 20
-	usnReasonFileCreate    = 0x00000100
-	usnReasonFileDelete    = 0x00000200
-	usnReasonRenameOldName = 0x00001000
-	usnReasonRenameNewName = 0x00002000
+	usnSubscribeBufferSize = 64 << 10
+
+	usnReasonDataOverwrite  = 0x00000001
+	usnReasonDataExtend     = 0x00000002
+	usnReasonDataTruncation = 0x00000004
+	usnReasonFileCreate     = 0x00000100
+	usnReasonFileDelete     = 0x00000200
+	usnReasonRenameOldName  = 0x00001000
+	usnReasonRenameNewName  = 0x00002000
+	usnReasonHardLinkChange = 0x00010000
+	usnReasonClose          = 0x80000000
+
+	usnStructuralReasonMask = usnReasonFileCreate | usnReasonFileDelete | usnReasonRenameOldName | usnReasonRenameNewName | usnReasonHardLinkChange
+	usnDataReasonMask       = usnReasonDataOverwrite | usnReasonDataExtend | usnReasonDataTruncation
+	usnSubscribeReasonMask  = usnStructuralReasonMask | usnDataReasonMask
 )
 
 type usnJournalData struct {

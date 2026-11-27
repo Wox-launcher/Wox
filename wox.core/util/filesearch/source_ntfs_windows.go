@@ -17,6 +17,8 @@ import (
 
 type factStream func(context.Context, protocol.Kind, protocol.Boundary, filesearchservice.FactSink) error
 
+var errStopForCompaction = errors.New("stop NTFS subscription for compaction")
+
 type nativeBuildProgress struct {
 	files, entries int64
 	finalizing     bool
@@ -35,6 +37,7 @@ type ntfsSource struct {
 	wantsNotifications func() bool
 	progress           func(nativeBuildProgress)
 	changed            func()
+	onCheckpoint       func()
 }
 
 // build retains the old searchable generation until enumeration and journal
@@ -144,6 +147,7 @@ func (s *ntfsSource) build(ctx context.Context) error {
 
 // replay applies bounded record batches with the old cursor, then commits the
 // checkpoint. A crash between them repeats idempotent source-versioned changes.
+// When wait is true, a single stream can emit multiple Records/Checkpoint cycles.
 func (s *ntfsSource) replay(ctx context.Context, wait bool) error {
 	var boundary protocol.Boundary
 	var cursor string
@@ -171,120 +175,166 @@ func (s *ntfsSource) replay(ctx context.Context, wait bool) error {
 			s.changed()
 		}
 	}()
-	next, err := s.read(ctx, kind, boundary, func(changes []column.Change) error {
-		notifyContent := s.notify != nil && (s.wantsNotifications == nil || s.wantsNotifications())
-		var notifications []ContentHookNotification
-		if notifyContent {
-			if err := s.store.Read(func(view column.View) error {
-				for _, change := range changes {
-					old, exists := view.Lookup(change.ID)
-					if exists && old.Version > change.Version {
-						continue
-					}
-					if !change.Deleted && (!exists || old.ParentID == change.ParentID && old.Name == change.Name) {
-						continue
-					}
-					if !exists {
-						old = change.Record
-					}
-					parent, reachable := view.Path(old.ParentID)
-					if !reachable {
-						continue
-					}
-					path := filepath.Join(parent, old.Name)
-					if old.Flags&column.Directory != 0 {
-						notifications = append(notifications, ContentHookNotification{Kind: ContentHookKindScopeReplaced, ScopePath: path})
-					} else {
-						notifications = append(notifications, ContentHookNotification{Kind: ContentHookKindDelete, Path: path})
-					}
-				}
-				return nil
-			}); err != nil {
+	batchBytes := 0
+	gotCheckpoint := false
+	err := s.stream(ctx, kind, boundary, func(frameKind protocol.Kind, payload []byte) error {
+		batchBytes += len(payload)
+		if batchBytes > 4<<20 {
+			return errors.New("NTFS read exceeded bounded response size")
+		}
+		switch frameKind {
+		case protocol.Records:
+			changes, err := decodeColumnChanges(payload)
+			if err != nil {
 				return err
 			}
+			return s.applyReplayChanges(ctx, cursor, changes, &wrote)
+		case protocol.Checkpoint:
+			next, err := protocol.DecodeBoundary(payload)
+			if err != nil {
+				return err
+			}
+			if err := validateFactCheckpoint(boundary, next); err != nil {
+				return err
+			}
+			gotCheckpoint = true
+			batchBytes = 0
+			if wrote {
+				encoded, err := json.Marshal(next)
+				if err != nil {
+					return err
+				}
+				if err := s.store.Apply(nil, string(encoded)); err != nil {
+					return err
+				}
+				cursor = string(encoded)
+				wrote = false
+				if s.changed != nil {
+					s.changed()
+				}
+			}
+			boundary = next
+			s.readCursor = next
+			if s.onCheckpoint != nil {
+				s.onCheckpoint()
+			}
+			if wait && s.store.NeedsCompaction() {
+				return errStopForCompaction
+			}
+			return nil
+		default:
+			return fmt.Errorf("unexpected NTFS replay frame %d", frameKind)
 		}
-		filtered := changes[:0]
-		if notifyContent {
-			filtered = make([]column.Change, 0, len(changes))
-		}
+	})
+	if errors.Is(err, errStopForCompaction) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if !gotCheckpoint {
+		return errors.New("incomplete NTFS checkpoint")
+	}
+	return nil
+}
+
+func (s *ntfsSource) applyReplayChanges(ctx context.Context, cursor string, changes []column.Change, wrote *bool) error {
+	notifyContent := s.notify != nil && (s.wantsNotifications == nil || s.wantsNotifications())
+	var notifications []ContentHookNotification
+	if notifyContent {
 		if err := s.store.Read(func(view column.View) error {
-			// A native read can contain several mutations of one ID. Compare
-			// against prior records in this batch, not only the durable view.
-			pending := make(map[uint64]column.Change, len(changes))
 			for _, change := range changes {
-				old, found := view.Lookup(change.ID)
-				if previous, ok := pending[change.ID]; ok {
-					old, found = previous.Record, !previous.Deleted
-				}
-				if found && change.Version < old.Version {
+				old, exists := view.Lookup(change.ID)
+				if exists && old.Version > change.Version {
 					continue
 				}
-				pending[change.ID] = change
-				if !change.Deleted && found && old.ParentID == change.ParentID && old.Name == change.Name && old.Flags == change.Flags && old.Size == change.Size && old.Modified == change.Modified {
+				if !change.Deleted && (!exists || old.ParentID == change.ParentID && old.Name == change.Name) {
 					continue
 				}
-				filtered = append(filtered, change)
+				if !exists {
+					old = change.Record
+				}
+				parent, reachable := view.Path(old.ParentID)
+				if !reachable {
+					continue
+				}
+				path := filepath.Join(parent, old.Name)
+				if old.Flags&column.Directory != 0 {
+					notifications = append(notifications, ContentHookNotification{Kind: ContentHookKindScopeReplaced, ScopePath: path})
+				} else {
+					notifications = append(notifications, ContentHookNotification{Kind: ContentHookKindDelete, Path: path})
+				}
 			}
 			return nil
 		}); err != nil {
 			return err
 		}
-		if len(filtered) != 0 {
-			if err := s.store.Apply(filtered, cursor); err != nil {
-				return err
+	}
+	filtered := changes[:0]
+	if notifyContent {
+		filtered = make([]column.Change, 0, len(changes))
+	}
+	if err := s.store.Read(func(view column.View) error {
+		// A native read can contain several mutations of one ID. Compare
+		// against prior records in this batch, not only the durable view.
+		pending := make(map[uint64]column.Change, len(changes))
+		for _, change := range changes {
+			old, found := view.Lookup(change.ID)
+			if previous, ok := pending[change.ID]; ok {
+				old, found = previous.Record, !previous.Deleted
 			}
-			wrote = true
-		}
-		if notifyContent {
-			if err := s.store.Read(func(view column.View) error {
-				for _, change := range changes {
-					if change.Deleted {
-						continue
-					}
-					record, exists := view.Lookup(change.ID)
-					if !exists || record.Version > change.Version {
-						continue
-					}
-					path, reachable := view.Path(change.ID)
-					if !reachable {
-						continue
-					}
-					if record.Flags&column.Directory == 0 {
-						notifications = append(notifications, ContentHookNotification{Kind: ContentHookKindUpsert, Path: path})
-					}
-				}
-				// Directory mutations need reconciliation of descendants at the
-				// new path, while metadata-only directory events need no content work.
-				for _, change := range filtered {
-					if !change.Deleted && change.Flags&column.Directory != 0 {
-						if path, ok := view.Path(change.ID); ok {
-							notifications = append(notifications, ContentHookNotification{Kind: ContentHookKindScopeReplaced, ScopePath: path})
-						}
-					}
-				}
-				return nil
-			}); err != nil {
-				return err
+			if found && change.Version < old.Version {
+				continue
 			}
-			s.notify(ctx, notifications)
+			pending[change.ID] = change
+			if !change.Deleted && found && old.ParentID == change.ParentID && old.Name == change.Name && old.Flags == change.Flags && old.Size == change.Size && old.Modified == change.Modified {
+				continue
+			}
+			filtered = append(filtered, change)
 		}
 		return nil
-	})
-	if err != nil {
+	}); err != nil {
 		return err
 	}
-	if !wrote {
-		s.readCursor = next
-		return nil
+	if len(filtered) != 0 {
+		if err := s.store.Apply(filtered, cursor); err != nil {
+			return err
+		}
+		*wrote = true
 	}
-	encoded, err := json.Marshal(next)
-	if err != nil {
-		return err
+	if notifyContent {
+		if err := s.store.Read(func(view column.View) error {
+			for _, change := range changes {
+				if change.Deleted {
+					continue
+				}
+				record, exists := view.Lookup(change.ID)
+				if !exists || record.Version > change.Version {
+					continue
+				}
+				path, reachable := view.Path(change.ID)
+				if !reachable {
+					continue
+				}
+				if record.Flags&column.Directory == 0 {
+					notifications = append(notifications, ContentHookNotification{Kind: ContentHookKindUpsert, Path: path})
+				}
+			}
+			// Directory mutations need reconciliation of descendants at the
+			// new path, while metadata-only directory events need no content work.
+			for _, change := range filtered {
+				if !change.Deleted && change.Flags&column.Directory != 0 {
+					if path, ok := view.Path(change.ID); ok {
+						notifications = append(notifications, ContentHookNotification{Kind: ContentHookKindScopeReplaced, ScopePath: path})
+					}
+				}
+			}
+			return nil
+		}); err != nil {
+			return err
+		}
+		s.notify(ctx, notifications)
 	}
-	if err := s.store.Apply(nil, string(encoded)); err != nil {
-		return err
-	}
-	s.readCursor = next
 	return nil
 }
 
@@ -300,15 +350,8 @@ func (s *ntfsSource) read(ctx context.Context, kind protocol.Kind, boundary prot
 		}
 		switch kind {
 		case protocol.Records:
-			changes := make([]column.Change, 0, len(payload)/56)
-			if err := protocol.VisitEntries(payload, func(entry protocol.Entry) error {
-				record, err := columnFact(entry)
-				if err != nil {
-					return err
-				}
-				changes = append(changes, column.Change{Record: record, Deleted: entry.Flags&protocol.Deleted != 0})
-				return nil
-			}); err != nil {
+			changes, err := decodeColumnChanges(payload)
+			if err != nil {
 				return err
 			}
 			return apply(changes)
@@ -327,6 +370,21 @@ func (s *ntfsSource) read(ctx context.Context, kind protocol.Kind, boundary prot
 		err = errors.New("incomplete NTFS checkpoint")
 	}
 	return next, err
+}
+
+func decodeColumnChanges(payload []byte) ([]column.Change, error) {
+	changes := make([]column.Change, 0, len(payload)/56)
+	if err := protocol.VisitEntries(payload, func(entry protocol.Entry) error {
+		record, err := columnFact(entry)
+		if err != nil {
+			return err
+		}
+		changes = append(changes, column.Change{Record: record, Deleted: entry.Flags&protocol.Deleted != 0})
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	return changes, nil
 }
 
 // columnFact keeps native flags out of the portable storage format.

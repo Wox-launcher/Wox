@@ -15,7 +15,7 @@ const (
 	PipeName        = `\\.\pipe\WoxFileIndexService`
 )
 
-var EmbeddedVersion = "2.8.3"
+var EmbeddedVersion = "2.8.4"
 var running atomic.Bool
 
 var ErrProtocolMismatch = errors.New("file index service protocol requires an update")

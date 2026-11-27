@@ -165,18 +165,32 @@ func (i *ntfsNameIndex) publishStatusChanges(ctx context.Context) {
 // Missing or expired journals require a fresh build through the same work slot.
 func (i *ntfsNameIndex) runVolume(ctx context.Context, id string, source *ntfsSource) {
 	defer i.workers.Done()
+	availableKnown := false
+	lastAvailable := false
 	setAvailable := func(available bool) {
+		if availableKnown && lastAvailable == available {
+			return
+		}
+		availableKnown = true
+		lastAvailable = available
 		if i.callbacks.availability != nil {
 			i.callbacks.availability(source.root, available)
 		}
 	}
 	defer setAvailable(false)
+	source.onCheckpoint = func() {
+		setAvailable(true)
+		i.clearError(id)
+	}
 	needsBuild := errors.Is(source.store.Read(func(column.View) error { return nil }), column.ErrNotReady)
+	caughtUp := false
 	for ctx.Err() == nil {
 		var err error
+		subscribed := false
 		if needsBuild || source.store.NeedsCompaction() {
 			if needsBuild {
 				setAvailable(false)
+				caughtUp = false
 			}
 			select {
 			case i.work <- struct{}{}:
@@ -187,6 +201,7 @@ func (i *ntfsNameIndex) runVolume(ctx context.Context, id string, source *ntfsSo
 				err = i.buildVolume(ctx, id, source)
 				if err == nil {
 					needsBuild = false
+					caughtUp = true
 					if i.callbacks.content != nil {
 						i.callbacks.content(ctx, []ContentHookNotification{{Kind: ContentHookKindScopeReplaced, ScopePath: source.root}})
 					}
@@ -195,7 +210,13 @@ func (i *ntfsNameIndex) runVolume(ctx context.Context, id string, source *ntfsSo
 				err = source.store.Compact(ctx)
 			}
 			<-i.work
+		} else if !caughtUp {
+			err = source.replay(ctx, false)
+			if err == nil {
+				caughtUp = true
+			}
 		} else {
+			subscribed = true
 			err = source.replay(ctx, true)
 		}
 		if ctx.Err() != nil {
@@ -204,8 +225,19 @@ func (i *ntfsNameIndex) runVolume(ctx context.Context, id string, source *ntfsSo
 		if err == nil {
 			setAvailable(true)
 			i.clearError(id)
+			// Avoid tight reconnects if a legacy service closes Subscribe after one checkpoint.
+			if subscribed && !source.store.NeedsCompaction() {
+				timer := time.NewTimer(250 * time.Millisecond)
+				select {
+				case <-ctx.Done():
+					timer.Stop()
+					return
+				case <-timer.C:
+				}
+			}
 			continue
 		}
+		caughtUp = false
 		setAvailable(false)
 		if errors.Is(err, filesearchservice.ErrFactsReset) || errors.Is(err, column.ErrNotReady) {
 			needsBuild = true

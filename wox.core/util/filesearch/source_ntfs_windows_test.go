@@ -6,6 +6,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"strings"
 	"testing"
 
 	"wox/util/filesearch/column"
@@ -345,5 +347,118 @@ func TestNTFSDirectoryRenameAndDeleteNotifyBothScopes(t *testing.T) {
 				t.Fatalf("notifications=%+v", received)
 			}
 		}
+	}
+}
+
+func TestNTFSPersistentSubscribeCommitsEachCheckpoint(t *testing.T) {
+	store, err := column.OpenStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	builder := column.NewBuilder(`C:\`, 5)
+	if err := builder.Add(column.Record{ID: 10, ParentID: 5, Name: "initial.txt", Version: 90}); err != nil {
+		t.Fatal(err)
+	}
+	base, err := builder.Finish()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cursor, _ := json.Marshal(protocol.Boundary{Volume: `C:\`, RootID: 5, JournalID: 10, NextUSN: 100})
+	if err := store.Publish(base, string(cursor), "ntfs-v3", 0); err != nil {
+		t.Fatal(err)
+	}
+
+	var changed, checkpoints int
+	var cursors []int64
+	longSuffix := "-" + strings.Repeat("x", 900)
+	emitLongBatch := func(emit filesearchservice.FactSink, startID uint64, startUSN int64, count int) error {
+		var batch []byte
+		for i := range count {
+			var err error
+			batch, err = protocol.AppendEntry(batch, protocol.Entry{
+				ID:       startID + uint64(i),
+				ParentID: 5,
+				Name:     fmt.Sprintf("f-%d%s.txt", i, longSuffix),
+				USN:      startUSN + int64(i),
+			})
+			if err != nil {
+				return err
+			}
+			if len(batch) >= protocol.TargetBatchSize {
+				if err := emit(protocol.Records, batch); err != nil {
+					return err
+				}
+				batch = batch[:0]
+			}
+		}
+		if len(batch) != 0 {
+			return emit(protocol.Records, batch)
+		}
+		return nil
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	source := ntfsSource{
+		root:    `C:\`,
+		store:   store,
+		changed: func() { changed++ },
+		onCheckpoint: func() {
+			checkpoints++
+			_ = store.Read(func(view column.View) error {
+				var b protocol.Boundary
+				if err := json.Unmarshal([]byte(view.Cursor), &b); err != nil {
+					return err
+				}
+				cursors = append(cursors, b.NextUSN)
+				return nil
+			})
+			if checkpoints == 3 {
+				cancel()
+			}
+		},
+		stream: func(ctx context.Context, kind protocol.Kind, boundary protocol.Boundary, emit filesearchservice.FactSink) error {
+			if kind != protocol.Subscribe {
+				return fmt.Errorf("unexpected stream kind %v", kind)
+			}
+			// Cycle 1 (>2.2 MiB): real records -> durable cursor 110.
+			if err := emitLongBatch(emit, 100, 101, 2400); err != nil {
+				return err
+			}
+			if err := emitFactTestBoundary(emit, protocol.Checkpoint, 110); err != nil {
+				return err
+			}
+			// Cycle 2: no-op metadata event on initial.txt -> durable cursor stays 110.
+			noop, _ := protocol.AppendEntry(nil, protocol.Entry{ID: 10, ParentID: 5, Name: "initial.txt", USN: 111})
+			if err := emit(protocol.Records, noop); err != nil {
+				return err
+			}
+			if err := emitFactTestBoundary(emit, protocol.Checkpoint, 120); err != nil {
+				return err
+			}
+			// Cycle 3 (>2.2 MiB, cumulative >4.4 MiB across stream): per-checkpoint byte counter must reset -> cursor 130.
+			if err := emitLongBatch(emit, 3000, 121, 2400); err != nil {
+				return err
+			}
+			if err := emitFactTestBoundary(emit, protocol.Checkpoint, 130); err != nil {
+				return err
+			}
+			<-ctx.Done()
+			return ctx.Err()
+		},
+	}
+
+	if err := source.replay(ctx, true); !errors.Is(err, context.Canceled) {
+		t.Fatalf("replay=%v, want context.Canceled", err)
+	}
+	if changed != 2 || checkpoints != 3 {
+		t.Fatalf("changed=%d checkpoints=%d, want 2/3", changed, checkpoints)
+	}
+	if len(cursors) != 3 || cursors[0] != 110 || cursors[1] != 110 || cursors[2] != 130 {
+		t.Fatalf("durable cursors=%v, want [110 110 130]", cursors)
+	}
+	if source.readCursor.NextUSN != 130 {
+		t.Fatalf("volatile readCursor=%d, want 130", source.readCursor.NextUSN)
 	}
 }

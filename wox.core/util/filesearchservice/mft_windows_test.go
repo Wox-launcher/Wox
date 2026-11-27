@@ -47,12 +47,17 @@ func TestParseUSNRecordsDoesNotAllocateEmptyBatch(t *testing.T) {
 }
 
 func testUSNRecord(reference uint64, parent uint64, name string, isDir bool) []byte {
+	return testUSNRecordWithReason(reference, parent, name, isDir, 0)
+}
+
+func testUSNRecordWithReason(reference uint64, parent uint64, name string, isDir bool, reason uint32) []byte {
 	nameWords := utf16.Encode([]rune(name))
 	record := make([]byte, 60+len(nameWords)*2)
 	binary.LittleEndian.PutUint32(record, uint32(len(record)))
 	binary.LittleEndian.PutUint16(record[4:], 2)
 	binary.LittleEndian.PutUint64(record[8:], reference)
 	binary.LittleEndian.PutUint64(record[16:], parent)
+	binary.LittleEndian.PutUint32(record[40:], reason)
 	if isDir {
 		binary.LittleEndian.PutUint32(record[52:], windows.FILE_ATTRIBUTE_DIRECTORY)
 	}
@@ -62,4 +67,58 @@ func testUSNRecord(reference uint64, parent uint64, name string, isDir bool) []b
 		binary.LittleEndian.PutUint16(record[60+index*2:], word)
 	}
 	return record
+}
+
+func TestShouldEmitLiveUSNReason(t *testing.T) {
+	cases := []struct {
+		name   string
+		reason uint32
+		want   bool
+	}{
+		{"create", usnReasonFileCreate, true},
+		{"delete", usnReasonFileDelete, true},
+		{"rename_old", usnReasonRenameOldName, true},
+		{"rename_new", usnReasonRenameNewName, true},
+		{"hard_link", usnReasonHardLinkChange, true},
+		{"data_extend_open", usnReasonDataExtend, false},
+		{"data_overwrite_open", usnReasonDataOverwrite, false},
+		{"data_truncate_open", usnReasonDataTruncation, false},
+		{"data_extend_close", usnReasonDataExtend | usnReasonClose, true},
+		{"data_overwrite_close", usnReasonDataOverwrite | usnReasonClose, true},
+		{"close_only", usnReasonClose, false},
+		{"basic_info_close", 0x00008000 | usnReasonClose, false},
+	}
+	for _, tc := range cases {
+		if got := shouldEmitLiveUSNReason(tc.reason); got != tc.want {
+			t.Errorf("%s (0x%x): got %t, want %t", tc.name, tc.reason, got, tc.want)
+		}
+	}
+}
+
+func TestParseUSNRecordsIntoReusesScratchAndFilters(t *testing.T) {
+	buffer := make([]byte, 8)
+	binary.LittleEndian.PutUint64(buffer, 123)
+	buffer = append(buffer, testUSNRecordWithReason(10, 5, "streaming.log", false, usnReasonDataExtend)...)
+	buffer = append(buffer, testUSNRecordWithReason(11, 5, "created.txt", false, usnReasonFileCreate)...)
+	buffer = append(buffer, testUSNRecordWithReason(12, 5, "saved.txt", false, usnReasonDataOverwrite|usnReasonClose)...)
+
+	nodes := make([]mftNode, 0, 8)
+	nameWords := make([]uint16, 0, 32)
+	var err error
+	var next uint64
+	for range 2 {
+		next, nodes, nameWords, err = parseUSNRecordsInto(buffer, nodes, nameWords, shouldEmitLiveUSNReason)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if next != 123 || len(nodes) != 2 {
+			t.Fatalf("next=%d nodes=%+v", next, nodes)
+		}
+		if nodes[0].Name != "created.txt" || nodes[1].Name != "saved.txt" {
+			t.Fatalf("unexpected filtered nodes=%+v", nodes)
+		}
+		if cap(nodes) != 8 {
+			t.Fatalf("nodes slice reallocated: cap=%d", cap(nodes))
+		}
+	}
 }

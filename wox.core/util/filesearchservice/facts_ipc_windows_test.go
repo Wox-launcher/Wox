@@ -145,3 +145,90 @@ func TestFactsPipeCheckpointAndReset(t *testing.T) {
 		t.Fatalf("reset=%v", err)
 	}
 }
+
+func TestFactsPipeSubscribeStreamsMultipleCheckpoints(t *testing.T) {
+	boundary := protocol.Boundary{Volume: `C:\`, RootID: 5, JournalID: 9, NextUSN: 20}
+	name, _ := runFactTestServer(t, func(ctx context.Context, kind protocol.Kind, got protocol.Boundary, emit FactSink) error {
+		if kind != protocol.Subscribe {
+			return fmt.Errorf("wrong kind: %v", kind)
+		}
+		for i := range 2 {
+			got.NextUSN++
+			payload, err := protocol.AppendEntry(nil, protocol.Entry{ID: uint64(100 + i), ParentID: 5, Name: fmt.Sprintf("item-%d.txt", i), USN: got.NextUSN})
+			if err != nil {
+				return err
+			}
+			if err := emit(protocol.Records, payload); err != nil {
+				return err
+			}
+			cp, err := protocol.EncodeBoundary(got)
+			if err != nil {
+				return err
+			}
+			if err := emit(protocol.Checkpoint, cp); err != nil {
+				return err
+			}
+		}
+		<-ctx.Done()
+		return ctx.Err()
+	})
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	received := make(chan protocol.Boundary, 4)
+	var names []string
+	done := make(chan error, 1)
+	go func() {
+		done <- streamFactsPipe(ctx, name, protocol.Subscribe, boundary, func(kind protocol.Kind, payload []byte) error {
+			switch kind {
+			case protocol.Records:
+				return protocol.VisitEntries(payload, func(entry protocol.Entry) error {
+					names = append(names, entry.Name)
+					return nil
+				})
+			case protocol.Checkpoint:
+				cp, err := protocol.DecodeBoundary(payload)
+				if err == nil {
+					received <- cp
+				}
+				return err
+			}
+			return nil
+		})
+	}()
+	for wantUSN := int64(21); wantUSN <= 22; wantUSN++ {
+		select {
+		case cp := <-received:
+			if cp.NextUSN != wantUSN {
+				t.Fatalf("checkpoint NextUSN=%d, want %d", cp.NextUSN, wantUSN)
+			}
+		case <-time.After(3 * time.Second):
+			t.Fatalf("timed out waiting for checkpoint %d", wantUSN)
+		}
+	}
+	cancel()
+	if err := <-done; !errors.Is(err, context.Canceled) {
+		t.Fatalf("subscribe exit=%v, want context.Canceled", err)
+	}
+	if len(names) != 2 || names[0] != "item-0.txt" || names[1] != "item-1.txt" {
+		t.Fatalf("names=%v", names)
+	}
+}
+
+func TestFactsPipeSubscribeHandlesLegacySingleCheckpointEOF(t *testing.T) {
+	boundary := protocol.Boundary{Volume: `C:\`, RootID: 5, JournalID: 9, NextUSN: 20}
+	name, _ := runFactTestServer(t, func(ctx context.Context, kind protocol.Kind, got protocol.Boundary, emit FactSink) error {
+		got.NextUSN++
+		cp, _ := protocol.EncodeBoundary(got)
+		return emit(protocol.Checkpoint, cp)
+	})
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	var got protocol.Boundary
+	if err := streamFactsPipe(ctx, name, protocol.Subscribe, boundary, func(kind protocol.Kind, payload []byte) error {
+		var err error
+		got, err = protocol.DecodeBoundary(payload)
+		return err
+	}); err != nil || got.NextUSN != 21 {
+		t.Fatalf("legacy subscribe=%+v: %v", got, err)
+	}
+}

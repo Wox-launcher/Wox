@@ -9,6 +9,7 @@ import (
 	"math"
 	"path/filepath"
 	"strings"
+	"time"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -18,6 +19,20 @@ import (
 // FactSink consumes borrowed payloads before returning. Backpressure propagates to
 // the native reader instead of retaining a second, service-owned filename index.
 type FactSink func(protocol.Kind, []byte) error
+
+const (
+	usnSubscribeCoalesceInterval = 250 * time.Millisecond
+	usnSilentCheckpointStep      = int64(1 << 20)
+)
+
+// shouldEmitLiveUSNReason keeps structural file events immediate while deferring
+// pure content writes until the handle closes to avoid wakeups on open log streams.
+func shouldEmitLiveUSNReason(reason uint32) bool {
+	if reason&usnStructuralReasonMask != 0 {
+		return true
+	}
+	return reason&usnDataReasonMask != 0 && reason&usnReasonClose != 0
+}
 
 // EnumerateFacts emits MFT records with the journal boundary captured before scanning.
 // End captures a catch-up target: replay from Begin through End before publication.
@@ -49,6 +64,8 @@ func EnumerateFacts(ctx context.Context, root string, emit FactSink) error {
 	}
 	buffer := make([]byte, mftReadBufferSize)
 	batch := make([]byte, 0, protocol.TargetBatchSize)
+	var nodes []mftNode
+	var nameWords []uint16
 	query := mftEnumData{HighUSN: math.MaxInt64}
 	for {
 		returned, err := factControl(ctx, handle, fsctlEnumUSNData, unsafe.Pointer(&query), uint32(unsafe.Sizeof(query)), buffer)
@@ -58,7 +75,8 @@ func EnumerateFacts(ctx context.Context, root string, emit FactSink) error {
 		if err != nil {
 			return err
 		}
-		next, nodes, err := parseUSNRecords(buffer[:returned])
+		var next uint64
+		next, nodes, nameWords, err = parseUSNRecordsInto(buffer[:returned], nodes, nameWords, nil)
 		if err != nil {
 			return err
 		}
@@ -115,7 +133,7 @@ func ReadFacts(ctx context.Context, boundary protocol.Boundary, wait bool, emit 
 	if journal.JournalID != boundary.JournalID || boundary.NextUSN < journal.FirstUSN || boundary.NextUSN < journal.LowestValidUSN || boundary.NextUSN > journal.NextUSN {
 		return emit(protocol.ResetRequired, []byte("USN history is no longer available"))
 	}
-	input := readUSNJournalData{StartUSN: boundary.NextUSN, ReasonMask: math.MaxUint32, JournalID: boundary.JournalID, MinMajorVersion: 2, MaxMajorVersion: 2}
+	input := readUSNJournalData{StartUSN: boundary.NextUSN, ReasonMask: usnSubscribeReasonMask, JournalID: boundary.JournalID, MinMajorVersion: 2, MaxMajorVersion: 2}
 	if wait {
 		input.BytesToWaitFor = 1
 	}
@@ -127,27 +145,15 @@ func ReadFacts(ctx context.Context, boundary protocol.Boundary, wait bool, emit 
 	if err != nil {
 		return err
 	}
-	next, nodes, err := parseUSNRecords(buffer[:returned])
+	next, nodes, _, err := parseUSNRecordsInto(buffer[:returned], nil, nil, shouldEmitLiveUSNReason)
 	if err != nil {
 		return err
 	}
 	if int64(next) < boundary.NextUSN {
 		return fmt.Errorf("USN cursor moved backwards")
 	}
-	batch := make([]byte, 0, protocol.TargetBatchSize)
-	for _, node := range nodes {
-		if node.Reference == boundary.RootID {
-			continue
-		}
-		batch, err = appendFact(batch, node, true, emit)
-		if err != nil {
-			return err
-		}
-	}
-	if len(batch) != 0 {
-		if err := emit(protocol.Records, batch); err != nil {
-			return err
-		}
+	if _, _, err := emitUSNNodes(make([]byte, 0, protocol.TargetBatchSize), nodes, boundary.RootID, emit); err != nil {
+		return err
 	}
 	boundary.NextUSN = int64(next)
 	payload, err := protocol.EncodeBoundary(boundary)
@@ -155,6 +161,115 @@ func ReadFacts(ctx context.Context, boundary protocol.Boundary, wait bool, emit 
 		return err
 	}
 	return emit(protocol.Checkpoint, payload)
+}
+
+// SubscribeFacts keeps one volume handle and reusable buffers across coalesced USN reads,
+// avoiding per-event pipe reconnects and repeated volume enumeration/reallocation.
+func SubscribeFacts(ctx context.Context, boundary protocol.Boundary, emit FactSink) error {
+	root, err := validateFactVolume(boundary.Volume)
+	if err != nil {
+		return err
+	}
+	handle, err := openFactVolume(root)
+	if err != nil {
+		return err
+	}
+	defer windows.CloseHandle(handle)
+	journal, err := readFactJournal(ctx, handle)
+	if err != nil {
+		return err
+	}
+	if journal.JournalID != boundary.JournalID || boundary.NextUSN < journal.FirstUSN || boundary.NextUSN < journal.LowestValidUSN || boundary.NextUSN > journal.NextUSN {
+		return emit(protocol.ResetRequired, []byte("USN history is no longer available"))
+	}
+	buffer := make([]byte, usnSubscribeBufferSize)
+	batch := make([]byte, 0, usnSubscribeBufferSize)
+	var nodes []mftNode
+	var nameWords []uint16
+	lastCheckpointUSN := boundary.NextUSN
+	draining := false
+	for ctx.Err() == nil {
+		input := readUSNJournalData{
+			StartUSN:        boundary.NextUSN,
+			ReasonMask:      usnSubscribeReasonMask,
+			JournalID:       boundary.JournalID,
+			MinMajorVersion: 2,
+			MaxMajorVersion: 2,
+		}
+		if !draining {
+			input.BytesToWaitFor = 1
+		}
+		returned, err := factControl(ctx, handle, fsctlReadUSNJournal, unsafe.Pointer(&input), uint32(unsafe.Sizeof(input)), buffer)
+		if errors.Is(err, windows.ERROR_JOURNAL_DELETE_IN_PROGRESS) || errors.Is(err, windows.ERROR_JOURNAL_NOT_ACTIVE) || errors.Is(err, windows.ERROR_JOURNAL_ENTRY_DELETED) {
+			return emit(protocol.ResetRequired, []byte("USN history changed during subscribe"))
+		}
+		if err != nil {
+			return err
+		}
+		var next uint64
+		next, nodes, nameWords, err = parseUSNRecordsInto(buffer[:returned], nodes, nameWords, shouldEmitLiveUSNReason)
+		if err != nil {
+			return err
+		}
+		if int64(next) < boundary.NextUSN {
+			return fmt.Errorf("USN cursor moved backwards")
+		}
+		var emittedRecords bool
+		batch, emittedRecords, err = emitUSNNodes(batch[:0], nodes, boundary.RootID, emit)
+		if err != nil {
+			return err
+		}
+		boundary.NextUSN = int64(next)
+		if emittedRecords || boundary.NextUSN-lastCheckpointUSN >= usnSilentCheckpointStep {
+			payload, err := protocol.EncodeBoundary(boundary)
+			if err != nil {
+				return err
+			}
+			if err := emit(protocol.Checkpoint, payload); err != nil {
+				return err
+			}
+			lastCheckpointUSN = boundary.NextUSN
+		}
+		if int(returned) >= len(buffer)*3/4 {
+			draining = true
+			continue
+		}
+		draining = false
+		timer := time.NewTimer(usnSubscribeCoalesceInterval)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return ctx.Err()
+		case <-timer.C:
+		}
+	}
+	return ctx.Err()
+}
+
+func emitUSNNodes(batch []byte, nodes []mftNode, rootID uint64, emit FactSink) ([]byte, bool, error) {
+	emitted := false
+	for _, node := range nodes {
+		if node.Reference == rootID {
+			continue
+		}
+		before := len(batch)
+		var err error
+		batch, err = appendFact(batch, node, true, emit)
+		if err != nil {
+			return batch, emitted, err
+		}
+		if len(batch) < before {
+			emitted = true
+		}
+	}
+	if len(batch) != 0 {
+		if err := emit(protocol.Records, batch); err != nil {
+			return batch, emitted, err
+		}
+		emitted = true
+		batch = batch[:0]
+	}
+	return batch, emitted, nil
 }
 
 // appendFact batches native records without resolving paths or retaining volume-sized state.

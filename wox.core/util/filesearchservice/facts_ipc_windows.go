@@ -43,10 +43,14 @@ func ServeFacts(ctx context.Context, ownerSID string) error {
 			return errors.New("file fact volume is not a fixed NTFS drive")
 		}
 		boundary.Volume = root
-		if kind == protocol.Enumerate {
+		switch kind {
+		case protocol.Enumerate:
 			return EnumerateFacts(ctx, root, emit)
+		case protocol.Subscribe:
+			return SubscribeFacts(ctx, boundary, emit)
+		default:
+			return ReadFacts(ctx, boundary, false, emit)
 		}
-		return ReadFacts(ctx, boundary, kind == protocol.Subscribe, emit)
 	})
 }
 
@@ -151,7 +155,7 @@ func handleFactsConnection(ctx context.Context, handle windows.Handle, handler f
 }
 
 // StreamFacts delivers borrowed frames synchronously and verifies session ordering.
-// Replay never waits for changes; Subscribe waits for one read then checkpoints.
+// Replay never waits for changes; Subscribe streams Records/Checkpoint cycles until cancelled or reset.
 func StreamFacts(ctx context.Context, kind protocol.Kind, boundary protocol.Boundary, receive FactSink) error {
 	return streamFactsPipe(ctx, factsPipeName, kind, boundary, receive)
 }
@@ -203,9 +207,14 @@ func streamFactsPipe(ctx context.Context, name string, kind protocol.Kind, bound
 	}
 	reader := protocol.NewReader(pipe)
 	begun := false
+	checkpoints := 0
 	for sequence := uint64(1); ; sequence++ {
 		frame, err := reader.Read()
 		if err != nil {
+			// Legacy 2.8.3 helpers close the pipe after one Subscribe checkpoint.
+			if kind == protocol.Subscribe && checkpoints > 0 && errors.Is(err, io.EOF) {
+				return nil
+			}
 			return err
 		}
 		if frame.Session != session || frame.Sequence != sequence {
@@ -233,6 +242,7 @@ func streamFactsPipe(ctx context.Context, name string, kind protocol.Kind, bound
 			if kind == protocol.Enumerate {
 				return errors.New("unexpected file fact checkpoint")
 			}
+			checkpoints++
 		default:
 			return errors.New("unexpected file fact response")
 		}
@@ -241,7 +251,7 @@ func streamFactsPipe(ctx context.Context, name string, kind protocol.Kind, bound
 				return err
 			}
 		}
-		if frame.Kind == protocol.End || frame.Kind == protocol.Checkpoint {
+		if frame.Kind == protocol.End || (frame.Kind == protocol.Checkpoint && kind != protocol.Subscribe) {
 			return nil
 		}
 	}
