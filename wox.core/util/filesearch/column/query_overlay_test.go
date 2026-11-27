@@ -141,3 +141,90 @@ func TestQueryOverlayConcurrentLeases(t *testing.T) {
 	}
 	workers.Wait()
 }
+
+// TestQueryOverlayIncrementalFilePatch verifies file-only mutations patch the
+// cached overlay identically to a full buildQueryOverlay across create, rename,
+// move, delete, and concurrent ReadQuery calls.
+func TestQueryOverlayIncrementalFilePatch(t *testing.T) {
+	s, _ := fixtureStore(t)
+	var baseOverlay *QueryOverlay
+	if err := s.ReadQuery(func(v View) error { baseOverlay = v.Query; return nil }); err != nil {
+		t.Fatal(err)
+	}
+
+	assertMatchesFresh := func(label string) {
+		t.Helper()
+		if err := s.ReadQuery(func(v View) error {
+			if v.Query != baseOverlay {
+				t.Fatalf("%s: file-only patch unexpectedly replaced overlay pointer", label)
+			}
+			fresh := buildQueryOverlay(v)
+			if len(v.Query.Names) != len(fresh.Names) {
+				t.Fatalf("%s: names len %d != %d", label, len(v.Query.Names), len(fresh.Names))
+			}
+			gotNames := make(map[uint64]LiveName, len(v.Query.Names))
+			for _, n := range v.Query.Names {
+				gotNames[n.ID] = n
+			}
+			for _, n := range fresh.Names {
+				if got, ok := gotNames[n.ID]; !ok || got != n {
+					t.Fatalf("%s: name mismatch for id %d: got=%+v ok=%v want=%+v", label, n.ID, got, ok, n)
+				}
+			}
+			if len(v.Query.Children) != len(fresh.Children) {
+				t.Fatalf("%s: children map len %d != %d", label, len(v.Query.Children), len(fresh.Children))
+			}
+			for parentID, wantKids := range fresh.Children {
+				gotKids := v.Query.Children[parentID]
+				if len(gotKids) != len(wantKids) {
+					t.Fatalf("%s: parent %d kids %v != %v", label, parentID, gotKids, wantKids)
+				}
+				seen := make(map[uint64]bool, len(gotKids))
+				for _, id := range gotKids {
+					seen[id] = true
+				}
+				for _, id := range wantKids {
+					if !seen[id] {
+						t.Fatalf("%s: parent %d missing child %d in %v", label, parentID, id, gotKids)
+					}
+				}
+			}
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Create two files, modify/rename one, move across parents, delete one.
+	if err := s.Apply([]Change{
+		{Record: Record{ID: 100, ParentID: 10, Name: "alpha.txt", Version: 1}},
+		{Record: Record{ID: 101, ParentID: 10, Name: "beta.txt", Version: 1}},
+	}, "f1"); err != nil {
+		t.Fatal(err)
+	}
+	assertMatchesFresh("create")
+
+	if err := s.Apply([]Change{
+		{Record: Record{ID: 100, ParentID: 11, Name: "alpha-moved.txt", Version: 2}},
+		{Record: Record{ID: 100, ParentID: 11, Name: "alpha-renamed.txt", Version: 3}},
+		{Record: Record{ID: 101, Version: 2}, Deleted: true},
+		{Record: Record{ID: 12, ParentID: 10, Name: "项目-重命名.txt", Version: 2}},
+	}, "f2"); err != nil {
+		t.Fatal(err)
+	}
+	assertMatchesFresh("rename-move-delete")
+
+	// Deleting a base file removes it from Names and Children.
+	if err := s.Apply([]Change{{Record: Record{ID: 12, Version: 3}, Deleted: true}}, "f3"); err != nil {
+		t.Fatal(err)
+	}
+	assertMatchesFresh("delete-base-file")
+
+	// Directory change must still invalidate lazily.
+	if err := s.Apply([]Change{{Record: Record{ID: 10, ParentID: 5, Name: "dir-renamed", Flags: Directory, Version: 20}}}, "d1"); err != nil {
+		t.Fatal(err)
+	}
+	if s.query != nil {
+		t.Fatal("directory change did not invalidate cached overlay")
+	}
+}

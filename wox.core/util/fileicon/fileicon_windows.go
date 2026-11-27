@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"time"
 	"unsafe"
 	"wox/util"
 	"wox/util/imagecache"
@@ -23,14 +24,24 @@ import (
 // and converting it to PNG, cached on disk by extension.
 
 var (
-	shell32       = syscall.NewLazyDLL("shell32.dll")
-	user32        = syscall.NewLazyDLL("user32.dll")
-	shGetFileInfo = shell32.NewProc("SHGetFileInfoW")
-	extractIconEx = shell32.NewProc("ExtractIconExW")
-	shellIconMu   sync.Mutex
+	shell32               = syscall.NewLazyDLL("shell32.dll")
+	user32                = syscall.NewLazyDLL("user32.dll")
+	shGetFileInfo         = shell32.NewProc("SHGetFileInfoW")
+	extractIconEx         = shell32.NewProc("ExtractIconExW")
+	shellIconMu           sync.Mutex
+	defaultFileTypeIconMu sync.Mutex
 
 	privateExtractIcons iconExtractionProcedure = user32.NewProc("PrivateExtractIconsW")
+
+	fileTypeFallbackCache = util.NewHashMap[string, cachedFileTypeFallback]()
 )
+
+type cachedFileTypeFallback struct {
+	fallbackPath string
+	expiresAt    time.Time
+}
+
+const fileTypeFallbackCacheTTL = 5 * time.Minute
 
 // iconExtractionProcedure keeps the native return-value and handle-ownership contract testable.
 type iconExtractionProcedure interface {
@@ -350,13 +361,78 @@ func getStandardDefaultIcon(ctx context.Context) (image.Image, error) {
 	return convertIconToImage(ctx, shfi.HIcon)
 }
 
+// getOrCreateDefaultFileTypeIcon returns the shared fallback file-type icon PNG,
+// extracting and caching it once under .__unknown across all unregistered extensions.
+func getOrCreateDefaultFileTypeIcon(ctx context.Context, size int) (string, error) {
+	fallbackPath := buildCachePath(".__unknown", size)
+	if info, err := os.Stat(fallbackPath); err == nil {
+		imagecache.Touch(ctx, fallbackPath, info)
+		return fallbackPath, nil
+	}
+
+	defaultFileTypeIconMu.Lock()
+	defer defaultFileTypeIconMu.Unlock()
+
+	if info, err := os.Stat(fallbackPath); err == nil {
+		imagecache.Touch(ctx, fallbackPath, info)
+		return fallbackPath, nil
+	}
+
+	img, err := getHighResDefaultIcon(ctx)
+	if err != nil {
+		return "", err
+	}
+
+	cacheDir := filepath.Dir(fallbackPath)
+	if mkdirErr := os.MkdirAll(cacheDir, 0o755); mkdirErr != nil {
+		return "", errors.New("failed to create cache dir: " + mkdirErr.Error())
+	}
+
+	// Write via a .png temp file so imaging.Save detects the PNG encoder and
+	// readers never observe a partially written default icon file.
+	tmpFile, tmpErr := os.CreateTemp(cacheDir, "filetype_default_*.png")
+	if tmpErr != nil {
+		return "", errors.New("failed to create temp default icon: " + tmpErr.Error())
+	}
+	tmpPath := tmpFile.Name()
+	_ = tmpFile.Close()
+
+	if saveErr := imaging.Save(img, tmpPath); saveErr != nil {
+		_ = os.Remove(tmpPath)
+		return "", errors.New("failed to save default icon to cache: " + saveErr.Error())
+	}
+	if renameErr := os.Rename(tmpPath, fallbackPath); renameErr != nil {
+		_ = os.Remove(tmpPath)
+		return "", errors.New("failed to finalize default icon cache: " + renameErr.Error())
+	}
+
+	return fallbackPath, nil
+}
+
 func getFileTypeIconImpl(ctx context.Context, ext string, size int) (string, error) {
+	if ext == ".__unknown" {
+		fallbackPath, err := getOrCreateDefaultFileTypeIcon(ctx, size)
+		if err != nil {
+			return "", errors.New("failed to get fallback file type icon for " + ext + ": " + err.Error())
+		}
+		return fallbackPath, nil
+	}
+
 	cachePath := buildCachePath(ext, size)
 
 	// Check cache first
 	if info, err := os.Stat(cachePath); err == nil {
 		imagecache.Touch(ctx, cachePath, info)
 		return cachePath, nil
+	}
+
+	// Reuse the shared generic fallback for unregistered extensions instead of
+	// repeatedly extracting shell32.dll and writing duplicate PNGs per extension.
+	if cached, hit := fileTypeFallbackCache.Load(cachePath); hit && time.Now().Before(cached.expiresAt) {
+		if info, err := os.Stat(cached.fallbackPath); err == nil {
+			imagecache.Touch(ctx, cached.fallbackPath, info)
+			return cached.fallbackPath, nil
+		}
 	}
 
 	// Try registry method first (more accurate for associated file types)
@@ -368,20 +444,25 @@ func getFileTypeIconImpl(ctx context.Context, ext string, size int) (string, err
 	if err != nil {
 		// Bug fix: SHGetFileInfoW can terminate the Windows smoke process for
 		// some transient extension lookups before Go can recover. When registry
-		// association lookup fails, use Wox's default shell icon extraction
-		// instead of the unsafe shell file-type fallback.
-		img, err = getHighResDefaultIcon(ctx)
-		if err != nil {
-			return "", errors.New("failed to get fallback file type icon for " + ext + ": " + err.Error())
+		// association lookup fails, share Wox's default shell icon extraction
+		// instead of duplicating per-extension files or using the unsafe shell fallback.
+		fallbackPath, fallbackErr := getOrCreateDefaultFileTypeIcon(ctx, size)
+		if fallbackErr != nil {
+			return "", errors.New("failed to get fallback file type icon for " + ext + ": " + fallbackErr.Error())
 		}
-	} else {
-		defer win.DestroyIcon(hIcon)
-		var convErr error
-		// Convert HICON to image
-		img, convErr = convertIconToImage(ctx, hIcon)
-		if convErr != nil {
-			return "", errors.New("failed to convert icon to image for " + ext + ": " + convErr.Error())
-		}
+		fileTypeFallbackCache.Store(cachePath, cachedFileTypeFallback{
+			fallbackPath: fallbackPath,
+			expiresAt:    time.Now().Add(fileTypeFallbackCacheTTL),
+		})
+		return fallbackPath, nil
+	}
+
+	defer win.DestroyIcon(hIcon)
+	var convErr error
+	// Convert HICON to image
+	img, convErr = convertIconToImage(ctx, hIcon)
+	if convErr != nil {
+		return "", errors.New("failed to convert icon to image for " + ext + ": " + convErr.Error())
 	}
 
 	// Ensure cache dir exists and save

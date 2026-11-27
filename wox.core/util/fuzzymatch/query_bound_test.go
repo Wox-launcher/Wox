@@ -41,6 +41,112 @@ func TestASCIIQueryBounds(t *testing.T) {
 			}
 		}
 	}
+
+	// Targeted edge cases: repeated letters with different boundary slopes, digits,
+	// punctuation, leading/trailing spaces, and non-ASCII/pinyin pruning parity.
+	for _, tc := range []struct {
+		text    string
+		pattern string
+	}{
+		{"ba-_a", "ba-a"},
+		{"ba_a", "aa"},
+		{"baA", "aa"},
+		{"xaba_a", "aba"},
+		{"docx.scale-200.png", "dsc2"},
+		{"200_dsc.png", "dsc2"},
+		{" a_b2 ", "ab2"},
+		{"test-123_abc.txt", "t1a"},
+		{"a", "a"},
+		{"x_a", "a"},
+	} {
+		candidate := strings.TrimSpace(tc.text)
+		prepared := PreparePattern(tc.pattern)
+		full := FuzzyMatch(candidate, tc.pattern, false)
+		if full.IsMatch && ASCIIScoreUpperBound(prepared, candidate, ASCIIScoreHints(tc.text)) < full.Score {
+			t.Fatalf("invalid edge bound %q %q: %+v", tc.text, tc.pattern, full)
+		}
+		for _, minimum := range []int64{0, 1, 16, 32, 64, full.Score, full.Score + 1} {
+			got := FuzzyMatchPatternAtLeast(candidate, prepared, true, false, minimum)
+			if full.IsMatch && full.Score >= minimum && got != full || got.IsMatch && (!full.IsMatch || got.Score != full.Score || got.Score < minimum) {
+				t.Fatalf("edge pruning %q %q minimum=%d: %+v != %+v", tc.text, tc.pattern, minimum, got, full)
+			}
+		}
+	}
+
+	for _, tc := range []struct {
+		text    string
+		pattern string
+	}{
+		{"重庆火锅.md", "cq"},
+		{"重庆火锅.md", "chongqing"},
+		{"Wox测试2026.txt", "woxcs2026"},
+		{"项目报告文档管理系统.txt", "xm"},
+		{"测试abcdefg.txt", "abc"},
+	} {
+		prepared := PreparePattern(tc.pattern)
+		full := FuzzyMatch(tc.text, tc.pattern, true)
+		for minimum := int64(0); minimum <= 300; minimum += 15 {
+			got := FuzzyMatchPatternAtLeast(tc.text, prepared, false, true, minimum)
+			if full.IsMatch && full.Score >= minimum && got != full || got.IsMatch && (!full.IsMatch || got.Score != full.Score || got.Score < minimum) {
+				t.Fatalf("pinyin pruning %q %q minimum=%d: %+v != %+v", tc.text, tc.pattern, minimum, got, full)
+			}
+		}
+	}
+
+	// Long ASCII names (>64 bytes) and digit-repeat/triple-digit hints, plus legacy-hint compatibility.
+	for _, tc := range []struct {
+		text    string
+		pattern string
+	}{
+		{"amd64_microsoft-windows-foo_10.0.26100.8972_none_abcdef1234567890abcdef1234.dll", "100"},
+		{"amd64_microsoft-windows-foo_10.0.26100.8972_none_abcdef1234567890abcdef1234.dll", "1000"},
+		{"amd64_microsoft-windows-foo_10.0.26100.8972_none_abcdef1234567890abcdef1234.dll", "10.0"},
+		{"amd64_microsoft-windows-foo_10.0.26100.8972_none_abcdef1234567890abcdef1234.dll", "000"},
+		{"amd64_microsoft-windows-userexperience-shared_31bf3856ad364e35_10.0.26100.8972_none_b2893c8d70f22708_docx.scale-200.png", "dsc2"},
+		{"amd64_microsoft-windows-userexperience-shared_31bf3856ad364e35_2026.0.1000_none_b2893c8d70f22708_report.log", "2026"},
+	} {
+		prepared := PreparePattern(tc.pattern)
+		full := FuzzyMatch(tc.text, tc.pattern, false)
+		hints, second := ASCIINameScoreHints(tc.text)
+		if full.IsMatch && ASCIIScoreUpperBoundHint(prepared, len(tc.text), hints, second) < full.Score {
+			t.Fatalf("invalid long digit bound %q %q: %+v", tc.text, tc.pattern, full)
+		}
+		legacyHints := hints &^ (uint64(0xf) << 60)
+		legacySecond := second &^ (uint64(0xfff) << 52)
+		if full.IsMatch && ASCIIScoreUpperBoundHint(prepared, len(tc.text), legacyHints, legacySecond) < full.Score {
+			t.Fatalf("invalid legacy digit bound %q %q: %+v", tc.text, tc.pattern, full)
+		}
+		for _, minimum := range []int64{0, 1, 16, 50, 84, 103, full.Score, full.Score + 1} {
+			got := FuzzyMatchPatternAtLeast(tc.text, prepared, true, false, minimum)
+			if full.IsMatch && full.Score >= minimum && got != full || got.IsMatch && (!full.IsMatch || got.Score != full.Score || got.Score < minimum) {
+				t.Fatalf("long pruning %q %q minimum=%d: %+v != %+v", tc.text, tc.pattern, minimum, got, full)
+			}
+		}
+	}
+
+	for iteration := 0; iteration < 5000; iteration++ {
+		text := make([]byte, 65+rng.Intn(96))
+		for i := range text {
+			text[i] = alphabet[rng.Intn(len(alphabet))]
+		}
+		pattern := make([]byte, 1+rng.Intn(8))
+		for i := range pattern {
+			pattern[i] = alphabet[rng.Intn(len(alphabet))]
+		}
+		candidate := strings.TrimSpace(string(text))
+		prepared := PreparePattern(string(pattern))
+		full := FuzzyMatch(candidate, string(pattern), false)
+		hints, second := ASCIINameScoreHints(string(text))
+		if full.IsMatch && ASCIIScoreUpperBoundHint(prepared, len(candidate), hints, second) < full.Score {
+			t.Fatalf("invalid random long bound %q %q: %+v", text, pattern, full)
+		}
+		for _, minimum := range []int64{0, 16, 50, 84, 103, full.Score, full.Score + 1} {
+			got := FuzzyMatchPatternAtLeast(candidate, prepared, true, false, minimum)
+			if full.IsMatch && full.Score >= minimum && got != full || got.IsMatch && (!full.IsMatch || got.Score != full.Score || got.Score < minimum) {
+				t.Fatalf("random long pruning %q %q minimum=%d: %+v != %+v", text, pattern, minimum, got, full)
+			}
+		}
+	}
 }
 
 // referenceAlignmentASCII retains the original exhaustive transitions as an

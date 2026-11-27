@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 	"wox/plugin"
 	"wox/util/filesearch"
 	"wox/util/recentfiles"
@@ -129,5 +130,54 @@ func TestFileSearchRecentFallbackPolicy(t *testing.T) {
 				t.Fatalf("system recents lost: %#v", response.Results)
 			}
 		})
+	}
+}
+
+func TestFileSearchRecentUsesPrepopulatedMetadata(t *testing.T) {
+	modTime := time.Unix(1700000123, 0)
+	nonExistent := filepath.Join(t.TempDir(), "pre-stat-skipped.txt")
+	results := recentFilesToSearchResults([]recentfiles.File{{
+		Path:    nonExistent,
+		HasMeta: true,
+		IsDir:   true,
+		ModTime: modTime,
+		Size:    42,
+	}}, false)
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result from prepopulated metadata, got %d", len(results))
+	}
+	if !results[0].IsDir || results[0].Size != 42 || results[0].Mtime != modTime.UnixMilli() {
+		t.Fatalf("prepopulated metadata mismatch: %+v", results[0])
+	}
+}
+
+func TestFileSearchRecentQueryCachesBrieflyAndInvalidates(t *testing.T) {
+	filePath, _ := writeRecentFileFixtures(t)
+	calls := 0
+	previous := listRecentFilesFn
+	listRecentFilesFn = func(context.Context, recentfiles.ListOption) ([]recentfiles.File, error) {
+		calls++
+		return []recentfiles.File{{Path: filePath}}, nil
+	}
+	t.Cleanup(func() { listRecentFilesFn = previous })
+
+	p := &FileSearchPlugin{api: fileSearchToolbarTestAPI{}}
+	q := plugin.Query{Type: plugin.QueryTypeInput, TriggerKeyword: "f"}
+	resp1 := p.Query(context.Background(), q)
+	resp2 := p.Query(context.Background(), q)
+	if len(resp1.Results) != 1 || len(resp2.Results) != 1 {
+		t.Fatalf("unexpected result counts: %d, %d", len(resp1.Results), len(resp2.Results))
+	}
+	if calls != 1 {
+		t.Fatalf("expected second recent query to hit TTL cache, got %d list calls", calls)
+	}
+
+	p.invalidateRecentFilesCache()
+	resp3 := p.Query(context.Background(), q)
+	if len(resp3.Results) != 1 {
+		t.Fatalf("unexpected post-invalidation count: %d", len(resp3.Results))
+	}
+	if calls != 2 {
+		t.Fatalf("expected cache invalidation to trigger fresh lookup, got %d list calls", calls)
 	}
 }

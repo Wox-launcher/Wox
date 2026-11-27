@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sync"
+	"sync/atomic"
 
 	"wox/util/filesearch/column"
 )
@@ -77,6 +78,14 @@ func (d *directoryIndex) attach(root RootRecord) error {
 
 // search merges bounded per-shard results while suppressing overlapping-root paths.
 func (d *directoryIndex) search(ctx context.Context, query SearchQuery, limit int) ([]SearchResult, error) {
+	query = normalizeSearchQuery(query)
+	if query.plan == nil {
+		return nil, nil
+	}
+	var sharedMinimum atomic.Int64
+	if query.wildcard != nil {
+		sharedMinimum.Store(-1 << 60)
+	}
 	d.mu.RLock()
 	defer d.mu.RUnlock()
 	if d.closed {
@@ -105,7 +114,7 @@ func (d *directoryIndex) search(ctx context.Context, query SearchQuery, limit in
 				}
 				errs[i] = shards[i].store.ReadQuery(func(view column.View) error {
 					var err error
-					matches[i], err = searchColumnView(ctx, view, query, limit)
+					matches[i], err = searchColumnViewWithFloor(ctx, view, query, limit, &sharedMinimum)
 					return err
 				})
 			}

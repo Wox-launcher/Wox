@@ -216,3 +216,77 @@ func TestColumnQueryHonorsDirectoryOverlay(t *testing.T) {
 		t.Fatalf("deleted subtree: %+v %v", results, err)
 	}
 }
+
+func TestMultiShardSharedFloorAndDigitPairs(t *testing.T) {
+	dir := t.TempDir()
+	index := newDirectoryIndex(filepath.Join(dir, "shards"))
+
+	makeShard := func(id, root string, names []string) {
+		t.Helper()
+		b := column.NewBuilder(root, 1)
+		for i, name := range names {
+			if err := b.Add(column.Record{ID: uint64(i + 2), ParentID: 1, Name: name}); err != nil {
+				t.Fatal(err)
+			}
+		}
+		base, err := b.Finish()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := prepareColumnNames(base); err != nil {
+			t.Fatal(err)
+		}
+		store, err := column.OpenStore(filepath.Join(dir, id), prepareColumnNames)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := store.Publish(base, "c", "", store.Revision()); err != nil {
+			t.Fatal(err)
+		}
+		index.shards[id] = &directoryShard{root: RootRecord{ID: id, Path: root}, store: store}
+	}
+	defer index.close()
+
+	rootA := filepath.Join(dir, "volA")
+	rootB := filepath.Join(dir, "volB")
+	makeShard("a", rootA, []string{"dsc2", "dsc2-notes.txt", "docx.scale-200.png", "Wox测试2026.txt"})
+	makeShard("b", rootB, []string{"200_dsc.png", "dsc_archive_2.md", "2026_roadmap.md", "dsc2_extra.log"})
+
+	for _, raw := range []string{"dsc2", "woxcs2026", "2026"} {
+		unlimited, err := index.search(context.Background(), SearchQuery{Raw: raw}, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := sortAndLimitResults(unlimited, 2)
+		got, err := index.search(context.Background(), SearchQuery{Raw: raw}, 2)
+		if err != nil || !reflect.DeepEqual(got, want) {
+			t.Fatalf("%q multi-shard limit=2: got=%+v want=%+v err=%v", raw, got, want, err)
+		}
+	}
+
+	// Simulate a legacy 27-class shard beside a 28-class shard and verify identical digit results.
+	var legacyView column.View
+	if err := index.shards["a"].store.Read(func(v column.View) error {
+		legacyView = v
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	words := (legacyView.Base.Names() + 63) / 64
+	legacyCopy := *legacyView.Base
+	legacyCopy.NamePairStride = 27
+	legacyCopy.NamePairBitmaps = make([]uint64, 27*27*words)
+	for i := range legacyCopy.NamePairBitmaps {
+		legacyCopy.NamePairBitmaps[i] = ^uint64(0)
+	}
+	for _, raw := range []string{"dsc2", "woxcs2026", "2026"} {
+		want, err := searchColumnView(context.Background(), legacyView, SearchQuery{Raw: raw}, 10)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := searchColumnView(context.Background(), column.View{Base: &legacyCopy}, SearchQuery{Raw: raw}, 10)
+		if err != nil || !reflect.DeepEqual(got, want) {
+			t.Fatalf("%q legacy-27 parity: got=%+v want=%+v err=%v", raw, got, want, err)
+		}
+	}
+}

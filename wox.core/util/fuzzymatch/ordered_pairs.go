@@ -2,11 +2,11 @@ package fuzzymatch
 
 import "unicode"
 
-// PossibleASCIIOrderedPairs returns necessary-order filters over letters and
-// dots. It unions normalized text and every pronunciation without enumerating
-// complete pinyin combinations. Rows are indexed by the second character.
-func PossibleASCIIOrderedPairs(text string) [27]uint32 {
-	var pairs [27]uint32
+// PossibleASCIIOrderedPairs returns necessary-order filters over letters,
+// digits and dots. It unions normalized text and every pronunciation without
+// enumerating complete pinyin combinations. Rows are indexed by the second character.
+func PossibleASCIIOrderedPairs(text string) [28]uint32 {
+	var pairs [28]uint32
 	var originalBuffer, normalizedBuffer [64]rune
 	original, normalized := originalBuffer[:0], normalizedBuffer[:0]
 	hasChinese := processText(text, &original, &normalized)
@@ -55,6 +55,9 @@ func orderedPairClass(r rune) int {
 	}
 	if r == '.' {
 		return 26
+	}
+	if r >= '0' && r <= '9' {
+		return 27
 	}
 	return -1
 }

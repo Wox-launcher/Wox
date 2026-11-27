@@ -83,6 +83,8 @@ const (
 	fileSearchRecentResultLimit            = 50
 	fileSearchRecentCandidateLimit         = 80
 	fileSearchRefinedCandidateLimit        = 300
+	fileSearchRecentCacheTTL               = 2 * time.Second
+	fileSearchRecentWarmDelay              = 1500 * time.Millisecond
 )
 
 // listRecentFilesFn is the OS recent-file lookup so tests can inject fixtures
@@ -138,6 +140,20 @@ type FileSearchPlugin struct {
 	rootsSyncMu              sync.Mutex
 	serviceSyncMu            sync.Mutex
 	rootsSyncGeneration      atomic.Int64
+	recentCacheMu            sync.Mutex
+	recentCacheItems         []filesearch.SearchResult
+	recentCacheOSCount       int
+	recentCacheSkipHidden    bool
+	recentCacheExpiresAt     time.Time
+	recentWarmCancel         context.CancelFunc
+}
+
+func (c *FileSearchPlugin) invalidateRecentFilesCache() {
+	c.recentCacheMu.Lock()
+	c.recentCacheItems = nil
+	c.recentCacheOSCount = 0
+	c.recentCacheExpiresAt = time.Time{}
+	c.recentCacheMu.Unlock()
 }
 
 func (c *FileSearchPlugin) CheckAfterWake(ctx context.Context) {
@@ -443,6 +459,28 @@ func (c *FileSearchPlugin) Init(ctx context.Context, initParams plugin.InitParam
 		c.resetToolbarMsgState()
 	})
 
+	if runtime.GOOS == "windows" && !util.IsTestMode() {
+		warmCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
+		c.recentCacheMu.Lock()
+		if c.recentWarmCancel != nil {
+			c.recentWarmCancel()
+		}
+		c.recentWarmCancel = cancel
+		c.recentCacheMu.Unlock()
+		util.Go(warmCtx, "warm windows recent files cache", func() {
+			timer := time.NewTimer(fileSearchRecentWarmDelay)
+			defer timer.Stop()
+			select {
+			case <-warmCtx.Done():
+				return
+			case <-timer.C:
+			}
+			// Pre-populate recentfiles COM/OLE caches shortly after startup so the
+			// first `f ` query avoids the ~400ms cold parse stall.
+			_, _ = listRecentFilesFn(warmCtx, recentfiles.ListOption{Limit: fileSearchRecentCandidateLimit})
+		})
+	}
+
 	c.syncUserRoots(ctx)
 	if runtime.GOOS == "windows" {
 		util.Go(ctx, "auto-update file index service", func() {
@@ -502,6 +540,7 @@ func (c *FileSearchPlugin) Init(ctx context.Context, initParams plugin.InitParam
 		}
 		if key == fileSkipHiddenFilesSettingKey {
 			c.syncSkipHiddenFiles(callbackCtx)
+			c.invalidateRecentFilesCache()
 			c.onFileSearchPolicyChanged(callbackCtx)
 			return
 		}
@@ -529,6 +568,16 @@ func (c *FileSearchPlugin) Init(ctx context.Context, initParams plugin.InitParam
 	})
 
 	c.api.OnUnload(ctx, func(ctx context.Context) {
+		c.recentCacheMu.Lock()
+		warmCancel := c.recentWarmCancel
+		c.recentWarmCancel = nil
+		c.recentCacheItems = nil
+		c.recentCacheOSCount = 0
+		c.recentCacheExpiresAt = time.Time{}
+		c.recentCacheMu.Unlock()
+		if warmCancel != nil {
+			warmCancel()
+		}
 		c.resetToolbarMsgState()
 		c.nextContentSearchGeneration()
 		c.stopContentCrawlWork()
@@ -1044,39 +1093,64 @@ func (c *FileSearchPlugin) Query(ctx context.Context, query plugin.Query) plugin
 func (c *FileSearchPlugin) queryRecentFiles(ctx context.Context, query plugin.Query, queryStartedAt int64) plugin.QueryResponse {
 	diagnostics := fileSearchQueryDiagnostics{}
 	searchStartedAt := util.GetSystemTimestamp()
-	items, err := listRecentFilesFn(ctx, recentfiles.ListOption{Limit: fileSearchRecentCandidateLimit})
-	if err != nil {
-		c.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("recent files lookup failed: %s", err.Error()))
-		items = nil
-	}
 	selectedType := selectedFileSearchType(query)
-	results := recentFilesToSearchResults(items, c.getConfiguredSkipHiddenFiles(ctx))
-	// Spotlight can return no rows when indexing is disabled. Keep OS recents
-	// authoritative otherwise, and leave Windows/Linux recent-file behavior intact.
-	fallback := runtime.GOOS == "darwin" && (err != nil || len(items) == 0)
-	if fallback && ctx.Err() == nil {
-		skipHidden := c.getConfiguredSkipHiddenFiles(ctx)
-		results, err = c.engine.RecentModified(ctx, fileSearchRecentResultLimit, func(item filesearch.SearchResult) bool {
-			if skipHidden && isHiddenFileSearchPath(item.Path) {
-				return false
-			}
-			if selectedType == fileSearchTypeRefinementFile && item.IsDir || selectedType == fileSearchTypeRefinementFolder && !item.IsDir {
-				return false
-			}
-			_, statErr := os.Lstat(item.Path)
-			return statErr == nil
-		})
+	skipHidden := c.getConfiguredSkipHiddenFiles(ctx)
+
+	var results []filesearch.SearchResult
+	var osCount int
+	var fallback bool
+	cacheHit := false
+
+	c.recentCacheMu.Lock()
+	if !c.recentCacheExpiresAt.IsZero() && time.Now().Before(c.recentCacheExpiresAt) && c.recentCacheSkipHidden == skipHidden {
+		results = append([]filesearch.SearchResult(nil), c.recentCacheItems...)
+		osCount = c.recentCacheOSCount
+		cacheHit = true
+	}
+	c.recentCacheMu.Unlock()
+
+	if !cacheHit {
+		items, err := listRecentFilesFn(ctx, recentfiles.ListOption{Limit: fileSearchRecentCandidateLimit})
 		if err != nil {
-			c.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("recent modified fallback failed: %s", err.Error()))
+			c.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("recent files lookup failed: %s", err.Error()))
+			items = nil
+		}
+		osCount = len(items)
+		results = recentFilesToSearchResults(items, skipHidden)
+		// Spotlight can return no rows when indexing is disabled. Keep OS recents
+		// authoritative otherwise, and leave Windows/Linux recent-file behavior intact.
+		fallback = runtime.GOOS == "darwin" && (err != nil || len(items) == 0)
+		if fallback && ctx.Err() == nil {
+			results, err = c.engine.RecentModified(ctx, fileSearchRecentResultLimit, func(item filesearch.SearchResult) bool {
+				if skipHidden && isHiddenFileSearchPath(item.Path) {
+					return false
+				}
+				if selectedType == fileSearchTypeRefinementFile && item.IsDir || selectedType == fileSearchTypeRefinementFolder && !item.IsDir {
+					return false
+				}
+				_, statErr := os.Lstat(item.Path)
+				return statErr == nil
+			})
+			if err != nil {
+				c.api.Log(ctx, plugin.LogLevelWarning, fmt.Sprintf("recent modified fallback failed: %s", err.Error()))
+			}
+		} else if !fallback && err == nil && len(items) > 0 {
+			c.recentCacheMu.Lock()
+			c.recentCacheItems = append([]filesearch.SearchResult(nil), results...)
+			c.recentCacheOSCount = osCount
+			c.recentCacheSkipHidden = skipHidden
+			c.recentCacheExpiresAt = time.Now().Add(fileSearchRecentCacheTTL)
+			c.recentCacheMu.Unlock()
 		}
 	}
+
 	diagnostics.searchElapsedMs = util.GetSystemTimestamp() - searchStartedAt
 	results = refineFileSearchResults(results, selectedType, fileSearchRecentResultLimit)
 	queryResults := c.materializeFileSearchResults(ctx, query, results, !fallback, &diagnostics)
 	if fallback {
 		c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("recent files: source=index_modified visible=%d", len(queryResults)))
 	}
-	c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("recent files: os=%d visible=%d", len(items), len(queryResults)))
+	c.api.Log(ctx, plugin.LogLevelInfo, fmt.Sprintf("recent files: os=%d visible=%d", osCount, len(queryResults)))
 	c.logQueryDiagnostics(ctx, "recent", diagnostics, len(queryResults), util.GetSystemTimestamp()-queryStartedAt)
 
 	response := plugin.NewQueryResponse(queryResults)
@@ -1088,9 +1162,21 @@ func (c *FileSearchPlugin) queryRecentFiles(ctx context.Context, query plugin.Qu
 func recentFilesToSearchResults(items []recentfiles.File, skipHidden bool) []filesearch.SearchResult {
 	results := make([]filesearch.SearchResult, 0, len(items))
 	for index, item := range items {
-		info, err := os.Lstat(item.Path)
-		if err != nil {
-			continue
+		var isDir bool
+		var modTime time.Time
+		var size int64
+		if item.HasMeta {
+			isDir = item.IsDir
+			modTime = item.ModTime
+			size = item.Size
+		} else {
+			info, err := os.Lstat(item.Path)
+			if err != nil {
+				continue
+			}
+			isDir = info.IsDir()
+			modTime = info.ModTime()
+			size = info.Size()
 		}
 		if skipHidden && isHiddenFileSearchPath(item.Path) {
 			continue
@@ -1099,9 +1185,9 @@ func recentFilesToSearchResults(items []recentfiles.File, skipHidden bool) []fil
 			Path:       item.Path,
 			Name:       filepath.Base(item.Path),
 			ParentPath: filepath.Dir(item.Path),
-			IsDir:      info.IsDir(),
-			Mtime:      info.ModTime().UnixMilli(),
-			Size:       info.Size(),
+			IsDir:      isDir,
+			Mtime:      modTime.UnixMilli(),
+			Size:       size,
 			Score:      int64(len(items) - index),
 		})
 	}
@@ -1372,6 +1458,8 @@ func (c *FileSearchPlugin) buildFileSearchResultActions(ctx context.Context, ite
 				}
 				if recordErr := recentfiles.RecordAccess(ctx, item.Path); recordErr != nil {
 					c.api.Log(ctx, plugin.LogLevelDebug, fmt.Sprintf("failed to record recent file access: path=%s err=%s", item.Path, recordErr.Error()))
+				} else {
+					c.invalidateRecentFilesCache()
 				}
 			},
 		},

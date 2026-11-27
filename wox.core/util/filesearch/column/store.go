@@ -29,6 +29,7 @@ type manifest struct {
 // Store serializes durable mutations and lends read leases across base/delta traversal.
 // Its directory belongs to exactly one live engine instance.
 type Store struct {
+	writeMu         sync.Mutex // serializes journal/publication disk I/O ahead of countsMu -> mu
 	mu              sync.RWMutex
 	dir             string
 	manifest        manifest
@@ -41,6 +42,7 @@ type Store struct {
 	writeErr        error
 	unsynced        bool // log holds ApplyUnsynced frames not yet fsynced
 	query           *QueryOverlay
+	queryPending    []uint64
 	queryMu         sync.Mutex // serializes lazy preparation within concurrent read leases
 	prepareSnapshot func(*Snapshot) error
 	countsMu        sync.Mutex
@@ -200,7 +202,7 @@ func (s *Store) NeedsCompaction() bool {
 	if s.base == nil || s.closed {
 		return false
 	}
-	threshold := min(100000, max(10000, s.base.Len()/10))
+	threshold := min(20000, max(10000, s.base.Len()/100))
 	if len(s.delta) >= threshold {
 		return true
 	}
@@ -294,8 +296,8 @@ func (s *Store) Read(callback func(View) error) error {
 	return callback(View{Base: s.base, Delta: s.delta, Cursor: s.cursor, Revision: s.revision, Policy: s.manifest.Policy})
 }
 
-// ReadQuery prepares one shared overlay only when a search needs it. Ordinary
-// source/status reads must not rebuild query data while the launcher is hidden.
+// ReadQuery prepares or incrementally patches one shared overlay only when a search needs it.
+// Ordinary source/status reads must not rebuild query data while the launcher is hidden.
 func (s *Store) ReadQuery(callback func(View) error) error {
 	return s.Read(func(view View) error {
 		// The read lease pins the mapping and delta while queryMu prevents two
@@ -303,6 +305,10 @@ func (s *Store) ReadQuery(callback func(View) error) error {
 		s.queryMu.Lock()
 		if s.query == nil {
 			s.query = buildQueryOverlay(view)
+			s.queryPending = nil
+		} else if len(s.queryPending) > 0 {
+			patchQueryOverlay(view, s.query, s.queryPending)
+			s.queryPending = s.queryPending[:0]
 		}
 		view.Query = s.query
 		s.queryMu.Unlock()
@@ -316,15 +322,15 @@ func (s *Store) Revision() uint64 {
 	return s.revision
 }
 
-// ReleaseIdleMemory waits for borrowed views before evicting clean mapped pages.
-// Names and deltas remain valid; the OS faults file pages back on the next read.
+// ReleaseIdleMemory waits for borrowed views before evicting cold mapped pages.
+// Hot name bitmaps and hints stay resident so resume queries avoid page faults.
 func (s *Store) ReleaseIdleMemory() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.closed || s.base == nil || s.base.mapping == nil {
+	if s.closed || s.base == nil {
 		return nil
 	}
-	return s.base.mapping.releasePages()
+	return s.base.releaseIdlePages()
 }
 
 // Publish writes and validates off the query lock, then rejects a stale build before switching.
@@ -397,6 +403,8 @@ func (s *Store) Publish(base *Snapshot, cursor, policy string, expectedRevision 
 	if closeErr != nil {
 		return closeErr
 	}
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
 	s.countsMu.Lock()
 	defer s.countsMu.Unlock()
 	s.mu.Lock()
@@ -421,6 +429,7 @@ func (s *Store) Publish(base *Snapshot, cursor, policy string, expectedRevision 
 	s.base, s.log, s.manifest, s.cursor = mapped, logFile, next, cursor
 	s.delta = make(map[uint64]Change)
 	s.query = nil
+	s.queryPending = nil
 	s.unsynced = false
 	s.revision++
 	s.countRevision++
@@ -461,38 +470,54 @@ func (s *Store) apply(changes []Change, cursor string, sync bool) error {
 	return err
 }
 
-// applyJournal appends one frame and then exposes it in the overlay.
+// applyJournal appends one frame off the query read lock and then exposes it in the overlay.
 func (s *Store) applyJournal(changes []Change, cursor string, sync bool) error {
+	data, err := encodeBatch(changes, cursor)
+	if err != nil {
+		return err
+	}
+	// Lock ordering: writeMu -> countsMu -> mu. Holding writeMu prevents any
+	// concurrent writer from modifying s.base/s.delta/s.log while fsync runs
+	// without blocking concurrent Read/ReadQuery searches.
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+
+	s.mu.RLock()
+	var logFile *os.File
+	var validateErr error
+	switch {
+	case s.closed:
+		validateErr = os.ErrClosed
+	case s.base == nil:
+		validateErr = ErrNotReady
+	case s.writeErr != nil:
+		validateErr = s.writeErr
+	default:
+		validateErr = s.validateChanges(changes)
+		logFile = s.log
+	}
+	s.mu.RUnlock()
+	if validateErr != nil {
+		return validateErr
+	}
+
+	var ioErr error
+	if _, err := logFile.Write(data); err != nil {
+		ioErr = err
+	} else if sync {
+		if err := logFile.Sync(); err != nil {
+			ioErr = err
+		}
+	}
+
 	// Counts takes these locks in the same order while traversing a read lease.
 	s.countsMu.Lock()
 	defer s.countsMu.Unlock()
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.closed {
-		return os.ErrClosed
-	}
-	if s.base == nil {
-		return ErrNotReady
-	}
-	if s.writeErr != nil {
-		return s.writeErr
-	}
-	if err := s.validateChanges(changes); err != nil {
-		return err
-	}
-	data, err := encodeBatch(changes, cursor)
-	if err != nil {
-		return err
-	}
-	if _, err := s.log.Write(data); err != nil {
-		s.writeErr = err
-		return err
-	}
-	if sync {
-		if err := s.log.Sync(); err != nil {
-			s.writeErr = err
-			return err
-		}
+	if ioErr != nil {
+		s.writeErr = ioErr
+		return ioErr
 	}
 	s.unsynced = !sync
 	s.applyMemory(changes, cursor)
@@ -583,9 +608,22 @@ func (s *Store) applyMemory(changes []Change, cursor string) {
 		}
 		change.Name = strings.Clone(change.Name)
 		s.delta[change.ID] = change
-		// Cursor-only commits still advance durability and revision, but do not
-		// change search data. Release stale query data without rebuilding it.
-		s.query = nil
+		if s.query != nil {
+			dirInvolved := (exists && old.Flags&Directory != 0) || (!change.Deleted && change.Flags&Directory != 0)
+			if !dirInvolved {
+				if row, inBase := s.base.Row(change.ID); inBase && s.base.Flags[row]&Directory != 0 {
+					dirInvolved = true
+				}
+			}
+			if dirInvolved || len(s.queryPending) >= 2048 {
+				// Directory mutations or huge pending batches invalidate the overlay;
+				// ordinary file updates stay queued for incremental ReadQuery patching.
+				s.query = nil
+				s.queryPending = nil
+			} else {
+				s.queryPending = append(s.queryPending, change.ID)
+			}
+		}
 	}
 	s.cursor = cursor
 	s.revision++
@@ -821,6 +859,8 @@ func (s *Store) publishWithChanges(ctx context.Context, changes []Change, cursor
 }
 
 func (s *Store) Close() error {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.closed {
@@ -839,5 +879,6 @@ func (s *Store) Close() error {
 	}
 	s.delta = nil
 	s.query = nil
+	s.queryPending = nil
 	return err
 }

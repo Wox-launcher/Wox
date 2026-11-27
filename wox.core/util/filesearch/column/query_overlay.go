@@ -17,6 +17,8 @@ type QueryOverlay struct {
 	LiveDirectories []LiveDirectory
 	PathsCached     bool
 	Names           []LiveName
+	nameIndex       map[uint64]int
+	childParent     map[uint64]uint64
 }
 
 // LiveName keeps cheap rejection metadata beside one live change ID. Stable
@@ -58,28 +60,39 @@ func (v View) DirectoryUnchanged(row uint32) bool {
 	return len(v.Delta) == 0 || v.Query != nil && (len(v.Query.StaleDirectories) == 0 || v.Query.StaleDirectories[id/64]&(uint64(1)<<uint(id%64)) == 0)
 }
 
+func liveNameForChange(v View, change Change, row uint32, inBase bool) LiveName {
+	mask, nonASCII := CharacterMask(change.Name)
+	name := LiveName{ID: change.ID, Mask: mask, NonASCII: nonASCII, BaseName: NoRow}
+	if nonASCII {
+		name.Mask = ^uint64(0)
+	}
+	if inBase && change.Name == v.Base.Name(v.Base.NameIDs[row]) {
+		name.BaseName = v.Base.NameIDs[row]
+		if !nonASCII || v.Base.NameFlags[name.BaseName]&NameMaskComplete != 0 {
+			name.Mask = v.Base.NameMasks[name.BaseName]
+		}
+	}
+	return name
+}
+
 // buildQueryOverlay scales with live changes and affected subtrees, not all
 // base entries. File-only changes require no directory invalidation bitmap.
 func buildQueryOverlay(v View) *QueryOverlay {
-	q := &QueryOverlay{Children: make(map[uint64][]uint64), Names: make([]LiveName, 0, len(v.Delta))}
+	q := &QueryOverlay{
+		Children:    make(map[uint64][]uint64),
+		Names:       make([]LiveName, 0, len(v.Delta)),
+		nameIndex:   make(map[uint64]int, len(v.Delta)),
+		childParent: make(map[uint64]uint64, len(v.Delta)),
+	}
 	var stack []uint32
 	var added []Record
 	for _, change := range v.Delta {
 		row, inBase := v.Base.Row(change.ID)
 		if !change.Deleted && change.ID != v.Base.IDs[0] {
 			q.Children[change.ParentID] = append(q.Children[change.ParentID], change.ID)
-			mask, nonASCII := CharacterMask(change.Name)
-			name := LiveName{ID: change.ID, Mask: mask, NonASCII: nonASCII, BaseName: NoRow}
-			if nonASCII {
-				name.Mask = ^uint64(0)
-			}
-			if inBase && change.Name == v.Base.Name(v.Base.NameIDs[row]) {
-				name.BaseName = v.Base.NameIDs[row]
-				if !nonASCII || v.Base.NameFlags[name.BaseName]&NameMaskComplete != 0 {
-					name.Mask = v.Base.NameMasks[name.BaseName]
-				}
-			}
-			q.Names = append(q.Names, name)
+			q.childParent[change.ID] = change.ParentID
+			q.nameIndex[change.ID] = len(q.Names)
+			q.Names = append(q.Names, liveNameForChange(v, change, row, inBase))
 		}
 		if inBase && v.Base.Flags[row]&Directory != 0 {
 			parent := v.Base.Parents[row]
@@ -138,4 +151,84 @@ func buildQueryOverlay(v View) *QueryOverlay {
 		}
 	}
 	return q
+}
+
+// patchQueryOverlay incrementally reconciles file-only mutations without
+// scanning the full delta map or running repeated base ID binary searches.
+func patchQueryOverlay(v View, q *QueryOverlay, ids []uint64) {
+	if q == nil || len(ids) == 0 {
+		return
+	}
+	if q.nameIndex == nil {
+		q.nameIndex = make(map[uint64]int, len(q.Names))
+		for i, n := range q.Names {
+			q.nameIndex[n.ID] = i
+		}
+	}
+	if q.childParent == nil {
+		q.childParent = make(map[uint64]uint64, len(q.Names))
+		for parentID, children := range q.Children {
+			for _, childID := range children {
+				q.childParent[childID] = parentID
+			}
+		}
+	}
+	var seen map[uint64]struct{}
+	if len(ids) > 1 {
+		seen = make(map[uint64]struct{}, len(ids))
+	}
+	for _, id := range ids {
+		if id == v.Base.IDs[0] {
+			continue
+		}
+		if seen != nil {
+			if _, ok := seen[id]; ok {
+				continue
+			}
+			seen[id] = struct{}{}
+		}
+		change, inDelta := v.Delta[id]
+		if oldParent, hadChild := q.childParent[id]; hadChild {
+			if !inDelta || change.Deleted || change.ParentID != oldParent {
+				children := q.Children[oldParent]
+				for i, childID := range children {
+					if childID == id {
+						last := len(children) - 1
+						children[i] = children[last]
+						children = children[:last]
+						break
+					}
+				}
+				if len(children) == 0 {
+					delete(q.Children, oldParent)
+				} else {
+					q.Children[oldParent] = children
+				}
+				delete(q.childParent, id)
+			}
+		}
+		if inDelta && !change.Deleted {
+			if _, hasChild := q.childParent[id]; !hasChild {
+				q.Children[change.ParentID] = append(q.Children[change.ParentID], id)
+				q.childParent[id] = change.ParentID
+			}
+			row, inBase := v.Base.Row(id)
+			live := liveNameForChange(v, change, row, inBase)
+			if idx, ok := q.nameIndex[id]; ok {
+				q.Names[idx] = live
+			} else {
+				q.nameIndex[id] = len(q.Names)
+				q.Names = append(q.Names, live)
+			}
+		} else if idx, ok := q.nameIndex[id]; ok {
+			last := len(q.Names) - 1
+			if idx != last {
+				moved := q.Names[last]
+				q.Names[idx] = moved
+				q.nameIndex[moved.ID] = idx
+			}
+			q.Names = q.Names[:last]
+			delete(q.nameIndex, id)
+		}
+	}
 }

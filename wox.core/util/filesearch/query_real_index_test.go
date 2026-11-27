@@ -190,6 +190,7 @@ func rewriteDiagnosticSnapshot(path string) error {
 		return err
 	}
 	defer snapshot.Close()
+	snapshot.RefreshSearchHints()
 	prepared := path + ".prepared"
 	if err := column.Write(prepared, snapshot); err != nil {
 		return err

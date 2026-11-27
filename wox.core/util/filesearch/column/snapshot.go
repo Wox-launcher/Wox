@@ -60,6 +60,7 @@ type Snapshot struct {
 	// Ordered pairs reject impossible ASCII subsequences before fuzzy scoring.
 	// Unicode names include normalization and every pinyin reading.
 	NamePairBitmaps    []uint64
+	NamePairStride     int
 	NonASCIINameBitmap []uint64
 	NameFlags          []byte
 	NameStarts         []uint32
@@ -85,6 +86,7 @@ type Snapshot struct {
 	DirectoryRuneCounts  []uint32
 	DirectoryPairBitmaps []uint64
 	mapping              *fileMapping
+	coldRanges           [][2]int
 }
 
 func (s *Snapshot) Len() int   { return len(s.IDs) }
@@ -191,6 +193,23 @@ func (s *Snapshot) Close() error {
 	err := s.mapping.close()
 	*s = Snapshot{}
 	return err
+}
+
+// releaseIdlePages evicts cold mapped sections while keeping hot name bitmaps and hints resident.
+func (s *Snapshot) releaseIdlePages() error {
+	if s == nil || s.mapping == nil {
+		return nil
+	}
+	if len(s.coldRanges) == 0 {
+		return s.mapping.releasePages()
+	}
+	var firstErr error
+	for _, r := range s.coldRanges {
+		if err := s.mapping.releaseRange(r[0], r[1]); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	return firstErr
 }
 
 // CharacterMask is a necessary, never sufficient condition for ASCII fuzzy matching.
@@ -366,6 +385,20 @@ func (s *Snapshot) PrepareSearchHints() {
 			s.NameScoreHints[id], s.NameSecondScoreHints[id] = fuzzymatch.ASCIINameScoreHints(s.Name(uint32(id)))
 		}
 	}
+	s.queryColumnsReady = true
+}
+
+// RefreshSearchHints recomputes ASCII score hints and transposed bitmaps when
+// rewriting snapshots across hint-format upgrades.
+func (s *Snapshot) RefreshSearchHints() {
+	s.NameScoreHints = make([]uint64, s.Names())
+	s.NameSecondScoreHints = make([]uint64, s.Names())
+	for id := range s.NameScoreHints {
+		if s.NameFlags[id]&NameNonASCII == 0 {
+			s.NameScoreHints[id], s.NameSecondScoreHints[id] = fuzzymatch.ASCIINameScoreHints(s.Name(uint32(id)))
+		}
+	}
+	s.prepareNameBitmaps()
 	s.queryColumnsReady = true
 }
 

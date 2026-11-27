@@ -9,6 +9,7 @@ import (
 // pinyin combinations. Every reading contributes; exact scoring still chooses
 // a valid sequence, so this compact rejection filter cannot change recall.
 func prepareColumnNames(base *column.Snapshot) error {
+	updated := false
 	for id := 0; id < base.Names(); id++ {
 		if base.NameFlags[id]&column.NameNonASCII == 0 || base.NameFlags[id]&column.NameMaskComplete != 0 {
 			continue
@@ -24,6 +25,10 @@ func prepareColumnNames(base *column.Snapshot) error {
 		mask, _ := column.CharacterMask(string(text))
 		base.NameMasks[id] |= mask
 		base.NameFlags[id] |= column.NameMaskComplete
+		updated = true
+	}
+	if updated {
+		base.RefreshNameBitmaps()
 	}
 	return nil
 }

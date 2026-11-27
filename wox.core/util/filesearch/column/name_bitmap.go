@@ -15,7 +15,9 @@ func (s *Snapshot) prepareNameBitmaps() {
 		mask := s.NameMasks[id]
 		var repeated uint32
 		if s.NameFlags[id]&NameNonASCII != 0 {
-			mask = ^uint64(0)
+			if s.NameFlags[id]&NameMaskComplete == 0 {
+				mask = ^uint64(0)
+			}
 			repeated = (1 << 26) - 1
 			s.NonASCIINameBitmap[word] |= bit
 		} else {
@@ -45,4 +47,10 @@ func (s *Snapshot) prepareNameBitmaps() {
 			repeated &= repeated - 1
 		}
 	}
+}
+
+// RefreshNameBitmaps rebuilds transposed name bitmaps after source-supplied
+// non-ASCII masks are populated.
+func (s *Snapshot) RefreshNameBitmaps() {
+	s.prepareNameBitmaps()
 }

@@ -14,6 +14,10 @@ const DefaultLimit = 50
 type File struct {
 	Path     string
 	LastUsed time.Time
+	HasMeta  bool
+	IsDir    bool
+	ModTime  time.Time
+	Size     int64
 }
 
 // ListOption caps how many existing recent paths are returned.

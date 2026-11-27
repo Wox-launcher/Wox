@@ -22,6 +22,32 @@ func (m *fileMapping) releasePages() error {
 	return err
 }
 
+func (m *fileMapping) releaseRange(start, end int) error {
+	if m == nil || len(m.data) == 0 {
+		return nil
+	}
+	if start < 0 {
+		start = 0
+	}
+	if end > len(m.data) {
+		end = len(m.data)
+	}
+	page := os.Getpagesize()
+	if page <= 0 {
+		page = 4096
+	}
+	alignedStart := (start + page - 1) &^ (page - 1)
+	alignedEnd := end &^ (page - 1)
+	if alignedStart >= alignedEnd {
+		return nil
+	}
+	err := windows.VirtualUnlock(uintptr(unsafe.Pointer(&m.data[alignedStart])), uintptr(alignedEnd-alignedStart))
+	if errors.Is(err, windows.ERROR_NOT_LOCKED) {
+		return nil
+	}
+	return err
+}
+
 type fileMapping struct{ data []byte }
 
 // mapFile keeps clean snapshot columns outside the Go heap; the section owns its file reference.

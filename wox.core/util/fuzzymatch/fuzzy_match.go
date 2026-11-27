@@ -25,8 +25,14 @@ type PreparedText struct {
 // PreparedPattern stores normalized pattern data that can be shared across candidates.
 type PreparedPattern struct {
 	raw             string
+	lowerASCII      string
 	isASCII         bool
 	normalizedRunes []rune
+	slopeOneLetters uint32
+	slopeOneDigit   bool
+	digitRepeatMask uint16
+	hasTripleDigit  bool
+	longSuffixMax   []int64
 }
 
 // PatternRequiresNonASCII reports whether normalized pattern literals require
@@ -146,45 +152,65 @@ func FuzzyMatch(text string, pattern string, usePinYin bool) FuzzyMatchResult {
 // FuzzyMatchPattern reuses query normalization without retaining per-candidate text.
 // asciiText must describe the original text, as recorded by the filename index.
 func FuzzyMatchPattern(text string, pattern *PreparedPattern, asciiText bool, usePinyin bool) FuzzyMatchResult {
+	return FuzzyMatchPatternAtLeast(text, pattern, asciiText, usePinyin, -1<<63)
+}
+
+// FuzzyMatchPatternAtLeast prunes candidates below a proven score bound.
+// Unicode and pinyin keep their full scoring pipeline and pronunciation set.
+func FuzzyMatchPatternAtLeast(text string, pattern *PreparedPattern, asciiText bool, usePinyin bool, minimum int64) FuzzyMatchResult {
 	if pattern.raw == "" {
+		if minimum > 0 {
+			return FuzzyMatchResult{}
+		}
 		return FuzzyMatchResult{IsMatch: true}
 	}
 	if text == "" {
 		return FuzzyMatchResult{}
 	}
 	if asciiText && pattern.isASCII {
-		return fuzzyMatchASCII(text, pattern.raw)
-	}
-	textBuffer, originalBuffer := getRuneBuffer(), getRuneBuffer()
-	defer putRuneBuffer(textBuffer)
-	defer putRuneBuffer(originalBuffer)
-	hasChinese := processText(text, originalBuffer, textBuffer)
-	return fuzzyMatchRunes(text, pattern.raw, *originalBuffer, *textBuffer, pattern.normalizedRunes, hasChinese, nil, nil, usePinyin, false)
-}
-
-// FuzzyMatchPatternAtLeast prunes ASCII candidates below a proven score bound.
-// Unicode and pinyin keep their full scoring pipeline and pronunciation set.
-func FuzzyMatchPatternAtLeast(text string, pattern *PreparedPattern, asciiText bool, usePinyin bool, minimum int64) FuzzyMatchResult {
-	if asciiText && pattern.isASCII && text != "" && pattern.raw != "" {
-		n := len(pattern.raw)
-		upper := max(int64(bonusPrefixMatch+n*scoreMatch+bonusFirstCharMatch), int64(n*(scoreMatch+bonusBoundary+bonusNonWord)+(n-1)*bonusConsecutive+10))
-		if len(text) == n {
-			upper = max(upper, int64(bonusExactMatch+n*scoreMatch))
+		lowerPattern := pattern.lowerASCII
+		if lowerPattern == "" {
+			lowerPattern = toLowerASCIIBytes(pattern.raw)
 		}
-		if upper < minimum {
-			return FuzzyMatchResult{}
+		n := len(lowerPattern)
+		if minimum > 0 {
+			upper := max(int64(bonusPrefixMatch+n*scoreMatch+bonusFirstCharMatch), int64(n*(scoreMatch+bonusBoundary+bonusNonWord)+(n-1)*bonusConsecutive+10))
+			if len(text) == n {
+				upper = max(upper, int64(bonusExactMatch+n*scoreMatch))
+			}
+			if upper < minimum {
+				return FuzzyMatchResult{}
+			}
 		}
-		result := fuzzyMatchASCIIAtLeast(text, pattern.raw, minimum)
+		result := fuzzyMatchASCIILowerAtLeast(text, lowerPattern, pattern.longSuffixMax, minimum)
 		if result.Score < minimum {
 			return FuzzyMatchResult{}
 		}
 		return result
 	}
-	result := FuzzyMatchPattern(text, pattern, asciiText, usePinyin)
+	textBuffer, originalBuffer := getRuneBuffer(), getRuneBuffer()
+	defer putRuneBuffer(textBuffer)
+	defer putRuneBuffer(originalBuffer)
+	hasChinese := processText(text, originalBuffer, textBuffer)
+	result := fuzzyMatchRunesAtLeast(text, pattern.raw, *originalBuffer, *textBuffer, pattern.normalizedRunes, hasChinese, nil, nil, usePinyin, false, minimum)
 	if result.Score < minimum {
 		return FuzzyMatchResult{}
 	}
 	return result
+}
+
+func toLowerASCIIBytes(s string) string {
+	for i := 0; i < len(s); i++ {
+		if s[i] >= 'A' && s[i] <= 'Z' {
+			b := make([]byte, len(s))
+			copy(b, s[:i])
+			for j := i; j < len(s); j++ {
+				b[j] = toLowerByte(s[j])
+			}
+			return string(b)
+		}
+	}
+	return s
 }
 
 // PrepareText precomputes immutable text data for repeated fuzzy matching.
@@ -220,9 +246,59 @@ func PreparePattern(pattern string) *PreparedPattern {
 	if pattern == "" {
 		return prepared
 	}
+	if prepared.isASCII {
+		lower := toLowerASCIIBytes(pattern)
+		prepared.lowerASCII = lower
+		n := len(lower)
+		var digitCounts [10]uint8
+		for i := 0; i < n; i++ {
+			c := lower[i]
+			if i == 0 || !isAlnumByte(lower[i-1]) {
+				if c >= 'a' && c <= 'z' {
+					prepared.slopeOneLetters |= uint32(1) << (c - 'a')
+				} else if c >= '0' && c <= '9' {
+					prepared.slopeOneDigit = true
+				}
+			}
+			if c >= '0' && c <= '9' {
+				d := c - '0'
+				if digitCounts[d] < 3 {
+					digitCounts[d]++
+					if digitCounts[d] == 2 {
+						prepared.digitRepeatMask |= uint16(1) << d
+					} else if digitCounts[d] == 3 {
+						prepared.hasTripleDigit = true
+					}
+				}
+			}
+		}
+		if n > 0 {
+			suffix := make([]int64, n)
+			for q := n - 1; q >= 1; q-- {
+				suffix[q-1] = suffix[q] + maxLongStepScore(lower[q-1], lower[q])
+			}
+			prepared.longSuffixMax = suffix
+		}
+	}
 
 	prepared.normalizedRunes = normalizeToRunes(pattern, make([]rune, 0, len(pattern)))
 	return prepared
+}
+
+func maxLongStepScore(prev, curr byte) int64 {
+	if isAlnumByte(prev) {
+		if prev >= 'a' && prev <= 'z' && curr >= 'a' && curr <= 'z' {
+			return 31
+		}
+		if curr >= '0' && curr <= '9' {
+			return 29
+		}
+		return 21
+	}
+	if isAlnumByte(curr) {
+		return 37
+	}
+	return 29
 }
 
 // AdvanceSubsequence carries a necessary path-match condition across text
@@ -294,6 +370,10 @@ func FuzzyMatchPrepared(text *PreparedText, pattern *PreparedPattern, usePinYin 
 
 // fuzzyMatchRunes applies the shared scoring pipeline to normalized text and pattern data.
 func fuzzyMatchRunes(text string, pattern string, originalRunes []rune, textRunes []rune, patternRunes []rune, hasChineseChar bool, pinyinSegments []PinyinSegment, pinyinLetterUpperBounds *[26]int, usePinYin, cachePinyin bool) FuzzyMatchResult {
+	return fuzzyMatchRunesAtLeast(text, pattern, originalRunes, textRunes, patternRunes, hasChineseChar, pinyinSegments, pinyinLetterUpperBounds, usePinYin, cachePinyin, -1<<63)
+}
+
+func fuzzyMatchRunesAtLeast(text string, pattern string, originalRunes []rune, textRunes []rune, patternRunes []rune, hasChineseChar bool, pinyinSegments []PinyinSegment, pinyinLetterUpperBounds *[26]int, usePinYin, cachePinyin bool, minimum int64) FuzzyMatchResult {
 	// Try exact match first (highest priority)
 	if equalRunes(textRunes, patternRunes) {
 		return FuzzyMatchResult{IsMatch: true, Score: bonusExactMatch + int64(len(pattern)*scoreMatch)}
@@ -317,7 +397,33 @@ func fuzzyMatchRunes(text string, pattern string, originalRunes []rune, textRune
 
 	// Try pinyin matching for Chinese text
 	if usePinYin && hasChineseChar {
-		if pinyinLetterUpperBounds == nil || canPossiblyMatchPinyin(patternRunes, *pinyinLetterUpperBounds) {
+		n := len(patternRunes)
+		hanCount := 0
+		hasNonHan := false
+		for _, r := range originalRunes {
+			if (r >= 0x4E00 && r <= 0x9FFF) || unicode.Is(unicode.Han, r) {
+				hanCount++
+			} else {
+				hasNonHan = true
+			}
+		}
+		minSegments := hanCount
+		if hasNonHan {
+			minSegments++
+		}
+		if pinyinSegments != nil {
+			minSegments = len(pinyinSegments)
+		}
+		var pinyinUpper int64
+		if minSegments > n {
+			pinyinUpper = max(
+				int64(bonusPrefixMatch+n*scoreMatch+bonusFirstCharMatch),
+				int64(n*scoreMatch*2+max(0, n-1)*bonusConsecutive+bonusPrefixMatch+10),
+			)
+		} else {
+			pinyinUpper = int64(n*scoreMatch*2 + max(0, n-1)*bonusConsecutive + bonusExactMatch + 10)
+		}
+		if minimum <= pinyinUpper && (pinyinLetterUpperBounds == nil || canPossiblyMatchPinyin(patternRunes, *pinyinLetterUpperBounds)) {
 			var pinyinResult FuzzyMatchResult
 			// General string matching still memoizes repeated titles. Compiled
 			// index scans borrow scratch for their many distinct candidate names.
@@ -336,7 +442,7 @@ func fuzzyMatchRunes(text string, pattern string, originalRunes []rune, textRune
 	}
 
 	// Fallback: substring match (lower score)
-	if containsRunes(textRunes, patternRunes) {
+	if minimum <= int64(len(patternRunes)) && containsRunes(textRunes, patternRunes) {
 		score := int64(len(patternRunes))
 		return FuzzyMatchResult{IsMatch: true, Score: score}
 	}
@@ -360,83 +466,222 @@ func fuzzyMatchASCII(text string, pattern string) FuzzyMatchResult {
 	return fuzzyMatchASCIIAtLeast(text, pattern, -1<<63)
 }
 
-// fuzzyMatchASCIIAtLeast avoids fallback work that cannot reach the caller's
-// current top-K threshold; equal scores remain eligible for lexical tie breaks.
 func fuzzyMatchASCIIAtLeast(text string, pattern string, minimum int64) FuzzyMatchResult {
+	return fuzzyMatchASCIILowerAtLeast(text, toLowerASCIIBytes(pattern), nil, minimum)
+}
+
+// fuzzyMatchASCIILowerAtLeast avoids fallback work that cannot reach the caller's
+// current top-K threshold; equal scores remain eligible for lexical tie breaks.
+func fuzzyMatchASCIILowerAtLeast(text string, lowerPattern string, longSuffixMax []int64, minimum int64) FuzzyMatchResult {
 	textLen := len(text)
-	patternLen := len(pattern)
+	patternLen := len(lowerPattern)
 
 	if patternLen > textLen {
 		return FuzzyMatchResult{IsMatch: false, Score: 0}
 	}
 
 	// Exact match check (case-insensitive)
-	if textLen == patternLen && equalFoldASCII(text, pattern) {
+	if textLen == patternLen && equalFoldASCIILower(text, lowerPattern) {
 		return FuzzyMatchResult{IsMatch: true, Score: bonusExactMatch + int64(patternLen*scoreMatch)}
 	}
 
 	// Prefix match check (case-insensitive)
-	if hasPrefixFoldASCII(text, pattern) {
+	if hasPrefixFoldASCIILower(text, lowerPattern) {
 		return FuzzyMatchResult{IsMatch: true, Score: bonusPrefixMatch + int64(patternLen*scoreMatch) + bonusFirstCharMatch}
 	}
 
+	if patternLen == 1 {
+		target := lowerPattern[0]
+		firstIdx := -1
+		for textIdx := 0; textIdx < textLen; textIdx++ {
+			if toLowerByte(text[textIdx]) == target {
+				firstIdx = textIdx
+				break
+			}
+		}
+		if firstIdx < 0 {
+			return FuzzyMatchResult{}
+		}
+		score := scoreMatch + calculateMatchBonusASCII(text, firstIdx) + calculateLeadingGapPenalty(firstIdx) + calculateTrailingGapPenalty(textLen, firstIdx) + calculateMatchRatioBonus(1, textLen)
+		if score >= calculateMinScoreThreshold(1, textLen) {
+			return FuzzyMatchResult{IsMatch: true, Score: score}
+		}
+		if minimum <= 1 {
+			return FuzzyMatchResult{IsMatch: true, Score: 1}
+		}
+		return FuzzyMatchResult{}
+	}
+
 	if patternLen == 2 && textLen <= optimalAlignmentTextLimit {
-		score, found := scoreTwoASCII(text, pattern)
+		score, found := scoreTwoASCIILower(text, lowerPattern)
 		if !found {
 			return FuzzyMatchResult{}
 		}
 		if score >= calculateMinScoreThreshold(patternLen, textLen) {
 			return FuzzyMatchResult{IsMatch: true, Score: score}
 		}
-		if minimum <= 2 && containsFoldASCII(text, pattern) {
+		if minimum <= 2 && containsFoldASCIILower(text, lowerPattern) {
 			return FuzzyMatchResult{IsMatch: true, Score: 2}
 		}
 		return FuzzyMatchResult{}
 	}
 
-	// Fuzzy match - find all pattern chars in order
-	patternIdx := 0
-	var matchedIndexes [64]int // Stack buffer for common cases
-	matchedSlice := matchedIndexes[:0]
-
-	for textIdx := 0; textIdx < textLen && patternIdx < patternLen; textIdx++ {
-		if toLowerByte(text[textIdx]) == toLowerByte(pattern[patternIdx]) {
-			matchedSlice = append(matchedSlice, textIdx)
-			patternIdx++
-		}
-	}
-
-	// A substring is also a subsequence. Once this scan fails, the fallback
-	// substring search cannot succeed and would only traverse the text again.
-	if patternIdx != patternLen {
-		return FuzzyMatchResult{}
-	}
-	if patternIdx == patternLen {
-		var score int64
-		if shouldUseOptimalAlignment(textLen, patternLen) {
-			bestScore, ok := calculateBestAlignmentScoreASCII(text, pattern)
-			if ok {
-				score = bestScore
+	if shouldUseOptimalAlignment(textLen, patternLen) {
+		firstIdx := -1
+		patternIdx := 0
+		for textIdx := 0; textIdx < textLen; textIdx++ {
+			if toLowerByte(text[textIdx]) == lowerPattern[patternIdx] {
+				if patternIdx == 0 {
+					firstIdx = textIdx
+				}
+				patternIdx++
+				if patternIdx == patternLen {
+					break
+				}
 			}
-		} else {
-			score = calculateScoreASCII(text, matchedSlice, patternLen)
 		}
-
-		minScore := calculateMinScoreThreshold(patternLen, textLen)
-		if score >= minScore {
+		if patternIdx != patternLen {
+			return FuzzyMatchResult{}
+		}
+		score, ok := calculateBestAlignmentScoreASCIILower(text, lowerPattern, firstIdx, minimum)
+		if ok && score >= calculateMinScoreThreshold(patternLen, textLen) {
+			if score < minimum {
+				return FuzzyMatchResult{}
+			}
 			// Penalize scattered matches only after the eligibility check so abbreviations remain searchable.
-			if patternLen >= 3 && !containsFoldASCII(text, pattern) {
+			if patternLen >= 3 && !containsFoldASCIILower(text, lowerPattern) {
 				score = max(1, score-8)
 			}
 			return FuzzyMatchResult{IsMatch: true, Score: score}
 		}
+		if minimum <= int64(patternLen) && containsFoldASCIILower(text, lowerPattern) {
+			return FuzzyMatchResult{IsMatch: true, Score: int64(patternLen)}
+		}
+		return FuzzyMatchResult{}
 	}
 
-	if minimum <= int64(patternLen) && containsFoldASCII(text, pattern) {
+	return scoreLongASCIILower(text, lowerPattern, longSuffixMax, minimum)
+}
+
+// scoreLongASCIILower computes the greedy left-most score in a single streaming
+// pass without allocating a match-index buffer, aborting early once the running
+// score plus remaining step upper bounds fall below minimum.
+func scoreLongASCIILower(text string, lowerPattern string, longSuffixMax []int64, minimum int64) FuzzyMatchResult {
+	textLen := len(text)
+	patternLen := len(lowerPattern)
+	ratioBonus := calculateMatchRatioBonus(patternLen, textLen)
+	prune := minimum > int64(patternLen) && len(longSuffixMax) == patternLen
+
+	var score int64
+	prevMatchIdx := -1
+	for patternIdx := 0; patternIdx < patternLen; patternIdx++ {
+		start := prevMatchIdx + 1
+		limit := textLen
+		if prune && prevMatchIdx >= 0 {
+			if score+longSuffixMax[patternIdx-1]+ratioBonus < minimum {
+				return FuzzyMatchResult{}
+			}
+			budget := score + 31 + longSuffixMax[patternIdx] + ratioBonus - minimum
+			if budget < 2 {
+				if start+1 < limit {
+					limit = start + 1
+				}
+			} else if int64(prevMatchIdx)+budget+1 < int64(limit) {
+				limit = int(int64(prevMatchIdx) + budget + 1)
+			}
+		}
+
+		target := lowerPattern[patternIdx]
+		matchedIdx := -1
+		for textIdx := start; textIdx < limit; textIdx++ {
+			if toLowerByte(text[textIdx]) == target {
+				matchedIdx = textIdx
+				break
+			}
+		}
+		if matchedIdx < 0 {
+			return FuzzyMatchResult{}
+		}
+
+		score += scoreMatch + calculateMatchBonusASCII(text, matchedIdx)
+		if prevMatchIdx >= 0 {
+			if matchedIdx == prevMatchIdx+1 {
+				score += bonusConsecutive
+			} else {
+				score += calculateGapPenalty(prevMatchIdx, matchedIdx)
+			}
+		} else {
+			score += calculateLeadingGapPenalty(matchedIdx)
+		}
+		prevMatchIdx = matchedIdx
+
+		if prune && score+longSuffixMax[patternIdx]+ratioBonus < minimum {
+			return FuzzyMatchResult{}
+		}
+	}
+
+	score += calculateTrailingGapPenalty(textLen, prevMatchIdx) + ratioBonus
+	minScore := calculateMinScoreThreshold(patternLen, textLen)
+	if score >= minScore {
+		if score < minimum {
+			return FuzzyMatchResult{}
+		}
+		if patternLen >= 3 && !containsFoldASCIILower(text, lowerPattern) {
+			score = max(1, score-8)
+		}
+		return FuzzyMatchResult{IsMatch: true, Score: score}
+	}
+
+	if minimum <= int64(patternLen) && containsFoldASCIILower(text, lowerPattern) {
 		return FuzzyMatchResult{IsMatch: true, Score: int64(patternLen)}
 	}
+	return FuzzyMatchResult{}
+}
 
-	return FuzzyMatchResult{IsMatch: false, Score: 0}
+func equalFoldASCIILower(a, lowerB string) bool {
+	if len(a) != len(lowerB) {
+		return false
+	}
+	for i := 0; i < len(a); i++ {
+		if toLowerByte(a[i]) != lowerB[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func hasPrefixFoldASCIILower(a, lowerB string) bool {
+	if len(a) < len(lowerB) {
+		return false
+	}
+	for i := 0; i < len(lowerB); i++ {
+		if toLowerByte(a[i]) != lowerB[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func containsFoldASCIILower(s, lowerSubstr string) bool {
+	if len(lowerSubstr) == 0 {
+		return true
+	}
+	if len(lowerSubstr) > len(s) {
+		return false
+	}
+	for start := 0; start <= len(s)-len(lowerSubstr); start++ {
+		matched := true
+		for offset := 0; offset < len(lowerSubstr); offset++ {
+			if toLowerByte(s[start+offset]) != lowerSubstr[offset] {
+				matched = false
+				break
+			}
+		}
+		if matched {
+			return true
+		}
+	}
+	return false
 }
 
 // equalFoldASCII checks if two ASCII strings are equal (case-insensitive)
@@ -593,6 +838,9 @@ func calculateTrailingGapPenalty(textLen, matchIdx int) int64 {
 
 // calculateMatchRatioBonus rewards compact matches regardless of the chosen alignment.
 func calculateMatchRatioBonus(patternLen, textLen int) int64 {
+	if patternLen*2 <= textLen {
+		return 0
+	}
 	matchRatio := float64(patternLen) / float64(textLen)
 	if matchRatio > 0.5 {
 		return int64(matchRatio * 10)
@@ -602,58 +850,96 @@ func calculateMatchRatioBonus(patternLen, textLen int) int64 {
 
 // calculateBestAlignmentScoreASCII finds the highest scoring ASCII alignment for short texts.
 func calculateBestAlignmentScoreASCII(text string, pattern string) (int64, bool) {
-	textLen, patternLen := len(text), len(pattern)
+	return calculateBestAlignmentScoreASCIILower(text, toLowerASCIIBytes(pattern), 0, -1<<63)
+}
+
+func calculateBestAlignmentScoreASCIILower(text string, lowerPattern string, firstIdx int, minimum int64) (int64, bool) {
+	textLen, patternLen := len(text), len(lowerPattern)
 	if patternLen == 0 || patternLen > textLen || patternLen > optimalAlignmentPatternLimit || textLen > optimalAlignmentTextLimit {
 		return 0, false
 	}
 	const absent int64 = -1 << 60
-	var previous, current [optimalAlignmentTextLimit]int64
-	for i := 0; i < textLen; i++ {
-		previous[i] = absent
-		if toLowerByte(text[i]) == toLowerByte(pattern[0]) {
-			previous[i] = scoreMatch + calculateMatchBonusASCII(text, i) + calculateLeadingGapPenalty(i)
+	var bufA, bufB [optimalAlignmentTextLimit]int64
+	prev, curr := bufA[:textLen], bufB[:textLen]
+	ratioBonus := calculateMatchRatioBonus(patternLen, textLen)
+	prune := minimum > int64(patternLen)
+
+	prevRowStart := textLen
+	rowMax := absent
+	firstChar := lowerPattern[0]
+	for i := firstIdx; i < textLen; i++ {
+		prev[i] = absent
+		if toLowerByte(text[i]) == firstChar {
+			score := scoreMatch + calculateMatchBonusASCII(text, i) + calculateLeadingGapPenalty(i)
+			prev[i] = score
+			if prevRowStart == textLen {
+				prevRowStart = i
+			}
+			if score > rowMax {
+				rowMax = score
+			}
 		}
 	}
+	if prevRowStart == textLen {
+		return 0, false
+	}
+	if prune && rowMax+int64(patternLen-1)*(scoreMatch+bonusConsecutive+bonusBoundary+bonusNonWord)+ratioBonus < minimum {
+		return 0, false
+	}
+
 	for p := 1; p < patternLen; p++ {
 		bestGap := absent
-		found := false
-		for i := 0; i < textLen; i++ {
-			current[i] = absent
+		rowStart := textLen
+		rowMax = absent
+		start := max(p, prevRowStart+1)
+		target := lowerPattern[p]
+		for i := start; i < textLen; i++ {
+			curr[i] = absent
 			// For a nonconsecutive predecessor j, the transition is
-			// previous[j] + j - i - 1. Its prefix maximum replaces the quadratic scan.
-			if i >= 2 && previous[i-2] != absent {
-				bestGap = max(bestGap, previous[i-2]+int64(i-2))
+			// prev[j] + j - i - 1. Its prefix maximum replaces the quadratic scan.
+			if i >= prevRowStart+2 && prev[i-2] != absent {
+				bestGap = max(bestGap, prev[i-2]+int64(i-2))
 			}
-			if i < p || toLowerByte(text[i]) != toLowerByte(pattern[p]) {
+			if toLowerByte(text[i]) != target {
 				continue
 			}
 			best := absent
-			if previous[i-1] != absent {
-				best = previous[i-1] + bonusConsecutive
+			if prev[i-1] != absent {
+				best = prev[i-1] + bonusConsecutive
 			}
 			if bestGap != absent {
 				best = max(best, bestGap-int64(i)-1)
 			}
 			if best != absent {
-				current[i] = best + scoreMatch + calculateMatchBonusASCII(text, i)
-				found = true
+				score := best + scoreMatch + calculateMatchBonusASCII(text, i)
+				curr[i] = score
+				if rowStart == textLen {
+					rowStart = i
+				}
+				if score > rowMax {
+					rowMax = score
+				}
 			}
 		}
-		if !found {
+		if rowStart == textLen {
 			return 0, false
 		}
-		previous, current = current, previous
+		if prune && p < patternLen-1 && rowMax+int64(patternLen-1-p)*(scoreMatch+bonusConsecutive+bonusBoundary+bonusNonWord)+ratioBonus < minimum {
+			return 0, false
+		}
+		prev, curr = curr, prev
+		prevRowStart = rowStart
 	}
 	best := absent
-	for i := patternLen - 1; i < textLen; i++ {
-		if previous[i] != absent {
-			best = max(best, previous[i]+calculateTrailingGapPenalty(textLen, i))
+	for i := max(patternLen-1, prevRowStart); i < textLen; i++ {
+		if prev[i] != absent {
+			best = max(best, prev[i]+calculateTrailingGapPenalty(textLen, i))
 		}
 	}
 	if best == absent {
 		return 0, false
 	}
-	return best + calculateMatchRatioBonus(patternLen, textLen), true
+	return best + ratioBonus, true
 }
 
 // calculateBestAlignmentScore finds the highest scoring normalized alignment for short texts.
@@ -1657,8 +1943,9 @@ func ASCIIScoreHints(text string) uint64 {
 	return first
 }
 
-// ASCIINameScoreHints retains the two highest bonuses for each letter, so a
-// repeated query character cannot claim one good boundary more than once.
+// ASCIINameScoreHints retains the two highest bonuses for each letter and digit
+// plus digit repetition masks in the upper bits, so repeated query characters
+// cannot claim one good boundary more than once.
 func ASCIINameScoreHints(text string) (uint64, uint64) {
 	originalLen := len(text)
 	text = strings.TrimSpace(text)
@@ -1669,9 +1956,13 @@ func ASCIINameScoreHints(text string) (uint64, uint64) {
 	if len(text) != originalLen {
 		hints |= uint64(1) << 59
 	}
+	var digitTop, digitSecond uint64
+	var digitCounts [10]uint8
+	var digitRepeatMask uint16
+	hasTripleDigit := false
 	for i := 0; i < len(text); i++ {
 		c := toLowerByte(text[i])
-		if c < 'a' || c > 'z' {
+		if (c < 'a' || c > 'z') && (c < '0' || c > '9') {
 			continue
 		}
 		bonus := calculateMatchBonusASCII(text, i)
@@ -1683,6 +1974,24 @@ func ASCIINameScoreHints(text string) (uint64, uint64) {
 		} else if bonus > 0 {
 			value = 1
 		}
+		if c >= '0' && c <= '9' {
+			d := c - '0'
+			if digitCounts[d] < 3 {
+				digitCounts[d]++
+				if digitCounts[d] == 2 {
+					digitRepeatMask |= uint16(1) << d
+				} else if digitCounts[d] == 3 {
+					hasTripleDigit = true
+				}
+			}
+			if value >= digitTop {
+				digitSecond = digitTop
+				digitTop = value
+			} else if value > digitSecond {
+				digitSecond = value
+			}
+			continue
+		}
 		shift := (c - 'a') * 2
 		top := (hints >> shift) & 3
 		if value >= top {
@@ -1691,6 +2000,11 @@ func ASCIINameScoreHints(text string) (uint64, uint64) {
 		} else if value > (second>>shift)&3 {
 			second = second&^(uint64(3)<<shift) | value<<shift
 		}
+	}
+	hints |= digitTop<<60 | digitSecond<<62
+	second |= uint64(digitRepeatMask)<<52 | uint64(1)<<63
+	if hasTripleDigit {
+		second |= uint64(1) << 62
 	}
 	return hints, second
 }
@@ -1705,32 +2019,103 @@ func ASCIIScoreUpperBound(pattern *PreparedPattern, text string, hints uint64) i
 // ASCIIScoreUpperBoundHint reads only scalar name metadata, leaving cold name
 // bytes untouched until a candidate can beat the current result threshold.
 func ASCIIScoreUpperBoundHint(pattern *PreparedPattern, textLen int, hints, second uint64) int64 {
-	n := len(pattern.raw)
+	raw := pattern.lowerASCII
+	slopeOneLetters := pattern.slopeOneLetters
+	slopeOneDigit := pattern.slopeOneDigit
+	digitRepeatMask := pattern.digitRepeatMask
+	hasTripleDigit := pattern.hasTripleDigit
+	if raw == "" {
+		raw = pattern.raw
+		var digitCounts [10]uint8
+		for i := 0; i < len(raw); i++ {
+			c := toLowerByte(raw[i])
+			if i == 0 || !isAlnumByte(raw[i-1]) {
+				if c >= 'a' && c <= 'z' {
+					slopeOneLetters |= uint32(1) << (c - 'a')
+				} else if c >= '0' && c <= '9' {
+					slopeOneDigit = true
+				}
+			}
+			if c >= '0' && c <= '9' {
+				d := c - '0'
+				if digitCounts[d] < 3 {
+					digitCounts[d]++
+					if digitCounts[d] == 2 {
+						digitRepeatMask |= uint16(1) << d
+					} else if digitCounts[d] == 3 {
+						hasTripleDigit = true
+					}
+				}
+			}
+		}
+	}
+	n := len(raw)
 	if n > textLen {
 		return -1 << 63
+	}
+	hasDigitHints := second&(uint64(1)<<63) != 0
+	if hasDigitHints {
+		if digitRepeatMask != 0 && uint16((second>>52)&0x3ff)&digitRepeatMask != digitRepeatMask {
+			return -1 << 63
+		}
+		if hasTripleDigit && second&(uint64(1)<<62) == 0 {
+			return -1 << 63
+		}
 	}
 	ratio := calculateMatchRatioBonus(n, textLen)
 	if hints&(uint64(1)<<59) != 0 {
 		ratio = 10
 	}
-	bound := int64(n*scoreMatch+(n-1)*bonusConsecutive) + ratio
 	bonuses := [4]int64{0, 8, 12, 16}
-	var seen uint32
+
+	var usedTop uint32
+	var usedTopDigit bool
+	var bound int64
+	var prev byte
 	for i := 0; i < n; i++ {
-		c := toLowerByte(pattern.raw[i])
-		if c >= 'a' && c <= 'z' {
-			source := hints
-			bit := uint32(1) << (c - 'a')
-			if seen&bit != 0 {
-				source = second
+		curr := toLowerByte(raw[i])
+		slopeOne := i == 0 || !isAlnumByte(prev)
+		var charBonus int64
+		if curr >= 'a' && curr <= 'z' {
+			bit := uint32(1) << (curr - 'a')
+			source := second
+			if usedTop&bit == 0 && (slopeOne || slopeOneLetters&bit == 0) {
+				source = hints
+				usedTop |= bit
 			}
-			seen |= bit
-			bound += bonuses[(source>>((c-'a')*2))&3]
+			charBonus = bonuses[(source>>((curr-'a')*2))&3]
+		} else if curr >= '0' && curr <= '9' {
+			if hasDigitHints {
+				if !usedTopDigit && (slopeOne || !slopeOneDigit) {
+					charBonus = bonuses[(hints>>60)&3]
+					usedTopDigit = true
+				} else {
+					charBonus = bonuses[(hints>>62)&3]
+				}
+			} else {
+				charBonus = 16
+			}
+		} else if i == 0 {
+			charBonus = bonusFirstCharMatch
 		} else {
-			bound += 16
+			charBonus = bonusBoundary
 		}
+
+		if i == 0 {
+			bound += scoreMatch + charBonus
+		} else if isAlnumByte(prev) {
+			consecBonus := int64(0)
+			if prev >= 'a' && prev <= 'z' && curr >= 'a' && curr <= 'z' {
+				consecBonus = min(charBonus, bonusCamelCase)
+			}
+			bound += scoreMatch + max(bonusConsecutive+consecBonus, charBonus+scoreGapStart)
+		} else {
+			bound += scoreMatch + bonusConsecutive + charBonus
+		}
+		prev = curr
 	}
-	if n > 0 && byte(hints>>52)&127 == toLowerByte(pattern.raw[0]) {
+	bound += ratio
+	if n > 0 && byte(hints>>52)&127 == toLowerByte(raw[0]) {
 		bound = max(bound, int64(bonusPrefixMatch+n*scoreMatch+bonusFirstCharMatch))
 	}
 	if n == textLen || hints&(uint64(1)<<59) != 0 {
@@ -1742,9 +2127,13 @@ func ASCIIScoreUpperBoundHint(pattern *PreparedPattern, textLen int, hints, seco
 // scoreTwoASCII evaluates both pattern positions in one pass, retaining the
 // best adjacent and gapped predecessor instead of allocating a DP matrix.
 func scoreTwoASCII(text, pattern string) (int64, bool) {
+	return scoreTwoASCIILower(text, toLowerASCIIBytes(pattern))
+}
+
+func scoreTwoASCIILower(text, lowerPattern string) (int64, bool) {
 	const absent int64 = -1 << 60
 	previousFirst, bestGap, best := absent, absent, absent
-	first, second := toLowerByte(pattern[0]), toLowerByte(pattern[1])
+	first, second := lowerPattern[0], lowerPattern[1]
 	for i := 0; i < len(text); i++ {
 		c := toLowerByte(text[i])
 		if c == second {

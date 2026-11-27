@@ -314,3 +314,59 @@ func TestIconLocationParsing(t *testing.T) {
 		t.Fatalf("unexpected location: %q %d", path, index)
 	}
 }
+
+type countingIconProcedure struct {
+	iconExtractionProcedure
+	calls *int
+}
+
+func (p countingIconProcedure) Call(args ...uintptr) (uintptr, uintptr, error) {
+	*p.calls++
+	return p.iconExtractionProcedure.Call(args...)
+}
+
+// TestUnknownExtensionsShareDefaultFileTypeIcon verifies unregistered extensions
+// share one cached .__unknown fallback icon without re-extracting shell32.dll.
+func TestUnknownExtensionsShareDefaultFileTypeIcon(t *testing.T) {
+	util.GetLogger()
+	root := t.TempDir()
+	t.Setenv(util.TestWoxDataDirEnv, root)
+	t.Setenv(util.TestUserDataDirEnv, filepath.Join(root, "user"))
+	if err := util.GetLocation().Init(); err != nil {
+		t.Fatal(err)
+	}
+
+	calls := 0
+	native := privateExtractIcons
+	privateExtractIcons = countingIconProcedure{iconExtractionProcedure: native, calls: &calls}
+	t.Cleanup(func() { privateExtractIcons = native })
+
+	ctx := context.Background()
+	wantPath := buildCachePath(".__unknown", util.ResultListIconSize)
+
+	first, err := GetFileTypeIcon(ctx, ".wox-unknown-ext-a")
+	if err != nil {
+		t.Fatalf("first unknown extension icon failed: %v", err)
+	}
+	second, err := GetFileTypeIcon(ctx, ".wox-unknown-ext-b")
+	if err != nil {
+		t.Fatalf("second unknown extension icon failed: %v", err)
+	}
+	third, err := GetFileTypeIcon(ctx, ".wox-unknown-ext-a")
+	if err != nil {
+		t.Fatalf("repeated unknown extension icon failed: %v", err)
+	}
+
+	if first != wantPath || second != wantPath || third != wantPath {
+		t.Fatalf("expected shared fallback %q, got %q, %q, %q", wantPath, first, second, third)
+	}
+	if calls != 1 {
+		t.Fatalf("expected shell32.dll extraction once across unknown extensions, got %d calls", calls)
+	}
+	for _, ext := range []string{".wox-unknown-ext-a", ".wox-unknown-ext-b"} {
+		perExtPath := buildCachePath(ext, util.ResultListIconSize)
+		if _, statErr := os.Stat(perExtPath); !os.IsNotExist(statErr) {
+			t.Fatalf("did not expect duplicate per-extension cache file %s (err=%v)", perExtPath, statErr)
+		}
+	}
+}

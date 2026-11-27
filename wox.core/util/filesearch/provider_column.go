@@ -18,7 +18,22 @@ import (
 // Filename matches visit interned names first; paths are materialized only for
 // competitive results or queries that actually need directory context.
 func searchColumnView(ctx context.Context, view column.View, input SearchQuery, limit int) ([]SearchResult, error) {
-	query := normalizeSearchQuery(input)
+	query := input
+	if query.plan == nil {
+		query = normalizeSearchQuery(input)
+	}
+	var sharedMinimum atomic.Int64
+	if query.wildcard != nil {
+		sharedMinimum.Store(-1 << 60)
+	}
+	return searchColumnViewWithFloor(ctx, view, query, limit, &sharedMinimum)
+}
+
+func searchColumnViewWithFloor(ctx context.Context, view column.View, input SearchQuery, limit int, sharedMinimum *atomic.Int64) ([]SearchResult, error) {
+	query := input
+	if query.plan == nil {
+		query = normalizeSearchQuery(input)
+	}
 	if query.plan == nil || view.Base == nil {
 		return nil, nil
 	}
@@ -27,6 +42,13 @@ func searchColumnView(ctx context.Context, view column.View, input SearchQuery, 
 	results := &columnResultHeap{limit: limit}
 	if query.plan.pathLike {
 		return searchColumnPaths(ctx, view, query, limit)
+	}
+	if sharedMinimum == nil {
+		var local atomic.Int64
+		if query.wildcard != nil {
+			local.Store(-1 << 60)
+		}
+		sharedMinimum = &local
 	}
 	// A query-local directory cache avoids allocating each repeated parent path.
 	// It is not retained by the index or shared with subsequent queries.
@@ -76,16 +98,19 @@ func searchColumnView(ctx context.Context, view column.View, input SearchQuery, 
 	}
 	groups := &columnNameHeap{limit: limit}
 	minimumScore := exactColumnNameThreshold(ctx, view, query, limit)
+	for old := sharedMinimum.Load(); minimumScore > old; old = sharedMinimum.Load() {
+		if sharedMinimum.CompareAndSwap(old, minimumScore) {
+			break
+		}
+	}
 	workers := min(runtime.GOMAXPROCS(0), max(1, base.Names()/16384), 8)
-	var sharedMinimum atomic.Int64
-	sharedMinimum.Store(minimumScore)
 	partitions := make([]*columnNameHeap, workers)
 	var wait sync.WaitGroup
 	for worker := 0; worker < workers; worker++ {
 		wait.Add(1)
 		go func(worker int) {
 			defer wait.Done()
-			partitions[worker] = scanColumnNames(ctx, view, query, limit, worker*64, base.Names(), workers, &sharedMinimum)
+			partitions[worker] = scanColumnNames(ctx, view, query, limit, worker*64, base.Names(), workers, sharedMinimum)
 		}(worker)
 	}
 	wait.Wait()
@@ -123,9 +148,21 @@ func searchColumnView(ctx context.Context, view column.View, input SearchQuery, 
 		}
 		if live.BaseName != column.NoRow && len(base.NamePairBitmaps) != 0 {
 			words := (base.Names() + 63) / 64
+			stride := base.NamePairStride
+			if stride == 0 {
+				stride = column.NamePairAlphabet
+			}
 			eligible := true
 			for _, pair := range query.plan.namePairs {
-				if base.NamePairBitmaps[pair*words+int(live.BaseName)/64]&(1<<(live.BaseName%64)) == 0 {
+				idx := pair
+				if stride != column.NamePairAlphabet {
+					first, second := pair/column.NamePairAlphabet, pair%column.NamePairAlphabet
+					if first >= stride || second >= stride {
+						continue
+					}
+					idx = first*stride + second
+				}
+				if base.NamePairBitmaps[idx*words+int(live.BaseName)/64]&(1<<(live.BaseName%64)) == 0 {
 					eligible = false
 					break
 				}
@@ -319,21 +356,41 @@ func scanColumnNames(ctx context.Context, view column.View, query SearchQuery, l
 	reachableParents := make(map[uint64]bool)
 	recycleParents := make(map[uint64]bool)
 	words := (base.Names() + 63) / 64
-	var columns [91][]uint64
-	count := 0
-	for remaining := mask; remaining != 0; remaining &= remaining - 1 {
-		class := bits.TrailingZeros64(remaining)
-		columns[count] = base.NameBitmaps[class*words : (class+1)*words]
-		count++
+	// Order bitmaps sparsest-first (non-ASCII, ordered pairs, repeated letters,
+	// non-letter symbols/digits, then ASCII letters) so early break skips dense reads.
+	var stackCols [128][]uint64
+	columns := stackCols[:0]
+	if requiresNonASCII {
+		columns = append(columns, base.NonASCIINameBitmap)
+	}
+	if len(base.NamePairBitmaps) != 0 && len(query.plan.namePairs) != 0 {
+		stride := base.NamePairStride
+		if stride == 0 {
+			stride = column.NamePairAlphabet
+		}
+		for _, pair := range query.plan.namePairs {
+			idx := pair
+			if stride != column.NamePairAlphabet {
+				first, second := pair/column.NamePairAlphabet, pair%column.NamePairAlphabet
+				if first >= stride || second >= stride {
+					continue
+				}
+				idx = first*stride + second
+			}
+			columns = append(columns, base.NamePairBitmaps[idx*words:(idx+1)*words])
+		}
 	}
 	for remaining := columnRepeatedLetters(query); remaining != 0; remaining &= remaining - 1 {
 		class := bits.TrailingZeros32(remaining)
-		columns[count] = base.NameRepeatBitmaps[class*words : (class+1)*words]
-		count++
+		columns = append(columns, base.NameRepeatBitmaps[class*words:(class+1)*words])
 	}
-	if requiresNonASCII {
-		columns[count] = base.NonASCIINameBitmap
-		count++
+	for remaining := mask >> 26; remaining != 0; remaining &= remaining - 1 {
+		class := 26 + bits.TrailingZeros64(remaining)
+		columns = append(columns, base.NameBitmaps[class*words:(class+1)*words])
+	}
+	for remaining := mask & ((uint64(1) << 26) - 1); remaining != 0; remaining &= remaining - 1 {
+		class := bits.TrailingZeros64(remaining)
+		columns = append(columns, base.NameBitmaps[class*words:(class+1)*words])
 	}
 	for word := start / 64; word < (end+63)/64; word += stride {
 		if ctx.Err() != nil {
@@ -341,18 +398,10 @@ func scanColumnNames(ctx context.Context, view column.View, query SearchQuery, l
 		}
 		minimumScore := sharedMinimum.Load()
 		candidates := ^uint64(0)
-		for _, bitmap := range columns[:count] {
+		for _, bitmap := range columns {
 			candidates &= bitmap[word]
 			if candidates == 0 {
 				break
-			}
-		}
-		if candidates != 0 && len(base.NamePairBitmaps) != 0 && len(query.plan.namePairs) != 0 {
-			for _, pair := range query.plan.namePairs {
-				candidates &= base.NamePairBitmaps[pair*words+word]
-				if candidates == 0 {
-					break
-				}
 			}
 		}
 		if word == start/64 {
@@ -372,7 +421,7 @@ func scanColumnNames(ctx context.Context, view column.View, query SearchQuery, l
 			if requiresNonASCII && flags&column.NameNonASCII == 0 {
 				continue
 			}
-			if (flags&column.NameNonASCII == 0 || flags&column.NameMaskComplete != 0) && base.NameMasks[nameID]&mask != mask {
+			if flags&column.NameNonASCII != 0 && flags&column.NameMaskComplete != 0 && base.NameMasks[nameID]&mask != mask {
 				continue
 			}
 			minimum := minimumScore

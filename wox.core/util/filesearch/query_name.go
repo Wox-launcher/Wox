@@ -98,7 +98,11 @@ func scoreColumnName(query SearchQuery, name string, ascii bool, minimum int64, 
 	if plan.extension != "" {
 		fuzzyMinimum -= 500
 	}
-	result := fuzzymatch.FuzzyMatchPatternAtLeast(strings.TrimSpace(name), plan.pattern, ascii, plan.usePinyin, fuzzyMinimum)
+	candidateName := name
+	if !ascii || len(name) > 0 && (name[0] <= ' ' || name[len(name)-1] <= ' ') {
+		candidateName = strings.TrimSpace(name)
+	}
+	result := fuzzymatch.FuzzyMatchPatternAtLeast(candidateName, plan.pattern, ascii, plan.usePinyin, fuzzyMinimum)
 	score := result.Score + 4000
 	if plan.extension != "" && normalizeExtension(filepath.Ext(name)) == plan.extension {
 		if !result.IsMatch {
@@ -121,47 +125,70 @@ func exactColumnNameThreshold(ctx context.Context, view column.View, query Searc
 	if limit <= 0 || len(plan.andTerms) != 0 || len(plan.exactPhrases) != 0 || plan.extension != "" {
 		return 0
 	}
-	if !plan.patternASCII {
+	if !plan.patternASCII || len(plan.raw) == 0 {
 		return 0
 	}
 	base := view.Base
-	for _, exact := range []bool{true, false} {
-		count := 0
-		for _, id := range base.FrequentNameIDs {
-			if ctx.Err() != nil {
-				return 0
-			}
-			name := base.Name(id)
-			if base.NameFlags[id]&column.NameNonASCII != 0 || len(name) < len(plan.raw) {
+	rawLen := len(plan.raw)
+	firstLower := plan.raw[0]
+	if firstLower >= 'A' && firstLower <= 'Z' {
+		firstLower += 'a' - 'A'
+	}
+	hasHints := len(base.NameScoreHints) == base.Names()
+	exactCount, prefixCount := 0, 0
+	for _, id := range base.FrequentNameIDs {
+		if ctx.Err() != nil {
+			return 0
+		}
+		if base.NameFlags[id]&column.NameNonASCII != 0 {
+			continue
+		}
+		nameLen := int(base.NameOffsets[id+1] - base.NameOffsets[id])
+		if nameLen < rawLen {
+			continue
+		}
+		isExact := nameLen == rawLen
+		if !isExact && prefixCount >= limit {
+			continue
+		}
+		if hasHints {
+			hint := base.NameScoreHints[id]
+			if hint&(uint64(1)<<59) == 0 && byte(hint>>52)&127 != firstLower {
 				continue
-			}
-			if exact && len(name) != len(plan.raw) || !strings.EqualFold(name[:len(plan.raw)], plan.raw) {
-				continue
-			}
-			for _, row := range base.NameRows[base.NameStarts[id]:base.NameStarts[id+1]] {
-				if _, changed := view.Delta[base.IDs[row]]; changed {
-					continue
-				}
-				if base.Flags[row]&column.Structural != 0 {
-					continue
-				}
-				parent := base.Parents[row]
-				if view.DirectoryUnchanged(parent) {
-					if base.DirectoryPath(base.RowDirectory[parent]) == "" {
-						continue
-					}
-				} else if !view.Reachable(base.IDs[row]) {
-					continue
-				}
-				count++
-				if count >= limit {
-					if exact {
-						return 4000 + 100 + int64(len(plan.raw)*16)
-					}
-					return 4000 + 32 + int64(len(plan.raw)*16)
-				}
 			}
 		}
+		name := base.Name(id)
+		if !strings.EqualFold(name[:rawLen], plan.raw) {
+			continue
+		}
+		for _, row := range base.NameRows[base.NameStarts[id]:base.NameStarts[id+1]] {
+			if _, changed := view.Delta[base.IDs[row]]; changed {
+				continue
+			}
+			if base.Flags[row]&column.Structural != 0 {
+				continue
+			}
+			parent := base.Parents[row]
+			if view.DirectoryUnchanged(parent) {
+				if base.DirectoryPath(base.RowDirectory[parent]) == "" {
+					continue
+				}
+			} else if !view.Reachable(base.IDs[row]) {
+				continue
+			}
+			prefixCount++
+			if isExact {
+				exactCount++
+				if exactCount >= limit {
+					return 4000 + 100 + int64(rawLen*16)
+				}
+			} else if prefixCount >= limit {
+				break
+			}
+		}
+	}
+	if prefixCount >= limit {
+		return 4000 + 32 + int64(rawLen*16)
 	}
 	return 0
 }

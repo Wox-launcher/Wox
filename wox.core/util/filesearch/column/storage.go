@@ -175,6 +175,7 @@ func openSnapshot(path string, writtenHeader []byte) (*Snapshot, error) {
 		verifyBuffer = make([]byte, 64*1024)
 	}
 	sections := make([][]byte, fileSections)
+	var coldRanges [][2]int
 	offset := uint64(headerSize)
 	for i := range sections {
 		descriptor := header[32+i*24:]
@@ -183,6 +184,15 @@ func openSnapshot(path string, writtenHeader []byte) (*Snapshot, error) {
 			return nil, fmt.Errorf("invalid column section bounds")
 		}
 		sections[i] = mapping.data[start : start+length]
+		isHotSection := i == 5 || i == 8 || i == queryColumnSection
+		if !isHotSection && length > 0 {
+			rangeStart, rangeEnd := int(start), int(start+length)
+			if len(coldRanges) > 0 && coldRanges[len(coldRanges)-1][1]+7 >= rangeStart {
+				coldRanges[len(coldRanges)-1][1] = rangeEnd
+			} else {
+				coldRanges = append(coldRanges, [2]int{rangeStart, rangeEnd})
+			}
+		}
 		var checksum uint32
 		// Keep the name dictionary, posting offsets and query filters warm for
 		// the first filename query. Per-entry columns stay demand-paged: their
@@ -215,7 +225,7 @@ func openSnapshot(path string, writtenHeader []byte) (*Snapshot, error) {
 			return nil, fmt.Errorf("misaligned column length")
 		}
 	}
-	s := &Snapshot{Root: string(sections[0]), IDs: view[uint64](sections[1]), Parents: view[uint32](sections[2]), NameIDs: view[uint32](sections[3]), Flags: sections[4], NameOffsets: view[uint32](sections[5]), NameBytes: sections[6], NameMasks: view[uint64](sections[7]), NameFlags: sections[8], NameStarts: view[uint32](sections[9]), NameRows: view[uint32](sections[10]), IDRows: view[uint32](sections[11]), Sizes: view[int64](sections[12]), Modified: view[int64](sections[13]), Versions: view[uint64](sections[14]), NameRowsPathSorted: binary.LittleEndian.Uint32(header[8:]) >= 2, mapping: mapping}
+	s := &Snapshot{Root: string(sections[0]), IDs: view[uint64](sections[1]), Parents: view[uint32](sections[2]), NameIDs: view[uint32](sections[3]), Flags: sections[4], NameOffsets: view[uint32](sections[5]), NameBytes: sections[6], NameMasks: view[uint64](sections[7]), NameFlags: sections[8], NameStarts: view[uint32](sections[9]), NameRows: view[uint32](sections[10]), IDRows: view[uint32](sections[11]), Sizes: view[int64](sections[12]), Modified: view[int64](sections[13]), Versions: view[uint64](sections[14]), NameRowsPathSorted: binary.LittleEndian.Uint32(header[8:]) >= 2, mapping: mapping, coldRanges: coldRanges}
 	if fileSections > childRowsSection {
 		s.ChildRows = view[uint32](sections[childRowsSection])
 	} else {
@@ -243,7 +253,15 @@ func openSnapshot(path string, writtenHeader []byte) (*Snapshot, error) {
 		s.prepareDirectoryColumns()
 	}
 	if fileSections > namePairSection {
-		if len(sections[namePairSection]) != 27*27*((s.Names()+63)/64)*8 {
+		words := (s.Names() + 63) / 64
+		expected28 := NamePairAlphabet * NamePairAlphabet * words * 8
+		expected27 := legacyNamePairAlphabet * legacyNamePairAlphabet * words * 8
+		switch len(sections[namePairSection]) {
+		case expected28:
+			s.NamePairStride = NamePairAlphabet
+		case expected27:
+			s.NamePairStride = legacyNamePairAlphabet
+		default:
 			return nil, fmt.Errorf("invalid name-pair column length")
 		}
 		s.NamePairBitmaps = view[uint64](sections[namePairSection])
