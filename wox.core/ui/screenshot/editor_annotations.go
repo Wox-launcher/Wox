@@ -12,7 +12,6 @@ import (
 	woxwidget "wox/ui/widget"
 
 	"golang.org/x/image/font"
-	"golang.org/x/image/font/gofont/gobold"
 	"golang.org/x/image/font/opentype"
 	"golang.org/x/image/math/fixed"
 )
@@ -724,10 +723,13 @@ func drawScreenshotEditorPixelTextWithFont(target *image.RGBA, clip image.Rectan
 	drawer.DrawString(text)
 }
 
-// recordingKeycapExportFont returns the cached bold face used only by encoded key hints.
+// recordingKeycapExportFont returns the cached bold system face used only by encoded key hints.
 func recordingKeycapExportFont() *opentype.Font {
 	recordingKeycapFontOnce.Do(func() {
-		recordingKeycapFont, _ = opentype.Parse(gobold.TTF)
+		recordingKeycapFont = loadFirstSystemOpenTypeFont(screenshotEditorFallbackFontPaths(true))
+		if recordingKeycapFont == nil {
+			recordingKeycapFont = screenshotEditorExportFont()
+		}
 	})
 	return recordingKeycapFont
 }

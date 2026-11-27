@@ -14,7 +14,6 @@ import (
 	"wox/util"
 
 	"golang.org/x/image/font"
-	"golang.org/x/image/font/gofont/goregular"
 	"golang.org/x/image/font/opentype"
 	"golang.org/x/image/font/sfnt"
 	"golang.org/x/image/math/fixed"
@@ -46,7 +45,7 @@ func screenshotEditorExportFont() *opentype.Font {
 	return fonts[0]
 }
 
-// loadScreenshotEditorExportFonts prefers a system CJK face and always keeps Go Regular as fallback.
+// loadScreenshotEditorExportFonts prefers a system CJK face and falls back to a system UI font.
 func loadScreenshotEditorExportFonts() []*opentype.Font {
 	var best *opentype.Font
 	bestScore := -1
@@ -79,10 +78,111 @@ func loadScreenshotEditorExportFonts() []*opentype.Font {
 	} else {
 		util.GetLogger().Warn(context.Background(), "screenshot export font has no CJK glyphs; text labels may render as boxes")
 	}
-	if fallback, err := opentype.Parse(goregular.TTF); err == nil && fallback != nil {
+	if fallback := loadFirstSystemOpenTypeFont(screenshotEditorFallbackFontPaths(false)); fallback != nil {
 		fonts = append(fonts, fallback)
 	}
 	return fonts
+}
+
+func loadFirstSystemOpenTypeFont(paths []string) *opentype.Font {
+	seen := map[string]struct{}{}
+	var firstValid *opentype.Font
+	for _, path := range paths {
+		if path == "" {
+			continue
+		}
+		if _, ok := seen[path]; ok {
+			continue
+		}
+		seen[path] = struct{}{}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		collection, err := opentype.ParseCollection(data)
+		if err != nil {
+			continue
+		}
+		for index := 0; index < collection.NumFonts(); index++ {
+			parsed, err := collection.Font(index)
+			if err != nil || parsed == nil {
+				continue
+			}
+			if firstValid == nil {
+				firstValid = parsed
+			}
+			if screenshotEditorFontHasRune(parsed, 'A') {
+				return parsed
+			}
+		}
+	}
+	return firstValid
+}
+
+func screenshotEditorFallbackFontPaths(bold bool) []string {
+	switch runtime.GOOS {
+	case "darwin":
+		if bold {
+			return []string{
+				"/System/Library/Fonts/Supplemental/Arial Bold.ttf",
+				"/System/Library/Fonts/HelveticaNeue.ttc",
+				"/System/Library/Fonts/Helvetica.ttc",
+				"/System/Library/Fonts/SFNS.ttf",
+				"/System/Library/Fonts/Supplemental/Arial.ttf",
+			}
+		}
+		return []string{
+			"/System/Library/Fonts/SFNS.ttf",
+			"/System/Library/Fonts/Helvetica.ttc",
+			"/System/Library/Fonts/Supplemental/Arial.ttf",
+			"/System/Library/Fonts/PingFang.ttc",
+		}
+	case "windows":
+		fontsDir := filepath.Join(screenshotEditorWindowsDirectory(), "Fonts")
+		if bold {
+			return []string{
+				filepath.Join(fontsDir, "segoeuib.ttf"),
+				filepath.Join(fontsDir, "arialbd.ttf"),
+				filepath.Join(fontsDir, "msyhbd.ttc"),
+				filepath.Join(fontsDir, "msyhbd.ttf"),
+				filepath.Join(fontsDir, "segoeui.ttf"),
+				filepath.Join(fontsDir, "arial.ttf"),
+			}
+		}
+		return []string{
+			filepath.Join(fontsDir, "segoeui.ttf"),
+			filepath.Join(fontsDir, "arial.ttf"),
+			filepath.Join(fontsDir, "tahoma.ttf"),
+			filepath.Join(fontsDir, "calibri.ttf"),
+		}
+	default:
+		var queries []string
+		var known []string
+		if bold {
+			queries = []string{"sans-serif:bold", "DejaVu Sans:bold"}
+			known = []string{
+				"/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+				"/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+				"/usr/share/fonts/TTF/DejaVuSans-Bold.ttf",
+				"/usr/share/fonts/noto/NotoSans-Bold.ttf",
+			}
+		} else {
+			queries = []string{"sans-serif", "DejaVu Sans"}
+			known = []string{
+				"/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+				"/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+				"/usr/share/fonts/TTF/DejaVuSans.ttf",
+				"/usr/share/fonts/noto/NotoSans-Regular.ttf",
+			}
+		}
+		paths := make([]string, 0, len(queries)+len(known))
+		for _, query := range queries {
+			if path, err := screenshotEditorFontconfigFile(query); err == nil && path != "" {
+				paths = append(paths, path)
+			}
+		}
+		return append(paths, known...)
+	}
 }
 
 func screenshotEditorExportFontPaths() []string {

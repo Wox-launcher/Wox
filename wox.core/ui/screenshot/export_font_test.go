@@ -76,6 +76,18 @@ func TestScreenshotEditorExportFontsCoverCJK(t *testing.T) {
 	}
 }
 
+func TestRecordingKeycapExportFontLoadsSystemFace(t *testing.T) {
+	parsed := recordingKeycapExportFont()
+	if parsed == nil {
+		t.Fatal("recordingKeycapExportFont returned nil")
+	}
+	for _, r := range []rune{'A', '1'} {
+		if !screenshotEditorFontHasRune(parsed, r) {
+			t.Fatalf("recordingKeycapExportFont missing rune %q", r)
+		}
+	}
+}
+
 func TestScreenshotEditorExportPaintsCJKInsteadOfTofu(t *testing.T) {
 	fonts := screenshotEditorExportFonts()
 	if !screenshotEditorFontsHaveRune(fonts, '中') {

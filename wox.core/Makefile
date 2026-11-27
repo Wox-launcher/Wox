@@ -106,15 +106,18 @@ ifeq ($(PLATFORM),macos)
 endif
 
 WINDOW_HOOK_SOURCE := util/windowhook/hook/window_hook.c
+WINDOW_HOOK_HELPER_SOURCE := util/windowhook/hook/window_hook_helper.c
 WINDOW_HOOK_DIR := resource/others/window_hook
 WINDOW_HOOK_DLL := $(WINDOW_HOOK_DIR)/WoxWindowHook64.dll
 WINDOW_HOOK_DLL32 := $(WINDOW_HOOK_DIR)/WoxWindowHook32.dll
 WINDOW_HOOK_HELPER32 := $(WINDOW_HOOK_DIR)/wox-window-hook-helper32.exe
 # The helper is a visible Wox process, so it carries Wox's icon and version strings.
-# Note the missing -64: goversioninfo defaults to a 32-bit resource, which is what a
-# GOARCH=386 binary needs. The .syso is deleted right after linking, exactly as the file
-# index service does, so an i386 resource can never be picked up by an amd64 build.
-WINDOW_HOOK_HELPER32_VERSIONINFO := cmd/window_hook_helper/resource_windows.syso
+# Note the missing -64: goversioninfo defaults to a 32-bit COFF resource object, which
+# i686 MinGW links directly. The .o is deleted right after linking, exactly as the file
+# index service does.
+WINDOW_HOOK_HELPER32_VERSIONINFO := util/windowhook/hook/window_hook_helper32_res.o
+WINDOW_HOOK_HELPER_CFLAGS := -O2 -s -static-libgcc -Wall -Wextra
+WINDOW_HOOK_HELPER_LIBS := -lshell32
 WINDOW_HOOK_LIBS := -lole32 -lshell32 -luuid -lcomctl32
 # An injected DLL is loaded by whatever process owns the dialog, so it can only depend on
 # system DLLs: nothing puts the toolchain's redistributables on that process's search path,
@@ -122,16 +125,15 @@ WINDOW_HOOK_LIBS := -lole32 -lshell32 -luuid -lcomctl32
 # and would otherwise pull in libgcc_s_dw2-1.dll.
 WINDOW_HOOK_CFLAGS := -shared -O2 -s -static-libgcc
 # 32-bit stdcall exports are decorated as name@bytes, so without --kill-at the helper's
-# FindProc("WoxWindowHookAttachSticky") misses an export actually named
+# GetProcAddress("WoxWindowHookAttachSticky") misses an export actually named
 # "WoxWindowHookAttachSticky@16". x64 has no such decoration, which is why only the
 # 32-bit link needs this and why the mismatch cannot show up in the 64-bit build.
 WINDOW_HOOK_CFLAGS32 := $(WINDOW_HOOK_CFLAGS) -Wl,--kill-at
 
 # SetWindowsHookEx cannot inject across bitness, and a 64-bit process cannot even load a
 # 32-bit DLL to obtain the module handle the call needs. Hooking a 32-bit host such as
-# Foxmail or 32-bit Office therefore needs a second DLL built by an i686 compiler, plus
-# the 32-bit helper below that installs it. The helper is pure Go and cross-compiles with
-# no extra toolchain; only the DLL needs one.
+# Foxmail or 32-bit Office therefore needs a second DLL and companion 32-bit helper both
+# built by an i686 compiler. Keeping the helper in pure C avoids embedding a Go runtime.
 #
 # Installing i686-w64-mingw32-gcc on Windows (it coexists with the 64-bit mingw; MSYS2
 # keeps the two toolchains in separate /mingw32 and /mingw64 prefixes):
@@ -169,25 +171,25 @@ else
 	rm -rf $(WINDOW_HOOK_DIR)
 	mkdir -p $(WINDOW_HOOK_DIR)
 	gcc $(WINDOW_HOOK_CFLAGS) -o $(WINDOW_HOOK_DLL) $(WINDOW_HOOK_SOURCE) $(WINDOW_HOOK_LIBS)
-	rm -f $(WINDOW_HOOK_HELPER32_VERSIONINFO)
-	cd . && go run github.com/josephspurrier/goversioninfo/cmd/goversioninfo@v1.5.0 \
-		-o $(WINDOW_HOOK_HELPER32_VERSIONINFO) -icon resource/app.ico \
-		-product-name "Wox" -description "Wox Window Hook Helper" \
-		-internal-name "WoxWindowHookHelper" -original-name "wox-window-hook-helper32.exe" \
-		-product-version "$(VERSION)" -file-version "$(VERSION)" \
-		-propagate-ver-strings
-	CGO_ENABLED=0 GOOS=windows GOARCH=386 go build -trimpath -ldflags "-s -w" -o $(WINDOW_HOOK_HELPER32) ./cmd/window_hook_helper
-	rm -f $(WINDOW_HOOK_HELPER32_VERSIONINFO)
 	@if command -v $(WINDOW_HOOK_CC32) >/dev/null 2>&1; then \
 		cc32="$$(command -v $(WINDOW_HOOK_CC32))"; \
 		bin32="$$(dirname "$$cc32")"; \
 		if command -v cygpath >/dev/null 2>&1; then bin32="$$(cygpath -u "$$bin32")"; fi; \
+		rm -f $(WINDOW_HOOK_HELPER32_VERSIONINFO); \
+		cd . && go run github.com/josephspurrier/goversioninfo/cmd/goversioninfo@v1.5.0 \
+			-o $(WINDOW_HOOK_HELPER32_VERSIONINFO) -icon resource/app.ico \
+			-product-name "Wox" -description "Wox Window Hook Helper" \
+			-internal-name "WoxWindowHookHelper" -original-name "wox-window-hook-helper32.exe" \
+			-product-version "$(VERSION)" -file-version "$(VERSION)" \
+			-propagate-ver-strings; \
 		set -x; \
 		PATH="$$bin32:$$PATH" "$$cc32" $(WINDOW_HOOK_CFLAGS32) -o $(WINDOW_HOOK_DLL32) $(WINDOW_HOOK_SOURCE) $(WINDOW_HOOK_LIBS); \
+		PATH="$$bin32:$$PATH" "$$cc32" $(WINDOW_HOOK_HELPER_CFLAGS) -o $(WINDOW_HOOK_HELPER32) $(WINDOW_HOOK_HELPER_SOURCE) $(WINDOW_HOOK_HELPER32_VERSIONINFO) $(WINDOW_HOOK_HELPER_LIBS); \
+		rm -f $(WINDOW_HOOK_HELPER32_VERSIONINFO); \
 	elif [ "$(WINDOW_HOOK_REQUIRE_32)" = "1" ]; then \
-		echo "ERROR: $(WINDOW_HOOK_CC32) not found. Release builds must ship WoxWindowHook32.dll." >&2; exit 1; \
+		echo "ERROR: $(WINDOW_HOOK_CC32) not found. Release builds must ship WoxWindowHook32.dll and wox-window-hook-helper32.exe." >&2; exit 1; \
 	else \
-		echo "WARNING: $(WINDOW_HOOK_CC32) not found, skipping WoxWindowHook32.dll." >&2; \
+		echo "WARNING: $(WINDOW_HOOK_CC32) not found, skipping WoxWindowHook32.dll and wox-window-hook-helper32.exe." >&2; \
 		echo "WARNING: overlays on 32-bit apps will fall back to polling and visibly lag." >&2; \
 		echo "WARNING: see the install notes above WINDOW_HOOK_CC32 in wox.core/Makefile." >&2; \
 	fi
