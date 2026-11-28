@@ -58,32 +58,29 @@ func checkGnomeTrayIndicator(ctx context.Context) (DoctorCheckResult, bool) {
 	}, true
 }
 
-// checkWaylandDesktopLaunch verifies that Wayland portal permissions can be
-// associated with Wox's stable desktop identity.
+// checkWaylandDesktopLaunch uses the launch identity as a fallback when no
+// successful portal binding is available.
 func checkWaylandDesktopLaunch(ctx context.Context) (DoctorCheckResult, bool) {
 	if !util.IsLinuxWaylandSession() {
 		return DoctorCheckResult{}, false
 	}
 
-	if util.IsLinuxLaunchedFromStableDesktopEntry() {
-		return DoctorCheckResult{
-			Name:        "i18n:plugin_doctor_wayland_desktop_launch",
-			Type:        DoctorCheckWaylandDesktopLaunch,
-			Passed:      true,
-			Description: "i18n:plugin_doctor_wayland_desktop_launch_ok",
-			ActionName:  "",
-			Action:      func(ctx context.Context, actionContext ActionContext) {},
-		}, true
-	}
-
-	return DoctorCheckResult{
+	result := DoctorCheckResult{
 		Name:        "i18n:plugin_doctor_wayland_desktop_launch",
 		Type:        DoctorCheckWaylandDesktopLaunch,
-		Passed:      false,
 		Description: "i18n:plugin_doctor_wayland_desktop_launch_missing",
-		ActionName:  "",
 		Action:      func(ctx context.Context, actionContext ActionContext) {},
-	}, true
+	}
+
+	switch {
+	case keyboard.HasWaylandPortalHotkeyBindings():
+		result.Passed = true
+		result.Description = "i18n:plugin_doctor_wayland_desktop_launch_shortcuts_bound"
+	case util.IsLinuxLaunchedFromStableDesktopEntry():
+		result.Passed = true
+		result.Description = "i18n:plugin_doctor_wayland_desktop_launch_ok"
+	}
+	return result, true
 }
 
 func isStatusNotifierHostRegistered(ctx context.Context) bool {

@@ -202,6 +202,14 @@ func (r *waylandHotkeySessionRegistration) Unregister() error {
 	return unregisterErr
 }
 
+// HasWaylandPortalHotkeyBindings reports whether the portal accepted a shortcut
+// session that Wox still holds on its D-Bus connection.
+func HasWaylandPortalHotkeyBindings() bool {
+	waylandPortalMu.Lock()
+	defer waylandPortalMu.Unlock()
+	return waylandPortalConn != nil && waylandPortalConn.Connected() && len(waylandPortalRegistrations) > 0
+}
+
 func closeWaylandPortalSession(conn *dbus.Conn, sessionPath dbus.ObjectPath) error {
 	if conn == nil || sessionPath == "" {
 		return nil
