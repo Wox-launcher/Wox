@@ -6,7 +6,6 @@ import (
 	"context"
 	"testing"
 
-	"wox/i18n"
 	"wox/test/automationdriver"
 	"wox/test/smoke"
 	woxui "wox/ui/runtime"
@@ -79,23 +78,16 @@ func verifySinglefileToolbar(t *testing.T, query, result, title, completed strin
 			t.Fatal(err)
 		}
 		smoke.ShowLauncher(t, ctx, client)
-		updateTitles := map[string]bool{}
-		for _, lang := range i18n.GetSupportedLanguages() {
-			texts, err := i18n.GetI18nManager().GetLangMap(ctx, lang.Code)
-			if err != nil {
-				t.Fatal(err)
-			}
-			updateTitles[texts["ui_update_success"]] = true
-		}
+		updateTitle := smoke.LocalizedText(t, ctx, client, "ui_update_success")
 		if _, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
 			status, found := automationdriver.Find(snapshot, "launcher.toolbar.status")
-			return found && updateTitles[status.Value]
+			return found && status.Value == updateTitle
 		}); err != nil {
 			t.Fatalf("wait for system notice: %v", err)
 		}
 		snapshot = waitForPluginResult(t, ctx, client, query, result)
 		status, found := automationdriver.Find(snapshot, "launcher.toolbar.status")
-		if !found || !updateTitles[status.Value] {
+		if !found || status.Value != updateTitle {
 			t.Fatalf("system notice did not cover host updates: found=%t status=%q", found, status.Value)
 		}
 		snapshot, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {

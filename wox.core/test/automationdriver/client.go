@@ -138,6 +138,11 @@ func (c *Client) Snapshot(ctx context.Context) (woxwidget.AutomationSnapshot, er
 	return call[woxwidget.AutomationSnapshot](ctx, c, "semantics.snapshot", nil)
 }
 
+// Translate resolves a Wox string in the running application's active language.
+func (c *Client) Translate(ctx context.Context, key string) (string, error) {
+	return call[string](ctx, c, "i18n.translate", map[string]string{"key": key})
+}
+
 // QueryState returns readiness for the current query and its retained result frame.
 func (c *Client) QueryState(ctx context.Context) (automation.QueryState, error) {
 	return call[automation.QueryState](ctx, c, "perf.query_state", nil)

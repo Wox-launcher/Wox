@@ -44,6 +44,19 @@ func CaseWithTimeout(t *testing.T, timeout time.Duration, run func(context.Conte
 	run(ctx, client)
 }
 
+// LocalizedText reads the expected label from the Wox process that renders the UI.
+func LocalizedText(t *testing.T, ctx context.Context, client *automationdriver.Client, key string) string {
+	t.Helper()
+	text, err := client.Translate(ctx, key)
+	if err != nil {
+		t.Fatalf("translate %q: %v", key, err)
+	}
+	if text == "" || text == key {
+		t.Fatalf("missing smoke translation for %q", key)
+	}
+	return text
+}
+
 // SharedClient connects lifecycle phases that intentionally terminate Wox before the test returns.
 func SharedClient(t *testing.T, ctx context.Context) *automationdriver.Client {
 	t.Helper()

@@ -2625,6 +2625,8 @@ WoxDarwinWindow *wox_darwin_window_create(const char *title, float width, float 
       ((WoxOverlayPanel *)native_window).woxNonactivating = is_nonactivating;
     } else if (is_nonactivating || is_focus_panel) {
       ((NSPanel *)native_window).hidesOnDeactivate = NO;
+      // AppKit infers a zoom animation for panels shown by the launcher hotkey.
+      native_window.animationBehavior = NSWindowAnimationBehaviorNone;
     }
     native_window.opaque = NO;
     native_window.backgroundColor = [NSColor clearColor];

@@ -6,7 +6,6 @@ import (
 	"context"
 	"testing"
 
-	"wox/i18n"
 	"wox/test/automationdriver"
 	"wox/test/smoke"
 	woxui "wox/ui/runtime"
@@ -38,17 +37,10 @@ func Test041LauncherUpdateNotice(t *testing.T) {
 			t.Fatal(err)
 		}
 		smoke.ShowLauncher(t, ctx, client)
-		values := map[string]bool{}
-		for _, lang := range i18n.GetSupportedLanguages() {
-			texts, err := i18n.GetI18nManager().GetLangMap(ctx, lang.Code)
-			if err != nil {
-				t.Fatal(err)
-			}
-			values[texts["ui_update_success"]] = true
-		}
+		updateTitle := smoke.LocalizedText(t, ctx, client, "ui_update_success")
 		observed, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
 			status, found := automationdriver.Find(snapshot, "launcher.toolbar.status")
-			return found && status.Value != "" && values[status.Value]
+			return found && status.Value == updateTitle
 		})
 		if err != nil {
 			t.Fatalf("wait for update confirmation: %v", err)
@@ -57,7 +49,7 @@ func Test041LauncherUpdateNotice(t *testing.T) {
 		for _, query := range []string{toolbarLongSmokeQuery, toolbarSmokeQuery} {
 			snapshot := smoke.SetLauncherQueryAndWaitComplete(t, ctx, client, query)
 			status, found := automationdriver.Find(snapshot, "launcher.toolbar.status")
-			if !found || !values[status.Value] {
+			if !found || status.Value != updateTitle {
 				t.Fatalf("system notice stopped covering plugin update for %q: found=%t status=%q", query, found, status.Value)
 			}
 		}

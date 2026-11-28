@@ -9,7 +9,6 @@ import (
 	"testing"
 	"unicode"
 
-	"wox/i18n"
 	"wox/test/automationdriver"
 	"wox/test/smoke"
 	woxwidget "wox/ui/widget"
@@ -28,24 +27,18 @@ func Test008LauncherPluginFileSearchToolbarCount(t *testing.T) {
 		waitForFileSearchResultPath(t, ctx, client, file, true, fileSearchInitialIndexTimeout)
 		smoke.ShowLauncher(t, ctx, client)
 		queryFileSearchResult(t, ctx, client, file)
-		var patterns [][]string
-		for _, lang := range i18n.GetSupportedLanguages() {
-			values, err := i18n.GetI18nManager().GetLangMap(ctx, lang.Code)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if parts := strings.Split(values["plugin_file_status_indexed_files"], "%s"); len(parts) == 2 {
-				patterns = append(patterns, parts)
-			}
+		format := smoke.LocalizedText(t, ctx, client, "plugin_file_status_indexed_files")
+		prefix, suffix, ok := strings.Cut(format, "%s")
+		if !ok {
+			t.Fatalf("indexed count format %q has no count placeholder", format)
 		}
 		isCount := func(value string) bool {
-			for _, parts := range patterns {
-				if strings.HasPrefix(value, parts[0]) && strings.HasSuffix(value, parts[1]) {
-					count := strings.TrimSuffix(strings.TrimPrefix(value, parts[0]), parts[1])
-					return strings.IndexFunc(count, unicode.IsDigit) >= 0
-				}
+			count, ok := strings.CutPrefix(value, prefix)
+			if !ok {
+				return false
 			}
-			return false
+			count, ok = strings.CutSuffix(count, suffix)
+			return ok && strings.IndexFunc(count, unicode.IsDigit) >= 0
 		}
 		snapshot, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
 			status, found := automationdriver.Find(snapshot, "launcher.toolbar.status")

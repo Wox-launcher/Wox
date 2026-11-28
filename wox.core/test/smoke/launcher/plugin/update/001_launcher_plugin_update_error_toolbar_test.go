@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"wox/i18n"
 	"wox/test/automationdriver"
 	"wox/test/smoke"
 	woxui "wox/ui/runtime"
@@ -23,22 +22,14 @@ func Test001LauncherPluginUpdateErrorToolbar(t *testing.T) {
 		smoke.PreserveClipboard(t)
 		smoke.ShowLauncher(t, ctx, client)
 		smoke.SetLauncherQueryAndWaitComplete(t, ctx, client, "update ")
-		labels := map[string]map[string]bool{"plugin_update_action_check": {}, "ui_toolbar_copy_error": {}}
-		for _, lang := range i18n.GetSupportedLanguages() {
-			texts, err := i18n.GetI18nManager().GetLangMap(ctx, lang.Code)
-			if err != nil {
-				t.Fatal(err)
-			}
-			for key := range labels {
-				labels[key][texts[key]] = true
-			}
-		}
+		checkLabel := smoke.LocalizedText(t, ctx, client, "plugin_update_action_check")
+		copyLabel := smoke.LocalizedText(t, ctx, client, "ui_toolbar_copy_error")
 		if err := client.Perform(ctx, "result-toolbar-more", woxui.AccessibilityActionActivate, ""); err != nil {
 			t.Fatal(err)
 		}
 		snapshot, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
 			for _, node := range snapshot.Tree.Nodes {
-				if strings.HasPrefix(node.AutomationID, "action-result-") && labels["plugin_update_action_check"][node.Label] {
+				if strings.HasPrefix(node.AutomationID, "action-result-") && node.Label == checkLabel {
 					return true
 				}
 			}
@@ -48,7 +39,7 @@ func Test001LauncherPluginUpdateErrorToolbar(t *testing.T) {
 			t.Fatalf("wait for update check action: %v", err)
 		}
 		for _, node := range snapshot.Tree.Nodes {
-			if strings.HasPrefix(node.AutomationID, "action-result-") && labels["plugin_update_action_check"][node.Label] {
+			if strings.HasPrefix(node.AutomationID, "action-result-") && node.Label == checkLabel {
 				if err := client.Perform(ctx, node.AutomationID, woxui.AccessibilityActionActivate, ""); err != nil {
 					t.Fatal(err)
 				}
@@ -70,7 +61,7 @@ func Test001LauncherPluginUpdateErrorToolbar(t *testing.T) {
 		}
 		snapshot, err = client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
 			for _, node := range snapshot.Tree.Nodes {
-				if strings.HasPrefix(node.AutomationID, "action-toolbar-") && labels["ui_toolbar_copy_error"][node.Label] {
+				if strings.HasPrefix(node.AutomationID, "action-toolbar-") && node.Label == copyLabel {
 					return true
 				}
 			}
@@ -80,7 +71,7 @@ func Test001LauncherPluginUpdateErrorToolbar(t *testing.T) {
 			t.Fatalf("wait for copy update error action: %v", err)
 		}
 		for _, node := range snapshot.Tree.Nodes {
-			if strings.HasPrefix(node.AutomationID, "action-toolbar-") && labels["ui_toolbar_copy_error"][node.Label] {
+			if strings.HasPrefix(node.AutomationID, "action-toolbar-") && node.Label == copyLabel {
 				if err := client.Perform(ctx, node.AutomationID, woxui.AccessibilityActionActivate, ""); err != nil {
 					t.Fatal(err)
 				}

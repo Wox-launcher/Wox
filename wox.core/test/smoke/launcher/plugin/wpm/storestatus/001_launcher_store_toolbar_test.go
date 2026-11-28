@@ -12,7 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"wox/i18n"
 	"wox/test/automationdriver"
 	"wox/test/smoke"
 	woxui "wox/ui/runtime"
@@ -36,19 +35,6 @@ func Test001LauncherStoreToolbar(t *testing.T) {
 			dir := filepath.Join(pluginDir, id+"@"+version)
 			t.Cleanup(func() { _ = os.RemoveAll(dir) })
 		}
-		labels := map[string]map[string]bool{}
-		for _, key := range []string{"plugin_wpm_install", "plugin_wpm_upgrade", "plugin_wpm_uninstall", "plugin_installer_verb_install_past", "plugin_installer_verb_upgrade_past", "plugin_installer_verb_uninstall_past"} {
-			labels[key] = map[string]bool{}
-		}
-		for _, lang := range i18n.GetSupportedLanguages() {
-			texts, err := i18n.GetI18nManager().GetLangMap(ctx, lang.Code)
-			if err != nil {
-				t.Fatal(err)
-			}
-			for key := range labels {
-				labels[key][texts[key]] = true
-			}
-		}
 		waitResult := func(query, title string) {
 			ticker := time.NewTicker(250 * time.Millisecond)
 			defer ticker.Stop()
@@ -66,12 +52,13 @@ func Test001LauncherStoreToolbar(t *testing.T) {
 			}
 		}
 		activate := func(key string) {
+			label := smoke.LocalizedText(t, ctx, client, key)
 			if err := client.Perform(ctx, "result-toolbar-more", woxui.AccessibilityActionActivate, ""); err != nil {
 				t.Fatal(err)
 			}
 			snapshot, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
 				for _, node := range snapshot.Tree.Nodes {
-					if strings.HasPrefix(node.AutomationID, "action-result-") && labels[key][node.Label] {
+					if strings.HasPrefix(node.AutomationID, "action-result-") && node.Label == label {
 						return true
 					}
 				}
@@ -81,7 +68,7 @@ func Test001LauncherStoreToolbar(t *testing.T) {
 				t.Fatalf("wait for action %s: %v", key, err)
 			}
 			for _, node := range snapshot.Tree.Nodes {
-				if strings.HasPrefix(node.AutomationID, "action-result-") && labels[key][node.Label] {
+				if strings.HasPrefix(node.AutomationID, "action-result-") && node.Label == label {
 					if err := client.Perform(ctx, node.AutomationID, woxui.AccessibilityActionActivate, ""); err != nil {
 						t.Fatal(err)
 					}
@@ -90,18 +77,14 @@ func Test001LauncherStoreToolbar(t *testing.T) {
 			}
 		}
 		waitOutcome := func(verbKey, version string, exists bool) {
+			verb := smoke.LocalizedText(t, ctx, client, verbKey)
 			snapshot, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
 				status, found := automationdriver.Find(snapshot, "launcher.toolbar.status")
-				if !found || !strings.Contains(status.Value, name) {
+				if !found || !strings.Contains(status.Value, name) || !strings.Contains(status.Value, verb) {
 					return false
 				}
-				for verb := range labels[verbKey] {
-					if verb != "" && strings.Contains(status.Value, verb) {
-						_, err := os.Stat(filepath.Join(pluginDir, id+"@"+version))
-						return (err == nil) == exists
-					}
-				}
-				return false
+				_, err := os.Stat(filepath.Join(pluginDir, id+"@"+version))
+				return (err == nil) == exists
 			})
 			if err != nil {
 				status, _ := automationdriver.Find(snapshot, "launcher.toolbar.status")

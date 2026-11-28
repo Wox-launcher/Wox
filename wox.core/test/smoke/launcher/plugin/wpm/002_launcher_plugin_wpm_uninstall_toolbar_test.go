@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"wox/i18n"
 	"wox/test/automationdriver"
 	"wox/test/smoke"
 	woxui "wox/ui/runtime"
@@ -65,26 +64,14 @@ module.exports.plugin = new SmokePlugin()
 		if err := client.Perform(ctx, id, woxui.AccessibilityActionActivate, ""); err != nil {
 			t.Fatalf("uninstall fixture: %v", err)
 		}
-		success := map[string]bool{}
-		for _, lang := range i18n.GetSupportedLanguages() {
-			texts, err := i18n.GetI18nManager().GetLangMap(ctx, lang.Code)
-			if err != nil {
-				t.Fatal(err)
-			}
-			success[texts["plugin_installer_verb_uninstall_past"]] = true
-		}
+		verb := smoke.LocalizedText(t, ctx, client, "plugin_installer_verb_uninstall_past")
 		snapshot, err := client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
 			status, found := automationdriver.Find(snapshot, "launcher.toolbar.status")
-			if !found || !strings.Contains(status.Value, name) {
+			if !found || !strings.Contains(status.Value, name) || !strings.Contains(status.Value, verb) {
 				return false
 			}
-			for verb := range success {
-				if verb != "" && strings.Contains(status.Value, verb) {
-					_, err := os.Stat(path)
-					return os.IsNotExist(err)
-				}
-			}
-			return false
+			_, err := os.Stat(path)
+			return os.IsNotExist(err)
 		})
 		if err != nil {
 			status, _ := automationdriver.Find(snapshot, "launcher.toolbar.status")

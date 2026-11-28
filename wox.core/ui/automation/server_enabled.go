@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"wox/i18n"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
 	"wox/util"
@@ -137,6 +138,14 @@ func newHandler(controller Controller, token string) http.Handler {
 
 func dispatch(ctx context.Context, controller Controller, method string, rawParams json.RawMessage) (any, *rpcError) {
 	switch method {
+	case "i18n.translate":
+		var params struct {
+			Key string `json:"key"`
+		}
+		if err := decodeParams(rawParams, &params); err != nil {
+			return nil, invalidParams(err)
+		}
+		return i18n.GetI18nManager().TranslateWox(ctx, params.Key), nil
 	case "perf.query_state":
 		reader, ok := controller.(interface{ AutomationQueryState() (QueryState, error) })
 		if !ok {

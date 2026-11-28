@@ -11,7 +11,6 @@ import (
 	"strings"
 	"testing"
 
-	"wox/i18n"
 	"wox/test/automationdriver"
 	"wox/test/smoke"
 	woxui "wox/ui/runtime"
@@ -91,26 +90,14 @@ func Test003LauncherPluginInstallerSuccessToolbar(t *testing.T) {
 			if err := client.Perform(ctx, resultID, woxui.AccessibilityActionActivate, ""); err != nil {
 				t.Fatal(err)
 			}
-			verbs := map[string]bool{}
-			for _, lang := range i18n.GetSupportedLanguages() {
-				texts, err := i18n.GetI18nManager().GetLangMap(ctx, lang.Code)
-				if err != nil {
-					t.Fatal(err)
-				}
-				verbs[texts[verbKey]] = true
-			}
+			verb := smoke.LocalizedText(t, ctx, client, verbKey)
 			snapshot, err = client.WaitFor(ctx, func(snapshot woxwidget.AutomationSnapshot) bool {
 				status, found := automationdriver.Find(snapshot, "launcher.toolbar.status")
-				if !found || !strings.Contains(status.Value, name) {
+				if !found || !strings.Contains(status.Value, name) || !strings.Contains(status.Value, verb) {
 					return false
 				}
-				for verb := range verbs {
-					if verb != "" && strings.Contains(status.Value, verb) {
-						_, err := os.Stat(filepath.Join(pluginRoot, id+"@"+version, "plugin.json"))
-						return err == nil
-					}
-				}
-				return false
+				_, err := os.Stat(filepath.Join(pluginRoot, id+"@"+version, "plugin.json"))
+				return err == nil
 			})
 			if err != nil {
 				status, _ := automationdriver.Find(snapshot, "launcher.toolbar.status")
