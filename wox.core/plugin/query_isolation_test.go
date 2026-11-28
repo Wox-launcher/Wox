@@ -76,9 +76,14 @@ func TestExplicitPluginProgressRenewsOnlyUpToLimit(t *testing.T) {
 		start := time.Now()
 		execution := scheduler.start(context.Background(), query, []queryPluginJob{{pluginInstance: instance}}, 0, queryExecutionCallbacks{
 			queryPlugin: func(ctx context.Context, _ *Instance, _ Query) (QueryResponse, bool) {
-				for range 3 {
-					time.Sleep(4 * time.Second)
-					scheduler.notePluginQueryProgress(query, instance.Metadata.Id)
+				// A targeted plugin can take longer than five seconds to publish its first batch.
+				for range 2 {
+					select {
+					case <-ctx.Done():
+						return QueryResponse{}, false
+					case <-time.After(7 * time.Second):
+						scheduler.notePluginQueryProgress(query, instance.Metadata.Id)
+					}
 				}
 				<-ctx.Done()
 				return QueryResponse{}, false

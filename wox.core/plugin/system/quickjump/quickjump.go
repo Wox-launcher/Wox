@@ -339,14 +339,7 @@ func (c *QuickJumpPlugin) queryFileSearchResults(ctx context.Context, query plug
 		if folderOnly && !item.IsDir {
 			continue
 		}
-		icon := common.NewWoxImageLazyLoadCandidate(common.NewWoxImageFileIcon(item.Path), common.ResultListIconSize)
-		if item.IsDir {
-			icon = icons.Get(icons.PluginFolder)
-			if util.IsMacOS() && strings.HasSuffix(strings.ToLower(item.Name), ".app") {
-				icon = common.NewWoxImageLazyLoadCandidate(common.NewWoxImageFileIcon(item.Path), common.ResultListIconSize)
-			}
-		}
-		results = append(results, c.buildDirectoryEntryResult(query, item.Name, item.Path, item.IsDir, icon, item.Score, true))
+		results = append(results, c.buildDirectoryEntryResult(query, item.Name, item.Path, item.IsDir, item.Score, true))
 	}
 	return results, true
 }
@@ -432,25 +425,13 @@ func (c *QuickJumpPlugin) queryDirectoryEntriesAtPath(ctx context.Context, query
 		}
 
 		fullPath := filepath.Join(dirPath, entry.Name())
-		var icon common.WoxImage
-		if isDir {
-			icon = icons.Get(icons.PluginFolder)
-
-			// On macOS, use the .app icon for application bundles
-			if util.IsMacOS() && strings.HasSuffix(strings.ToLower(entry.Name()), ".app") {
-				icon = common.NewWoxImageFileIcon(fullPath)
-			}
-		} else {
-			icon = common.NewWoxImageFileIcon(fullPath)
-		}
-
-		results = append(results, c.buildDirectoryEntryResult(query, entry.Name(), fullPath, isDir, icon, matchScore, false))
+		results = append(results, c.buildDirectoryEntryResult(query, entry.Name(), fullPath, isDir, matchScore, false))
 	}
 
 	return results
 }
 
-func (c *QuickJumpPlugin) buildDirectoryEntryResult(query plugin.Query, title string, fullPath string, isDir bool, icon common.WoxImage, score int64, isGlobalResult bool) plugin.QueryResult {
+func (c *QuickJumpPlugin) buildDirectoryEntryResult(query plugin.Query, title string, fullPath string, isDir bool, score int64, isGlobalResult bool) plugin.QueryResult {
 	defaultAction := plugin.QueryResultAction{
 		Name:                   "i18n:plugin_quickjump_reveal_in_explorer",
 		Icon:                   icons.Get(icons.ActionOpenContainingFolder),
@@ -466,6 +447,15 @@ func (c *QuickJumpPlugin) buildDirectoryEntryResult(query plugin.Query, title st
 		defaultAction.Action = func(ctx context.Context, actionContext plugin.ActionContext) {
 			c.jumpToFolder(ctx, query.Env, fullPath)
 		}
+	}
+
+	// A directory query can return thousands of paths. Extract native icons only
+	// when their rows become visible, including custom icons on macOS app bundles.
+	var icon common.WoxImage
+	if isDir && !(util.IsMacOS() && strings.EqualFold(filepath.Ext(title), ".app")) {
+		icon = icons.Get(icons.PluginFolder)
+	} else {
+		icon = common.NewWoxImageLazyLoadCandidate(common.NewWoxImageFileIcon(fullPath), common.ResultListIconSize)
 	}
 
 	return plugin.QueryResult{
@@ -1211,14 +1201,17 @@ func (c *QuickJumpPlugin) startIntegrationRuntime(ctx context.Context) {
 		traceCtx = util.WithCoreSessionContext(traceCtx)
 		pushEvent(overlayEvent{eventType: overlayEventKey, key: key, ctx: traceCtx})
 	}
-	onDialogKey := func(key string) {
-		if key != explorerOpenSearchEventKey {
-			onKey(key)
-			return
-		}
+	requestDialogSearch := func(hintPid int) {
 		traceCtx := context.WithValue(ctx, util.ContextKeyTraceId, uuid.NewString())
 		traceCtx = util.WithCoreSessionContext(traceCtx)
-		pushEvent(overlayEvent{eventType: overlayEventOpenDialogSearch, ctx: traceCtx})
+		pushEvent(overlayEvent{eventType: overlayEventOpenDialogSearch, ctx: traceCtx, pid: hintPid})
+	}
+	onDialogKey := func(key string) {
+		if key == explorerOpenSearchEventKey {
+			requestDialogSearch(0)
+			return
+		}
+		onKey(key)
 	}
 
 	go func() {
@@ -1345,9 +1338,9 @@ func (c *QuickJumpPlugin) startIntegrationRuntime(ctx context.Context) {
 				Message:  c.api.GetTranslation(localCtx, messageKey),
 				FontSize: fontSize,
 				OnClick: func() bool {
-					clickCtx := context.WithValue(ctx, util.ContextKeyTraceId, uuid.NewString())
-					clickCtx = util.WithCoreSessionContext(clickCtx)
-					openDialogQuery(clickCtx, pid)
+					// Opening search closes this overlay. Let the monitor handle the
+					// handoff after the pointer callback releases the UI thread.
+					requestDialogSearch(pid)
 					return true
 				},
 			})
@@ -1504,7 +1497,7 @@ func (c *QuickJumpPlugin) startIntegrationRuntime(ctx context.Context) {
 					if localCtx == nil {
 						localCtx = ctx
 					}
-					if active && activePid > 0 && !c.isIgnoredApplicationPid(activePid) {
+					if active && activePid > 0 && (ev.pid == 0 || ev.pid == activePid) && !c.isIgnoredApplicationPid(activePid) {
 						openDialogQuery(localCtx, activePid)
 					}
 				case overlayEventKey:

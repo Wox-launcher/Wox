@@ -1,11 +1,38 @@
 package quickjump
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
+	"wox/common"
+	"wox/common/icons"
 	"wox/plugin"
 	"wox/util"
 )
+
+// File icons from directory listings must not delay the first batch while the OS extracts them.
+func TestCurrentDirectoryDefersFileIcons(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "photo.arw")
+	if err := os.WriteFile(file, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(dir, "albums"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	results := (&QuickJumpPlugin{}).queryDirectoryEntriesAtPath(t.Context(), plugin.Query{}, dir, "")
+	if len(results) != 2 {
+		t.Fatalf("got %d directory entries, want 2", len(results))
+	}
+	// ReadDir returns entries in filename order.
+	if results[0].Icon != icons.Get(icons.PluginFolder) {
+		t.Fatal("expected the standard folder icon for albums")
+	}
+	payload, err := common.ParseWoxLazyLoadImagePayload(results[1].Icon)
+	if err != nil || payload.Source == nil || *payload.Source != common.NewWoxImageFileIcon(file) || payload.TargetSize != common.ResultListIconSize {
+		t.Fatalf("expected a deferred file icon for photo.arw, got %+v (%v)", payload, err)
+	}
+}
 
 func TestIsDirectChildPath(t *testing.T) {
 	quickJumpPlugin := &QuickJumpPlugin{}

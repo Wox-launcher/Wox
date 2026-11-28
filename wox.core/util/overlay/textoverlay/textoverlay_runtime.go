@@ -518,15 +518,13 @@ func (instance *runtimeTextOverlay) toastButton(chrome overlay.ThemeChrome) woxw
 	})
 }
 
-// overlayMessage paints the body. Centered loading placeholders stay draw-only;
-// dialog and AI-command text use a read-only field so drag-select and copy work.
-// The field is a deeper gesture than the optional body OnTap, so selection wins
-// over click-to-copy on the text itself.
+// A clickable hint lets the panel handle taps on its label. Copyable results
+// keep the text field so users can drag to select part of the message.
 func (instance *runtimeTextOverlay) overlayMessage(layout runtimeTextLayout, style woxui.TextStyle, color woxui.Color, chrome overlay.ThemeChrome) woxwidget.Widget {
-	if instance.options.CenterContent {
+	if instance.options.CenterContent || (instance.options.OnClick != nil && !instance.options.ShowCopyButton) {
 		return woxwidget.TextBlock{
 			Value: instance.options.Message, Style: style, Color: color, Width: layout.textWidth,
-			LineHeight: layout.textLayout.LineHeight, Centered: true, Layout: &layout.textLayout,
+			LineHeight: layout.textLayout.LineHeight, Centered: instance.options.CenterContent, Layout: &layout.textLayout,
 		}
 	}
 	lineHeight := layout.textLayout.LineHeight

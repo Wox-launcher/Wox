@@ -484,16 +484,28 @@ static void apply_window_chrome(WoxDarwinWindow *window) {
 }
 
 @interface WoxNativeWindow : NSWindow
-@property(nonatomic, assign) BOOL woxNonactivating;
 @end
 
 @implementation WoxNativeWindow
 - (BOOL)canBecomeKeyWindow {
-  return !self.woxNonactivating;
+  return YES;
 }
 
 - (BOOL)canBecomeMainWindow {
-  return !self.woxNonactivating;
+  return YES;
+}
+@end
+
+@interface WoxNonactivatingPanel : NSPanel
+@end
+
+@implementation WoxNonactivatingPanel
+- (BOOL)canBecomeKeyWindow {
+  return NO;
+}
+
+- (BOOL)canBecomeMainWindow {
+  return NO;
 }
 @end
 
@@ -2597,9 +2609,10 @@ WoxDarwinWindow *wox_darwin_window_create(const char *title, float width, float 
     Class window_class = [WoxNativeWindow class];
     if (is_screenshot_window) {
       window_class = [WoxOverlayPanel class];
-    } else if (is_focus_panel) {
-      // AppKit sets up nonactivating keyboard focus when the panel is created.
-      window_class = [NSPanel class];
+    } else if (is_nonactivating || is_focus_panel) {
+      // Only a panel created with this style can receive a click without
+      // activating Wox and taking focus away from another app's file dialog.
+      window_class = is_nonactivating ? [WoxNonactivatingPanel class] : [NSPanel class];
       style_mask |= NSWindowStyleMaskNonactivatingPanel;
     }
     NSWindow *native_window = [[window_class alloc]
@@ -2610,10 +2623,8 @@ WoxDarwinWindow *wox_darwin_window_create(const char *title, float width, float 
     native_window.releasedWhenClosed = NO;
     if (is_screenshot_window) {
       ((WoxOverlayPanel *)native_window).woxNonactivating = is_nonactivating;
-    } else if (is_focus_panel) {
+    } else if (is_nonactivating || is_focus_panel) {
       ((NSPanel *)native_window).hidesOnDeactivate = NO;
-    } else {
-      ((WoxNativeWindow *)native_window).woxNonactivating = is_nonactivating;
     }
     native_window.opaque = NO;
     native_window.backgroundColor = [NSColor clearColor];

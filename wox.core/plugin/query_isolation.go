@@ -8,7 +8,7 @@ import (
 
 const (
 	globalPluginQueryTimeout   = 1500 * time.Millisecond
-	targetedPluginQueryTimeout = 5 * time.Second
+	targetedPluginQueryTimeout = 10 * time.Second
 	targetedPluginQueryLimit   = 15 * time.Second
 	pluginQueryRetryDelay      = 125 * time.Millisecond
 	pluginCircuitWindow        = time.Minute

@@ -1,4 +1,4 @@
-#include <ApplicationServices/ApplicationServices.h>
+#include "file_dialog_detect_darwin.h"
 #include <Cocoa/Cocoa.h>
 #include <ScriptingBridge/ScriptingBridge.h>
 #include <math.h>
@@ -1058,76 +1058,91 @@ static BOOL isOpenSaveDialogWindowElement(AXUIElementRef windowElement) {
     return NO;
 }
 
-static BOOL elementMatchesRole(AXUIElementRef element, CFStringRef expectedRole) {
-    if (!element || !expectedRole) {
-        return NO;
+// Read a string attribute without transferring ownership to the caller.
+static NSString* getAXStringAttribute(AXUIElementRef element, CFStringRef attr) {
+    if (!element || !attr) {
+        return nil;
     }
 
-    CFTypeRef roleValue = NULL;
-    BOOL matched = NO;
-    if (AXUIElementCopyAttributeValue(element, kAXRoleAttribute, &roleValue) == kAXErrorSuccess && roleValue) {
-        if (CFGetTypeID(roleValue) == CFStringGetTypeID() && CFStringCompare((CFStringRef)roleValue, expectedRole, 0) == kCFCompareEqualTo) {
-            matched = YES;
+    CFTypeRef value = NULL;
+    if (AXUIElementCopyAttributeValue(element, attr, &value) != kAXErrorSuccess || !value) {
+        if (value) {
+            CFRelease(value);
         }
-        CFRelease(roleValue);
+        return nil;
     }
-    return matched;
+
+    NSString *result = nil;
+    if (CFGetTypeID(value) == CFStringGetTypeID()) {
+        // Return an autoreleased Foundation copy because this file is built without ARC.
+        result = [NSString stringWithString:(__bridge NSString *)value];
+    }
+    CFRelease(value);
+    return result;
 }
 
-static BOOL elementOrDescendantMatchesRole(AXUIElementRef element, CFStringRef expectedRole, int depth) {
-    if (!element || !expectedRole || depth > 8) {
+BOOL woxIsAppKitFilePanel(AXUIElementRef window) {
+    NSString *identifier = getAXStringAttribute(window, kAXIdentifierAttribute);
+    return [identifier isEqualToString:@"open-panel"] || [identifier isEqualToString:@"save-panel"];
+}
+
+static BOOL isFileListRole(NSString *role) {
+    return [role isEqualToString:@"AXOutline"] || [role isEqualToString:@"AXBrowser"] || [role isEqualToString:@"AXTable"];
+}
+
+// Inspect panel controls once. Asking AX for list children can materialize
+// thousands of file or process rows, none of which describe the panel itself.
+static BOOL visitFileDialogControls(AXUIElementRef element, int depth, BOOL (^visit)(AXUIElementRef, NSString *)) {
+    if (!element || depth > 8) {
         return NO;
     }
 
-    if (elementMatchesRole(element, expectedRole)) {
+    NSString *role = getAXStringAttribute(element, kAXRoleAttribute);
+    if (visit(element, role)) {
         return YES;
+    }
+    if (depth == 8 || isFileListRole(role) || [role isEqualToString:@"AXList"] ||
+        [role isEqualToString:@"AXGrid"] || [role isEqualToString:@"AXRow"] || [role isEqualToString:@"AXCell"]) {
+        return NO;
     }
 
     CFArrayRef children = NULL;
-    AXError childrenErr = AXUIElementCopyAttributeValue(element, kAXChildrenAttribute, (CFTypeRef *)&children);
-    if (childrenErr != kAXErrorSuccess || !children) {
-        if (children) {
-            CFRelease(children);
-        }
+    if (AXUIElementCopyAttributeValue(element, kAXChildrenAttribute, (CFTypeRef *)&children) != kAXErrorSuccess || !children) {
         return NO;
     }
-
     BOOL found = NO;
-    CFIndex count = CFArrayGetCount(children);
-    for (CFIndex i = 0; i < count; i++) {
+    for (CFIndex i = 0; i < CFArrayGetCount(children); i++) {
         AXUIElementRef child = (AXUIElementRef)CFArrayGetValueAtIndex(children, i);
-        if (!child || CFGetTypeID(child) != AXUIElementGetTypeID()) {
-            continue;
-        }
-        if (elementOrDescendantMatchesRole(child, expectedRole, depth + 1)) {
+        if (CFGetTypeID(child) == AXUIElementGetTypeID() && visitFileDialogControls(child, depth + 1, visit)) {
             found = YES;
             break;
         }
     }
-
     CFRelease(children);
     return found;
+}
+
+BOOL woxHasFilePickerControls(AXUIElementRef window, BOOL allowSearchField) {
+    __block BOOL hasFileList = NO;
+    __block BOOL hasInput = NO;
+    return visitFileDialogControls(window, 0, ^BOOL(AXUIElementRef element, NSString *role) {
+        if (isFileListRole(role)) {
+            hasFileList = YES;
+        } else if ([role isEqualToString:@"AXComboBox"]) {
+            hasInput = YES;
+        } else if (!hasInput && [role isEqualToString:@"AXTextField"]) {
+            hasInput = allowSearchField || ![getAXStringAttribute(element, kAXSubroleAttribute) isEqualToString:@"AXSearchField"];
+        }
+        return hasFileList && hasInput;
+    });
 }
 
 static BOOL isLikelyOpenSaveDialogWindowElement(AXUIElementRef windowElement) {
     if (!windowElement) {
         return NO;
     }
-
-    if (isOpenSaveDialogWindowElement(windowElement)) {
-        return YES;
-    }
-
-    BOOL hasFileList =
-        elementOrDescendantMatchesRole(windowElement, CFSTR("AXOutline"), 0) ||
-        elementOrDescendantMatchesRole(windowElement, CFSTR("AXBrowser"), 0) ||
-        elementOrDescendantMatchesRole(windowElement, CFSTR("AXTable"), 0);
-
-    BOOL hasFileNameInput =
-        elementOrDescendantMatchesRole(windowElement, CFSTR("AXTextField"), 0) ||
-        elementOrDescendantMatchesRole(windowElement, CFSTR("AXComboBox"), 0);
-
-    return hasFileList && hasFileNameInput;
+    return woxIsAppKitFilePanel(windowElement) || isOpenSaveDialogWindowElement(windowElement) ||
+           woxHasFilePickerControls(windowElement, NO);
 }
 
 static AXUIElementRef copyFocusedWindowElement(AXUIElementRef appElement) {
@@ -1468,29 +1483,6 @@ int isOpenSaveDialogByPid(int pid) {
     }
 }
 
-// getAXStringAttribute reads a string attribute used by folder-only heuristics.
-static NSString* getAXStringAttribute(AXUIElementRef element, CFStringRef attr) {
-    if (!element || !attr) {
-        return nil;
-    }
-
-    CFTypeRef value = NULL;
-    if (AXUIElementCopyAttributeValue(element, attr, &value) != kAXErrorSuccess || !value) {
-        if (value) {
-            CFRelease(value);
-        }
-        return nil;
-    }
-
-    NSString *result = nil;
-    if (CFGetTypeID(value) == CFStringGetTypeID()) {
-        // Return an autoreleased Foundation copy because this file is built without ARC.
-        result = [NSString stringWithString:(__bridge NSString *)value];
-    }
-    CFRelease(value);
-    return result;
-}
-
 // axStringLooksLikeSelectFolder matches localized Choose Folder chrome.
 // Prefer multi-word / localized folder-pick phrases so ordinary Open/Save titles
 // that merely mention "folder" are not treated as folder-only.
@@ -1518,69 +1510,18 @@ static BOOL axStringLooksLikeSelectFolder(NSString *text) {
     return NO;
 }
 
-// collectButtonTitlesRecursive gathers default/action button labels for heuristics.
-static void collectButtonTitlesRecursive(AXUIElementRef element, NSMutableArray<NSString *> *titles, int depth) {
-    if (!element || !titles || depth > 8) {
-        return;
-    }
-
-    if (elementMatchesRole(element, kAXButtonRole) || elementMatchesRole(element, CFSTR("AXDefaultButton"))) {
-        NSString *title = getAXStringAttribute(element, kAXTitleAttribute);
-        if (title.length > 0) {
-            [titles addObject:title];
-        }
-    }
-
-    CFArrayRef children = NULL;
-    if (AXUIElementCopyAttributeValue(element, kAXChildrenAttribute, (CFTypeRef *)&children) != kAXErrorSuccess || !children) {
-        if (children) {
-            CFRelease(children);
-        }
-        return;
-    }
-
-    CFIndex count = CFArrayGetCount(children);
-    for (CFIndex i = 0; i < count; i++) {
-        AXUIElementRef child = (AXUIElementRef)CFArrayGetValueAtIndex(children, i);
-        if (!child || CFGetTypeID(child) != AXUIElementGetTypeID()) {
-            continue;
-        }
-        collectButtonTitlesRecursive(child, titles, depth + 1);
-    }
-    CFRelease(children);
-}
-
-// isOpenSaveDialogSelectFolderWindow is true only for confirmed folder-only panels.
-// Uncertain open/save sheets stay false so ordinary Open/Save still show files.
+// Only explicit folder-picker chrome should hide files in Quick Jump.
 static int isOpenSaveDialogSelectFolderWindow(AXUIElementRef dialogWindow) {
-    if (!dialogWindow) {
-        return 0;
-    }
-
-    BOOL hasFileList =
-        elementOrDescendantMatchesRole(dialogWindow, CFSTR("AXOutline"), 0) ||
-        elementOrDescendantMatchesRole(dialogWindow, CFSTR("AXBrowser"), 0) ||
-        elementOrDescendantMatchesRole(dialogWindow, CFSTR("AXTable"), 0);
-    if (!hasFileList) {
-        return 0;
-    }
-
-    NSString *title = getAXStringAttribute(dialogWindow, kAXTitleAttribute);
-    BOOL chromeLooksLikeFolder = axStringLooksLikeSelectFolder(title);
-    if (!chromeLooksLikeFolder) {
-        NSMutableArray<NSString *> *buttonTitles = [NSMutableArray array];
-        collectButtonTitlesRecursive(dialogWindow, buttonTitles, 0);
-        for (NSString *buttonTitle in buttonTitles) {
-            if (axStringLooksLikeSelectFolder(buttonTitle)) {
-                chromeLooksLikeFolder = YES;
-                break;
-            }
+    __block BOOL hasFileList = NO;
+    __block BOOL folderTitle = axStringLooksLikeSelectFolder(getAXStringAttribute(dialogWindow, kAXTitleAttribute));
+    return visitFileDialogControls(dialogWindow, 0, ^BOOL(AXUIElementRef element, NSString *role) {
+        if (isFileListRole(role)) {
+            hasFileList = YES;
+        } else if (!folderTitle && ([role isEqualToString:@"AXButton"] || [role isEqualToString:@"AXDefaultButton"])) {
+            folderTitle = axStringLooksLikeSelectFolder(getAXStringAttribute(element, kAXTitleAttribute));
         }
-    }
-
-    // AX trees can omit controls while a normal Open/Save panel is loading. Only
-    // explicit folder-picker chrome is strong enough to hide file results.
-    return chromeLooksLikeFolder ? 1 : 0;
+        return hasFileList && folderTitle;
+    });
 }
 
 int isOpenSaveDialogSelectFolder() {

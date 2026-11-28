@@ -1,5 +1,5 @@
 #import <Cocoa/Cocoa.h>
-#import <ApplicationServices/ApplicationServices.h>
+#import "../../../util/window/file_dialog_detect_darwin.h"
 #import <ctype.h>
 #include <stdint.h>
 
@@ -485,58 +485,10 @@ static BOOL appHasFocusedTextInput(AXUIElementRef appElement) {
     return isTextInput;
 }
 
-static BOOL elementOrDescendantMatchesRole(AXUIElementRef element, CFStringRef expectedRole, int depth) {
-    if (!element || !expectedRole || depth > 8) {
-        return NO;
-    }
-
-    if (elementMatchesRole(element, expectedRole)) {
-        return YES;
-    }
-
-    CFArrayRef children = NULL;
-    AXError childrenErr = AXUIElementCopyAttributeValue(element, kAXChildrenAttribute, (CFTypeRef *)&children);
-    if (childrenErr != kAXErrorSuccess || !children) {
-        if (children) {
-            CFRelease(children);
-        }
-        return NO;
-    }
-
-    BOOL found = NO;
-    CFIndex count = CFArrayGetCount(children);
-    for (CFIndex i = 0; i < count; i++) {
-        AXUIElementRef child = (AXUIElementRef)CFArrayGetValueAtIndex(children, i);
-        if (!child || CFGetTypeID(child) != AXUIElementGetTypeID()) {
-            continue;
-        }
-        if (elementOrDescendantMatchesRole(child, expectedRole, depth + 1)) {
-            found = YES;
-            break;
-        }
-    }
-
-    CFRelease(children);
-    return found;
-}
-
+// Keep generic sheets and IME candidate windows out of the Quick Jump monitor.
 static BOOL isLikelyOpenSaveDialogWindow(AXUIElementRef windowElement) {
-    if (!isOpenSaveDialogWindow(windowElement)) {
-        return NO;
-    }
-
-    // Narrow detection to file-picking dialogs to avoid false positives
-    // from IME candidate windows and generic dialogs.
-    BOOL hasFileList =
-        elementOrDescendantMatchesRole(windowElement, CFSTR("AXOutline"), 0) ||
-        elementOrDescendantMatchesRole(windowElement, CFSTR("AXBrowser"), 0) ||
-        elementOrDescendantMatchesRole(windowElement, CFSTR("AXTable"), 0);
-
-    BOOL hasFileNameInput =
-        elementOrDescendantMatchesRole(windowElement, CFSTR("AXTextField"), 0) ||
-        elementOrDescendantMatchesRole(windowElement, CFSTR("AXComboBox"), 0);
-
-    return hasFileList && hasFileNameInput;
+    return woxIsAppKitFilePanel(windowElement) ||
+           (isOpenSaveDialogWindow(windowElement) && woxHasFilePickerControls(windowElement, YES));
 }
 
 static BOOL getAXWindowRect(AXUIElementRef windowElement, int *x, int *y, int *w, int *h) {

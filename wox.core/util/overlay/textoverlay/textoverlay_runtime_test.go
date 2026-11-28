@@ -325,20 +325,28 @@ func TestRuntimeTextOverlayBuildPaintsThemeBackground(t *testing.T) {
 	}
 }
 
-func TestRuntimeTextOverlayBuildInvokesClick(t *testing.T) {
-	clicked := false
+// Exercise hit testing through the message as well as the surrounding panel.
+func TestRuntimeTextOverlayRoutesHintClicks(t *testing.T) {
+	size := woxui.Size{Width: 240, Height: 44}
+	clicks := 0
 	instance := &runtimeTextOverlay{
 		layout: runtimeTextLayout{
-			windowSize:  woxui.Size{Width: 160, Height: 48},
-			contentSize: woxui.Size{Width: 140, Height: 28},
-			textWidth:   140,
+			windowSize: size, contentSize: woxui.Size{Width: 204, Height: 20},
+			viewportHeight: 20, textWidth: 204,
+			textLayout: woxwidget.TextBlockLayout{Size: woxui.Size{Width: 204, Height: 16}, LineHeight: 16},
 		},
-		options: Options{Message: "click", OnClick: func() bool { clicked = true; return true }},
+		options: Options{Message: "Click to search this folder", OnClick: func() bool { clicks++; return true }},
 	}
-	root := instance.build(woxui.FrameInfo{Size: woxui.Size{Width: 160, Height: 48}}).(woxwidget.Gesture)
-	root.OnTap()
-	if !clicked {
-		t.Fatal("clickable text overlay did not invoke OnClick")
+	host := woxwidget.NewHost(instance.build)
+	host.Attach(&woxui.Window{})
+	defer host.Dispose()
+	host.Frame(&woxui.DisplayList{}, woxui.FrameInfo{Size: size, Scale: 1})
+	for i, point := range []woxui.Point{{X: 5, Y: 22}, {X: 60, Y: 22}} {
+		host.Pointer(woxui.PointerEvent{Kind: woxui.PointerDown, Button: woxui.PointerButtonPrimary, Position: point})
+		host.Pointer(woxui.PointerEvent{Kind: woxui.PointerUp, Button: woxui.PointerButtonPrimary, Position: point})
+		if clicks != i+1 {
+			t.Fatalf("click at %+v: got %d callbacks, want %d", point, clicks, i+1)
+		}
 	}
 }
 
