@@ -10,6 +10,7 @@ import (
 	"image/draw"
 	"io"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"sync/atomic"
 	"testing"
@@ -67,11 +68,8 @@ func TestScreenshotWindowBackgroundComposition(t *testing.T) {
 			draw.Draw(source, bounds, image.NewUniform(color.RGBA{R: 200, G: 100, B: 60, A: 255}), image.Point{}, draw.Src)
 			draw.Draw(source, clip, window, clip.Min, draw.Src)
 			preview := composeScreenshotWindowBackgroundPreview(source, clip, background)
-			if preview.Bounds() != bounds || !preview.Opaque() || preview.RGBAAt(clip.Min.X+1, clip.Min.Y) != output.RGBAAt(padding.X+1, padding.Y) {
-				t.Fatal("combined preview shifted the window or changed native alpha blending")
-			}
-			if corner := preview.RGBAAt(bounds.Max.X-1, bounds.Max.Y-1); corner != (color.RGBA{R: 107, G: 53, B: 32, A: 255}) {
-				t.Fatalf("combined preview did not dim the surrounding desktop once: %+v", corner)
+			if preview.Bounds().Size() != background.Bounds().Size() || preview.Opaque() || preview.RGBAAt(padding.X+1, padding.Y) != output.RGBAAt(padding.X+1, padding.Y) {
+				t.Fatal("background preview did not keep cropped rounded card or native alpha blending")
 			}
 			if got := screenshotWindowBackgroundBounds(selection, background, bounds, frame); got != (Rect{X: -64, Y: -32, Width: 528, Height: 264}) {
 				t.Fatalf("preview padded bounds=%+v", got)
@@ -276,7 +274,7 @@ func TestScreenshotWindowBackgroundToggle(t *testing.T) {
 	}
 }
 
-// TestScreenshotWindowBackgroundPreload verifies early decoding, eager preparation and stale-result rejection.
+// TestScreenshotWindowBackgroundPreload verifies lazy loading, caching and stale-result rejection.
 func TestScreenshotWindowBackgroundPreload(t *testing.T) {
 	for _, scale := range []float32{1, 1.5, 2} {
 		for _, scenario := range []string{"idle", "requested", "toggle off", "selection changed", "closed", "failure"} {
@@ -295,6 +293,21 @@ func TestScreenshotWindowBackgroundPreload(t *testing.T) {
 					},
 				})
 				state.originalSource = desktop
+				t.Cleanup(state.releaseWindowBackground)
+				state.captureSelectedWindow(selection, 0, make(chan struct{}), false)
+				state.mu.Lock()
+				done := state.backgroundDone
+				loading, enabled := state.backgroundLoading, state.showBackground
+				state.mu.Unlock()
+				if done != nil || loading || enabled {
+					t.Fatal("native capture eagerly prepared background before toggle")
+				}
+				if scenario == "idle" {
+					if state.backgroundSource != nil || state.backgroundPreview != nil || state.backgroundWallpaper != nil {
+						t.Fatal("idle capture allocated background resources")
+					}
+					return
+				}
 				started, release := make(chan struct{}), make(chan struct{})
 				var loads atomic.Int32
 				state.backgroundWallpaper = preloadScreenshotWallpaper(func(ctx context.Context) (image.Image, error) {
@@ -312,22 +325,18 @@ func TestScreenshotWindowBackgroundPreload(t *testing.T) {
 					draw.Draw(wallpaper, wallpaper.Bounds(), image.NewUniform(color.RGBA{R: 40, G: 50, B: 60, A: 255}), image.Point{}, draw.Src)
 					return wallpaper, nil
 				})
-				t.Cleanup(state.releaseWindowBackground)
+				state.toggleWindowBackground()
 				select {
 				case <-started:
 				case <-time.After(time.Second):
-					t.Fatal("wallpaper decode did not start before selecting a window")
+					t.Fatal("wallpaper decode did not start after toggling background")
 				}
-				state.captureSelectedWindow(selection, 0, make(chan struct{}), false)
 				state.mu.Lock()
-				done := state.backgroundDone
-				loading, enabled := state.backgroundLoading, state.showBackground
+				done = state.backgroundDone
+				loading, enabled = state.backgroundLoading, state.showBackground
 				state.mu.Unlock()
-				if done == nil || !loading || enabled {
-					t.Fatal("native capture did not prepare the background without enabling it")
-				}
-				if scenario != "idle" {
-					state.toggleWindowBackground()
+				if done == nil || !loading || !enabled {
+					t.Fatal("toggle did not start lazy background preparation")
 				}
 				switch scenario {
 				case "toggle off":
@@ -360,7 +369,7 @@ func TestScreenshotWindowBackgroundPreload(t *testing.T) {
 					t.Fatal("preparation changed editing pixels or used the wrong display scale")
 				}
 				if state.showBackground != (scenario == "requested") || state.backgroundWallpaper != nil {
-					t.Fatal("preparation enabled an unrequested effect or retained the full wallpaper")
+					t.Fatal("preparation left wallpaper or wrong toggle state")
 				}
 				background := state.backgroundSource
 				for i := 0; i < 10; i++ {
@@ -369,17 +378,77 @@ func TestScreenshotWindowBackgroundPreload(t *testing.T) {
 				if loads.Load() != 1 || state.backgroundSource != background || state.backgroundDone != done {
 					t.Fatal("repeated toggles reloaded or recomposed a prepared background")
 				}
-				if state.backgroundPreview.Width != desktop.Bounds().Dx() || state.backgroundPreview.Height != desktop.Bounds().Dy() {
-					t.Fatal("prepared preview did not include the full editor canvas")
+				if state.backgroundPreview.Width != state.backgroundSource.Bounds().Dx() || state.backgroundPreview.Height != state.backgroundSource.Bounds().Dy() {
+					t.Fatal("prepared preview did not match cropped background card dimensions")
 				}
 				state.showBackground, state.autoConfirm = true, true
 				list := &DisplayList{}
 				state.draw(list, FrameInfo{Size: frame})
-				if list.ImageDrawCount() != 1 {
-					t.Fatalf("background frame uploaded competing large images: %d", list.ImageDrawCount())
+				if list.ImageDrawCount() != 2 {
+					t.Fatalf("background frame image draws = %d, want 2 (desktop + cropped card)", list.ImageDrawCount())
 				}
 			})
 		}
+	}
+}
+
+// TestFitScreenshotWallpaperAspectFill covers landscape, portrait, negative origins, and translucent edges.
+func TestFitScreenshotWallpaperAspectFill(t *testing.T) {
+	// Landscape wallpaper (400x200) fitted into portrait canvas (100x200) must center-crop horizontally.
+	landscape := image.NewRGBA(image.Rect(-50, -20, 350, 180))
+	draw.Draw(landscape, landscape.Bounds(), image.NewUniform(color.RGBA{R: 10, G: 20, B: 30, A: 255}), image.Point{}, draw.Src)
+	draw.Draw(landscape, image.Rect(100, -20, 200, 180), image.NewUniform(color.RGBA{R: 200, G: 100, B: 50, A: 255}), image.Point{}, draw.Src)
+	out := fitScreenshotWallpaper(landscape, image.Pt(100, 200))
+	if out.Bounds().Size() != image.Pt(100, 200) || !out.Opaque() {
+		t.Fatalf("landscape->portrait output invalid: bounds=%v opaque=%t", out.Bounds(), out.Opaque())
+	}
+	if got := out.RGBAAt(50, 100); got.R < 180 {
+		t.Fatalf("landscape->portrait did not center-crop: %+v", got)
+	}
+
+	// Portrait translucent wallpaper (200x400) fitted into landscape canvas (200x100) must center-crop vertically and composite over fallback.
+	portrait := image.NewRGBA(image.Rect(0, 0, 200, 400))
+	draw.Draw(portrait, portrait.Bounds(), image.NewUniform(color.RGBA{R: 0, G: 0, B: 0, A: 0}), image.Point{}, draw.Src)
+	draw.Draw(portrait, image.Rect(0, 150, 200, 250), image.NewUniform(color.RGBA{R: 60, G: 120, B: 180, A: 255}), image.Point{}, draw.Src)
+	out2 := fitScreenshotWallpaper(portrait, image.Pt(200, 100))
+	if out2.Bounds().Size() != image.Pt(200, 100) || !out2.Opaque() {
+		t.Fatalf("portrait->landscape output invalid: bounds=%v opaque=%t", out2.Bounds(), out2.Opaque())
+	}
+	if got := out2.RGBAAt(100, 50); got.B < 160 {
+		t.Fatalf("portrait->landscape did not center-crop: %+v", got)
+	}
+
+	// NRGBA with partial alpha composites over the dark fallback cleanly.
+	nrgba := image.NewNRGBA(image.Rect(0, 0, 120, 80))
+	draw.Draw(nrgba, nrgba.Bounds(), image.NewUniform(color.NRGBA{R: 200, G: 100, B: 50, A: 128}), image.Point{}, draw.Src)
+	outNRGBA := fitScreenshotWallpaper(nrgba, image.Pt(60, 40))
+	if outNRGBA.Bounds().Size() != image.Pt(60, 40) || !outNRGBA.Opaque() {
+		t.Fatalf("NRGBA output invalid: bounds=%v opaque=%t", outNRGBA.Bounds(), outNRGBA.Opaque())
+	}
+
+	// YCbCr (JPEG-like) fast path decodes without per-pixel interface boxing and avoids huge temp slices.
+	ycbcr := image.NewYCbCr(image.Rect(0, 0, 2000, 1400), image.YCbCrSubsampleRatio420)
+	for i := range ycbcr.Y {
+		ycbcr.Y[i] = 180
+	}
+	for i := range ycbcr.Cb {
+		ycbcr.Cb[i] = 128
+		ycbcr.Cr[i] = 200
+	}
+	runtime.GC()
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	outYCbCr := fitScreenshotWallpaper(ycbcr, image.Pt(1200, 900))
+	runtime.ReadMemStats(&after)
+	if outYCbCr.Bounds().Size() != image.Pt(1200, 900) || !outYCbCr.Opaque() {
+		t.Fatalf("YCbCr output invalid: bounds=%v opaque=%t", outYCbCr.Bounds(), outYCbCr.Opaque())
+	}
+	if center := outYCbCr.RGBAAt(600, 450); center.R <= center.B {
+		t.Fatalf("YCbCr warm color lost during scaling: %+v", center)
+	}
+	// A full dstW*srcH*[4]float64 buffer would allocate >50 MiB; rolling rows keep total allocs near output size (~4.3 MiB).
+	if allocated := after.TotalAlloc - before.TotalAlloc; allocated > 16*1024*1024 {
+		t.Fatalf("fitScreenshotWallpaper allocated %d bytes, expected < 16 MiB", allocated)
 	}
 }
 

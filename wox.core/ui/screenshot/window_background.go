@@ -15,7 +15,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/disintegration/imaging"
 	_ "golang.org/x/image/bmp"
 	_ "golang.org/x/image/tiff"
 	_ "golang.org/x/image/webp"
@@ -111,7 +110,7 @@ func (state *screenshotEditorOverlayState) toggleWindowBackground() {
 	}
 	state.showBackground = !state.showBackground
 	state.backgroundFailed = false
-	prepare := state.showBackground && state.backgroundSource == nil && !state.backgroundLoading
+	prepare := state.showBackground && (state.backgroundSource == nil || state.backgroundPreview == nil) && !state.backgroundLoading
 	state.mu.Unlock()
 	if prepare {
 		state.prepareWindowBackground()
@@ -119,12 +118,11 @@ func (state *screenshotEditorOverlayState) toggleWindowBackground() {
 	state.invalidate()
 }
 
-// prepareWindowBackground fits and composes the wallpaper once the selection's capture pixels are ready.
-// Preparing never enables the effect: editing still shows the frozen desktop until the user requests it.
+// prepareWindowBackground loads and composes the wallpaper lazily when requested by the user.
 func (state *screenshotEditorOverlayState) prepareWindowBackground() {
 	state.mu.Lock()
 	source := state.backgroundCaptureSourceLocked()
-	if !state.hasSelection || state.dragging || source == nil || (state.windowSelection != nil && state.windowSource == nil) || state.backgroundSource != nil || state.backgroundLoading || state.backgroundClosed || state.scrolling || state.scrollingStarting {
+	if !state.hasSelection || state.dragging || source == nil || (state.windowSelection != nil && state.windowSource == nil) || (state.backgroundSource != nil && state.backgroundPreview != nil) || state.backgroundLoading || state.backgroundClosed || state.scrolling || state.scrollingStarting {
 		state.mu.Unlock()
 		return
 	}
@@ -134,10 +132,14 @@ func (state *screenshotEditorOverlayState) prepareWindowBackground() {
 		// Initial macOS captures can be ready before Draw publishes the active display's scale.
 		scale = max(float32(1), state.chromeScale(selection))
 	}
-	wallpaper := state.backgroundWallpaper
-	if wallpaper == nil {
-		wallpaper = preloadScreenshotWallpaper(loadScreenshotWallpaper)
-		state.backgroundWallpaper = wallpaper
+	existingBackground := state.backgroundSource
+	var wallpaper *screenshotWallpaperLoad
+	if existingBackground == nil {
+		wallpaper = state.backgroundWallpaper
+		if wallpaper == nil {
+			wallpaper = preloadScreenshotWallpaper(loadScreenshotWallpaper)
+			state.backgroundWallpaper = wallpaper
+		}
 	}
 	done := make(chan struct{})
 	ctx, cancel := context.WithCancel(context.Background())
@@ -150,28 +152,34 @@ func (state *screenshotEditorOverlayState) prepareWindowBackground() {
 		defer state.backgroundWorkers.Done()
 		defer close(done)
 		defer cancel()
-		select {
-		case <-ctx.Done():
-			return
-		case <-wallpaper.done:
+		var pixels image.Image
+		var err error
+		if existingBackground == nil {
+			select {
+			case <-ctx.Done():
+				return
+			case <-wallpaper.done:
+			}
+			pixels, err = wallpaper.result()
 		}
-		pixels, err := wallpaper.result()
 		state.mu.Lock()
 		current := !state.backgroundClosed && generation == state.windowCaptureGeneration && state.hasSelection && state.selection == selection
 		state.mu.Unlock()
 		if !current || ctx.Err() != nil {
 			return
 		}
-		var background *image.RGBA
+		background := existingBackground
 		var preview *Image
 		if err == nil {
 			clip, clipErr := screenshotEditorPixelSelection(source.Bounds(), selection, frame)
 			err = clipErr
 			if err == nil {
-				padding := screenshotWindowBackgroundPadding(source.Bounds(), selection, frame, scale)
-				background = fitScreenshotWallpaper(pixels, clip.Size().Add(padding.Mul(2)))
-				if ctx.Err() != nil {
-					return
+				if background == nil {
+					padding := screenshotWindowBackgroundPadding(source.Bounds(), selection, frame, scale)
+					background = fitScreenshotWallpaper(pixels, clip.Size().Add(padding.Mul(2)))
+					if ctx.Err() != nil {
+						return
+					}
 				}
 				preview, err = newScreenshotEditorImage(composeScreenshotWindowBackgroundPreview(source, clip, background))
 			}
@@ -191,8 +199,10 @@ func (state *screenshotEditorOverlayState) prepareWindowBackground() {
 			state.backgroundWallpaper = nil
 		}
 		state.mu.Unlock()
-		if current {
+		if current && wallpaper != nil {
 			wallpaper.close()
+			pixels = nil
+			scheduleScreenshotMemoryRelease()
 		}
 		if err != nil && !errors.Is(err, context.Canceled) {
 			util.GetLogger().Warn(context.Background(), "screenshot wallpaper: "+err.Error())
@@ -276,9 +286,217 @@ func screenshotWindowBackgroundPadding(bounds image.Rectangle, selection Rect, f
 func fitScreenshotWallpaper(pixels image.Image, size image.Point) *image.RGBA {
 	result := image.NewRGBA(image.Rectangle{Max: size})
 	draw.Draw(result, result.Bounds(), image.NewUniform(color.RGBA{R: 24, G: 29, B: 38, A: 255}), image.Point{}, draw.Src)
-	stage := imaging.Fill(pixels, size.X, size.Y, imaging.Center, imaging.CatmullRom)
-	draw.Draw(result, result.Bounds(), stage, stage.Bounds().Min, draw.Over)
+	if pixels == nil || pixels.Bounds().Empty() || size.X <= 0 || size.Y <= 0 {
+		return result
+	}
+	srcBounds := pixels.Bounds()
+	srcW, srcH := srcBounds.Dx(), srcBounds.Dy()
+	var cropW, cropH int
+	if int64(srcW)*int64(size.Y) > int64(size.X)*int64(srcH) {
+		cropH = srcH
+		cropW = max(1, min(srcW, int(math.Round(float64(srcH)*float64(size.X)/float64(size.Y)))))
+	} else {
+		cropW = srcW
+		cropH = max(1, min(srcH, int(math.Round(float64(srcW)*float64(size.Y)/float64(size.X)))))
+	}
+	x0 := srcBounds.Min.X + (srcW-cropW)/2
+	y0 := srcBounds.Min.Y + (srcH-cropH)/2
+	cropRect := image.Rect(x0, y0, x0+cropW, y0+cropH)
+	scaleImageCatmullRom(result, pixels, cropRect, true)
 	return result
+}
+
+type scaleDistribEntry struct {
+	start   int
+	end     int
+	weights []float32
+}
+
+func catmullRomKernel(t float64) float64 {
+	if t < 0 {
+		t = -t
+	}
+	if t < 1 {
+		return (1.5*t-2.5)*t*t + 1
+	}
+	if t < 2 {
+		return ((-0.5*t+2.5)*t-4)*t + 2
+	}
+	return 0
+}
+
+func buildCatmullRomDistrib(dstLen, srcLen int) []scaleDistribEntry {
+	entries := make([]scaleDistribEntry, dstLen)
+	scale := float64(srcLen) / float64(dstLen)
+	halfWidth := 2.0
+	argScale := 1.0
+	if scale > 1 {
+		halfWidth = 2.0 * scale
+		argScale = 1.0 / scale
+	}
+	for d := 0; d < dstLen; d++ {
+		center := (float64(d)+0.5)*scale - 0.5
+		start := max(0, int(math.Floor(center-halfWidth)))
+		end := min(srcLen, int(math.Ceil(center+halfWidth)))
+		if start >= end {
+			nearest := max(0, min(srcLen-1, int(math.Round(center))))
+			entries[d] = scaleDistribEntry{start: nearest, end: nearest + 1, weights: []float32{1}}
+			continue
+		}
+		weights := make([]float32, end-start)
+		total := 0.0
+		for s := start; s < end; s++ {
+			weight := catmullRomKernel((float64(s) - center) * argScale)
+			weights[s-start] = float32(weight)
+			total += weight
+		}
+		if total == 0 {
+			nearest := max(0, min(srcLen-1, int(math.Round(center))))
+			entries[d] = scaleDistribEntry{start: nearest, end: nearest + 1, weights: []float32{1}}
+			continue
+		}
+		inv := float32(1.0 / total)
+		for i := range weights {
+			weights[i] *= inv
+		}
+		entries[d] = scaleDistribEntry{start: start, end: end, weights: weights}
+	}
+	return entries
+}
+
+func readScaledSourceRow(dst []float32, src image.Image, minX, y, width int) {
+	switch raster := src.(type) {
+	case *image.RGBA:
+		pix := raster.Pix[raster.PixOffset(minX, y):]
+		for x := 0; x < width; x++ {
+			off := x * 4
+			dst[off], dst[off+1], dst[off+2], dst[off+3] = float32(pix[off]), float32(pix[off+1]), float32(pix[off+2]), float32(pix[off+3])
+		}
+	case *image.NRGBA:
+		pix := raster.Pix[raster.PixOffset(minX, y):]
+		for x := 0; x < width; x++ {
+			off := x * 4
+			alpha := pix[off+3]
+			if alpha == 255 {
+				dst[off], dst[off+1], dst[off+2], dst[off+3] = float32(pix[off]), float32(pix[off+1]), float32(pix[off+2]), 255
+			} else if alpha == 0 {
+				dst[off], dst[off+1], dst[off+2], dst[off+3] = 0, 0, 0, 0
+			} else {
+				factor := float32(alpha) / 255.0
+				dst[off], dst[off+1], dst[off+2], dst[off+3] = float32(pix[off])*factor, float32(pix[off+1])*factor, float32(pix[off+2])*factor, float32(alpha)
+			}
+		}
+	case *image.YCbCr:
+		for x := 0; x < width; x++ {
+			yi := raster.YOffset(minX+x, y)
+			ci := raster.COffset(minX+x, y)
+			r, g, b := color.YCbCrToRGB(raster.Y[yi], raster.Cb[ci], raster.Cr[ci])
+			off := x * 4
+			dst[off], dst[off+1], dst[off+2], dst[off+3] = float32(r), float32(g), float32(b), 255
+		}
+	default:
+		const scale = float32(1.0 / 257.0)
+		for x := 0; x < width; x++ {
+			r, g, b, a := src.At(minX+x, y).RGBA()
+			off := x * 4
+			dst[off], dst[off+1], dst[off+2], dst[off+3] = float32(r)*scale, float32(g)*scale, float32(b)*scale, float32(a)*scale
+		}
+	}
+}
+
+func clampScaledByte(value float32, limit uint8) uint8 {
+	if value <= 0 {
+		return 0
+	}
+	maxVal := float32(limit)
+	if value >= maxVal {
+		return limit
+	}
+	return uint8(value + 0.5)
+}
+
+// scaleImageCatmullRom resamples srcRect into dst using a rolling-row ring buffer so large
+// wallpapers never allocate a full dstW*srcH float64 intermediate slice.
+func scaleImageCatmullRom(dst *image.RGBA, src image.Image, srcRect image.Rectangle, over bool) {
+	if dst == nil || dst.Bounds().Empty() || src == nil {
+		return
+	}
+	srcRect = srcRect.Intersect(src.Bounds())
+	if srcRect.Empty() {
+		return
+	}
+	dstBounds := dst.Bounds()
+	dstW, dstH := dstBounds.Dx(), dstBounds.Dy()
+	srcW, srcH := srcRect.Dx(), srcRect.Dy()
+	xDistrib := buildCatmullRomDistrib(dstW, srcW)
+	yDistrib := buildCatmullRomDistrib(dstH, srcH)
+
+	maxWindow := 1
+	for _, yr := range yDistrib {
+		if span := yr.end - yr.start; span > maxWindow {
+			maxWindow = span
+		}
+	}
+	srcRow := make([]float32, srcW*4)
+	ring := make([]float32, maxWindow*dstW*4)
+	ringRow := make([]int, maxWindow)
+	for i := range ringRow {
+		ringRow[i] = -1
+	}
+
+	for dy := 0; dy < dstH; dy++ {
+		yr := yDistrib[dy]
+		for sy := yr.start; sy < yr.end; sy++ {
+			slot := sy % maxWindow
+			if ringRow[slot] == sy {
+				continue
+			}
+			readScaledSourceRow(srcRow, src, srcRect.Min.X, srcRect.Min.Y+sy, srcW)
+			out := ring[slot*dstW*4 : (slot+1)*dstW*4]
+			for dx := 0; dx < dstW; dx++ {
+				xr := xDistrib[dx]
+				var r, g, b, a float32
+				for i, w := range xr.weights {
+					off := (xr.start + i) * 4
+					r += srcRow[off] * w
+					g += srcRow[off+1] * w
+					b += srcRow[off+2] * w
+					a += srcRow[off+3] * w
+				}
+				dOff := dx * 4
+				out[dOff], out[dOff+1], out[dOff+2], out[dOff+3] = r, g, b, a
+			}
+			ringRow[slot] = sy
+		}
+
+		dstOff := dst.PixOffset(dstBounds.Min.X, dstBounds.Min.Y+dy)
+		dstPix := dst.Pix[dstOff : dstOff+dstW*4]
+		for dx := 0; dx < dstW; dx++ {
+			var r, g, b, a float32
+			for i, w := range yr.weights {
+				slot := (yr.start + i) % maxWindow
+				in := ring[(slot*dstW+dx)*4:]
+				r += in[0] * w
+				g += in[1] * w
+				b += in[2] * w
+				a += in[3] * w
+			}
+			sa := clampScaledByte(a, 255)
+			sr := clampScaledByte(r, sa)
+			sg := clampScaledByte(g, sa)
+			sb := clampScaledByte(b, sa)
+			dOff := dx * 4
+			if !over || sa == 255 {
+				dstPix[dOff], dstPix[dOff+1], dstPix[dOff+2], dstPix[dOff+3] = sr, sg, sb, sa
+			} else if sa > 0 {
+				invA := uint32(255 - sa)
+				dstPix[dOff] = uint8(min(255, uint32(sr)+(uint32(dstPix[dOff])*invA+127)/255))
+				dstPix[dOff+1] = uint8(min(255, uint32(sg)+(uint32(dstPix[dOff+1])*invA+127)/255))
+				dstPix[dOff+2] = uint8(min(255, uint32(sb)+(uint32(dstPix[dOff+2])*invA+127)/255))
+				dstPix[dOff+3] = uint8(min(255, uint32(sa)+(uint32(dstPix[dOff+3])*invA+127)/255))
+			}
+		}
+	}
 }
 
 // composeScreenshotWindowBackground centers capture pixels and rounds only the outer composited canvas.
@@ -309,18 +527,20 @@ func composeScreenshotWindowBackground(window image.Image, background *image.RGB
 	return result
 }
 
-// composeScreenshotWindowBackgroundPreview freezes the dimmed desktop and capture canvas into one renderer image.
-// Drawing them separately alternates two oversized images through the renderer's single large-image cache slot.
+// composeScreenshotWindowBackgroundPreview builds only the padded, rounded capture card so the
+// editor can draw it over the already-cached desktop image without a full-desktop copy.
 func composeScreenshotWindowBackgroundPreview(source image.Image, clip image.Rectangle, background *image.RGBA) *image.RGBA {
-	preview := image.NewRGBA(source.Bounds())
-	copyScreenshotCapture(preview, source, source.Bounds().Min)
-	// Compose from detached pixels before dimming so freeform captures retain their original colors.
-	canvas := composeScreenshotWindowBackground(preview.SubImage(clip), background)
-	draw.Draw(preview, preview.Bounds(), image.NewUniform(color.RGBA{A: screenshotEditorDimAlpha}), image.Point{}, draw.Over)
-	padding := background.Bounds().Size().Sub(clip.Size()).Div(2)
-	origin := clip.Min.Sub(padding)
-	draw.Draw(preview, image.Rectangle{Min: origin, Max: origin.Add(canvas.Bounds().Size())}, canvas, canvas.Bounds().Min, draw.Over)
-	return preview
+	if capture, ok := source.(*screenshotWindowCaptureImage); ok && capture.window != nil && capture.window.Rect == clip {
+		return composeScreenshotWindowBackground(capture.window, background)
+	}
+	if sub, ok := source.(interface {
+		SubImage(image.Rectangle) image.Image
+	}); ok {
+		return composeScreenshotWindowBackground(sub.SubImage(clip), background)
+	}
+	cropped := image.NewRGBA(image.Rectangle{Max: clip.Size()})
+	copyScreenshotCapture(cropped, source, clip.Min)
+	return composeScreenshotWindowBackground(cropped, background)
 }
 
 // backgroundCaptureSourceLocked preserves native alpha only while the original window selection is intact.

@@ -191,9 +191,9 @@ type screenshotEditorOverlayState struct {
 	selectionDragged  bool
 	// Native window pixels are export-only; any selection change cancels their use.
 	originalSource      image.Image
-	windowSource        *image.RGBA
+	windowSource        *screenshotWindowCaptureImage
 	backgroundSource    *image.RGBA
-	backgroundPreview   *Image // Full editor raster, including the dimmed desktop behind the padded capture.
+	backgroundPreview   *Image // Cropped padded capture card drawn over the cached dimmed desktop.
 	showBackground      bool
 	backgroundLoading   bool
 	backgroundFailed    bool
@@ -452,11 +452,6 @@ func runScreenshotEditor(options ScreenshotOptions, source image.Image, platform
 	if source == nil || platform.setWindowBounds == nil || platform.logicalSelection == nil || (platform.document == nil && platform.captureDesktop == nil) {
 		return ScreenshotResult{}, errors.New("screenshot editor platform is incomplete")
 	}
-	var wallpaper *screenshotWallpaperLoad
-	if !options.AutoConfirm && !options.HideAnnotationToolbar && platform.initialBackgroundSource == nil {
-		wallpaper = preloadScreenshotWallpaper(loadScreenshotWallpaper)
-		defer wallpaper.close()
-	}
 	uiImage, err := newScreenshotEditorImage(source)
 	if err != nil {
 		return ScreenshotResult{}, fmt.Errorf("prepare screenshot overlay image: %w", err)
@@ -466,7 +461,6 @@ func runScreenshotEditor(options ScreenshotOptions, source image.Image, platform
 	state.startObjectSelection()
 	defer state.stopObjectSelection()
 	state.originalSource = source
-	state.backgroundWallpaper = wallpaper
 	defer state.releaseWindowBackground()
 	if platform.initialWindowSource != nil && platform.initialSelection != nil {
 		if err := state.installWindowCapture(*platform.initialSelection, platform.initialWindowSource); err != nil {
@@ -474,16 +468,18 @@ func runScreenshotEditor(options ScreenshotOptions, source image.Image, platform
 		}
 	}
 	if platform.initialBackgroundSource != nil && state.hasSelection {
-		clip, err := screenshotEditorPixelSelection(source.Bounds(), state.selection, state.frameSize)
-		if err != nil {
-			return ScreenshotResult{}, err
-		}
 		state.backgroundSource = platform.initialBackgroundSource
-		state.backgroundPreview, err = newScreenshotEditorImage(composeScreenshotWindowBackgroundPreview(state.backgroundCaptureSourceLocked(), clip, state.backgroundSource))
-		if err != nil {
-			return ScreenshotResult{}, err
-		}
 		state.showBackground = platform.document != nil && platform.document.ShowBackground
+		if state.showBackground {
+			clip, err := screenshotEditorPixelSelection(source.Bounds(), state.selection, state.frameSize)
+			if err != nil {
+				return ScreenshotResult{}, err
+			}
+			state.backgroundPreview, err = newScreenshotEditorImage(composeScreenshotWindowBackgroundPreview(state.backgroundCaptureSourceLocked(), clip, state.backgroundSource))
+			if err != nil {
+				return ScreenshotResult{}, err
+			}
+		}
 	}
 	if platform.document == nil {
 		state.startScrolling = func() { state.beginScrollingCapture(source, platform) }
@@ -544,9 +540,6 @@ func runScreenshotEditor(options ScreenshotOptions, source image.Image, platform
 	}
 	if openErr != nil {
 		return ScreenshotResult{}, openErr
-	}
-	if wallpaper != nil {
-		state.prepareWindowBackground()
 	}
 	state.startCaretBlink()
 	defer state.stopCaretBlink()
@@ -1049,11 +1042,7 @@ func (state *screenshotEditorOverlayState) draw(displayList *DisplayList, frame 
 	displayList.Clear(Color{A: 255})
 	frameRect := Rect{Width: frame.Size.Width, Height: frame.Size.Height}
 	hasBackgroundPreview := backgroundEnabled && backgroundImage != nil
-	if hasBackgroundPreview {
-		displayList.DrawImage(backgroundImage, frameRect)
-	} else {
-		displayList.DrawImage(previewImage, frameRect)
-	}
+	displayList.DrawImage(previewImage, frameRect)
 	dim := Color{A: screenshotEditorDimAlpha}
 	if !hasSelection || selection.Width <= 0 || selection.Height <= 0 {
 		state.publishSizeLabel(Rect{}, "")
@@ -1063,9 +1052,13 @@ func (state *screenshotEditorOverlayState) draw(displayList *DisplayList, frame 
 		}
 		return
 	}
-	if !hasBackgroundPreview {
-		// Adjacent translucent bands leave bright seams where their antialiased edges meet.
-		displayList.FillRect(frameRect, dim)
+	// Adjacent translucent bands leave bright seams where their antialiased edges meet.
+	displayList.FillRect(frameRect, dim)
+	if hasBackgroundPreview {
+		// Clip to the editor surface when off-screen wallpaper padding extends beyond the desktop.
+		displayList.PushClipRect(frameRect)
+		displayList.DrawImage(backgroundImage, backgroundBounds)
+		displayList.PopClipRect()
 	}
 	displayList.PushClipRect(selection)
 	if !hasBackgroundPreview {
@@ -2444,15 +2437,12 @@ func (state *screenshotEditorOverlayState) pointer(event PointerEvent) {
 				state.windowCaptureDone = captureDone
 				state.windowSelection = &selection
 			}
-			prepareBackground := state.hasSelection && !autoConfirm && state.backgroundWallpaper != nil
 			state.mu.Unlock()
 			state.invalidate()
 			if captureDone != nil {
 				go state.captureSelectedWindow(selection, generation, captureDone, autoConfirm)
 			} else if autoConfirm {
 				state.complete(false)
-			} else if prepareBackground {
-				state.prepareWindowBackground()
 			}
 			return
 		}

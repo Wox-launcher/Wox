@@ -79,3 +79,64 @@ func TestWindowsImageCacheBudget(t *testing.T) {
 		t.Fatalf("unexpected bounded cache activity: %+v", stats)
 	}
 }
+
+// TestWindowsLargeImageCache retains up to two oversized screenshot bitmaps across frames without
+// evicting normal textures or re-uploading every frame.
+func TestWindowsLargeImageCache(t *testing.T) {
+	r, err := newWindowsOffscreenRenderer(64, 64)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(r.destroy)
+
+	const width, height = 4096, 2160
+	const largeBytes = int64(width * height * 4)
+	first, err := NewImage(image.NewRGBA(image.Rect(0, 0, width, height)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := NewImage(image.NewRGBA(image.Rect(0, 0, width, height)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	third, err := NewImage(image.NewRGBA(image.Rect(0, 0, width, height)))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	d := &DisplayList{}
+	d.DrawImage(first, Rect{Width: 64, Height: 64})
+	d.DrawImage(second, Rect{Width: 64, Height: 64})
+	if err := r.render(d, 1); err != nil {
+		t.Fatal(err)
+	}
+	stats := r.resourceStats()
+	if stats.ImageUploads != 2 || stats.CacheHits != 0 || stats.ResidentBytes != 2*largeBytes {
+		t.Fatalf("frame 0: %+v, want uploads=2 hits=0 bytes=%d", stats, 2*largeBytes)
+	}
+
+	if err := r.render(d, 1); err != nil {
+		t.Fatal(err)
+	}
+	stats = r.resourceStats()
+	if stats.ImageUploads != 0 || stats.CacheHits != 2 || stats.ResidentBytes != 2*largeBytes {
+		t.Fatalf("frame 1: %+v, want uploads=0 hits=2 bytes=%d", stats, 2*largeBytes)
+	}
+
+	d2 := &DisplayList{}
+	d2.DrawImage(third, Rect{Width: 64, Height: 64})
+	if err := r.render(d2, 1); err != nil {
+		t.Fatal(err)
+	}
+	stats = r.resourceStats()
+	if stats.ImageUploads != 1 || stats.CacheEvictions != 1 || stats.ResidentBytes != 2*largeBytes {
+		t.Fatalf("frame 2: %+v, want uploads=1 evictions=1 bytes=%d", stats, 2*largeBytes)
+	}
+
+	if err := r.clearImageCache(); err != nil {
+		t.Fatal(err)
+	}
+	if r.residentBytes() != 0 {
+		t.Fatalf("clearing cache retained large image: %d", r.residentBytes())
+	}
+}

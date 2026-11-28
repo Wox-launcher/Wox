@@ -185,6 +185,7 @@ func prepareScreenshotDocumentSave(path string, source, composited image.Image, 
 		// A completed job may remain with its result; release all rasters instead of retaining the desktop and wallpaper.
 		saved = true
 		detachedSource, cursor, composited, window, background = nil, nil, nil, nil, nil
+		scheduleScreenshotMemoryRelease()
 		return nil
 	}, nil
 }

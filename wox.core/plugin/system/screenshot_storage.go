@@ -190,10 +190,9 @@ func (p *ScreenshotPlugin) beginScreenshotStorageUseLocked() (string, *sync.Wait
 }
 
 // runScreenshotStorageTask extends a capture's lease through its deferred scene/OCR writes.
-func (p *ScreenshotPlugin) runScreenshotStorageTask(jobs *sync.WaitGroup, message string, job func(context.Context)) {
+func (p *ScreenshotPlugin) runScreenshotStorageTask(jobs *sync.WaitGroup, message string, job func(context.Context)) bool {
 	if jobs == nil {
-		p.runScreenshotBackgroundTask(message, job)
-		return
+		return p.runScreenshotBackgroundTask(message, job)
 	}
 	jobs.Add(1)
 	if !p.runScreenshotBackgroundTask(message, func(ctx context.Context) {
@@ -201,7 +200,9 @@ func (p *ScreenshotPlugin) runScreenshotStorageTask(jobs *sync.WaitGroup, messag
 		job(ctx)
 	}) {
 		jobs.Done()
+		return false
 	}
+	return true
 }
 
 // startScreenshotTransfer waits only for the previous generation; new captures use

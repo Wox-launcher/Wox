@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	runtimedebug "runtime/debug"
 	"sort"
 	"strconv"
 	"strings"
@@ -25,6 +26,7 @@ import (
 	"wox/util"
 	"wox/util/ocr"
 	"wox/util/overlay/imageoverlay"
+	"wox/util/processmemory"
 	"wox/util/screenshotedit"
 	"wox/util/shell"
 
@@ -734,11 +736,17 @@ func (p *ScreenshotPlugin) removeScreenshotOCRSidecar(ctx context.Context, scree
 	}
 }
 
-func (p *ScreenshotPlugin) scheduleScreenshotOCR(screenshotPath string, jobs *sync.WaitGroup) {
+func (p *ScreenshotPlugin) scheduleScreenshotOCR(screenshotPath string, jobs *sync.WaitGroup, doneWG *sync.WaitGroup) {
 	// OCR runs after the screenshot file is already durable. The old history path had no text index,
 	// but blocking screenshot completion on platform OCR would make capture feel unreliable on
 	// machines where Windows/macOS OCR models are missing or still warming up.
-	p.runScreenshotStorageTask(jobs, "recognize screenshot text", func(runtimeCtx context.Context) {
+	if doneWG != nil {
+		doneWG.Add(1)
+	}
+	started := p.runScreenshotStorageTask(jobs, "recognize screenshot text", func(runtimeCtx context.Context) {
+		if doneWG != nil {
+			defer doneWG.Done()
+		}
 		if !p.isScreenshotOCREnabled(runtimeCtx) {
 			return
 		}
@@ -753,6 +761,9 @@ func (p *ScreenshotPlugin) scheduleScreenshotOCR(screenshotPath string, jobs *sy
 			p.api.Log(runtimeCtx, plugin.LogLevelWarning, fmt.Sprintf("failed to recognize screenshot text: path=%s err=%s", screenshotPath, err.Error()))
 		}
 	})
+	if !started && doneWG != nil {
+		doneWG.Done()
+	}
 }
 
 func (p *ScreenshotPlugin) writeScreenshotOCRSidecar(ctx context.Context, screenshotPath string) error {
@@ -1030,7 +1041,17 @@ func (p *ScreenshotPlugin) runScreenshotRequest(ctx context.Context, editPath st
 
 	switch result.Status {
 	case common.CaptureScreenshotStatusCompleted:
-		defer p.saveScreenshotSceneInBackground(result.ScreenshotPath, result.SaveEditableScene, jobs)
+		var postCaptureWG sync.WaitGroup
+		// Registered first (runs last in LIFO) so scene, thumbnail, and OCR jobs all register
+		// on postCaptureWG before the cleanup goroutine begins waiting.
+		defer func() {
+			util.Go(util.NewTraceContext(), "release screenshot memory", func() {
+				postCaptureWG.Wait()
+				runtimedebug.FreeOSMemory()
+				_ = processmemory.ReleaseIdleNativeHeap()
+			})
+		}()
+		defer p.saveScreenshotSceneWithTracker(result.ScreenshotPath, result.SaveEditableScene, jobs, &postCaptureWG)
 		if result.EditableSceneWarning != "" {
 			util.GetLogger().Warn(ctx, "failed to save screenshot scene: "+result.EditableSceneWarning)
 			defer p.api.ShowToastMsg(ctx, plugin.ShowToastMsgOption{Message: "i18n:plugin_screenshot_edit_save_failed"})
@@ -1053,12 +1074,16 @@ func (p *ScreenshotPlugin) runScreenshotRequest(ctx context.Context, editPath st
 			return
 		}
 		screenshotPath := result.ScreenshotPath
-		p.runScreenshotStorageTask(jobs, "generate screenshot history thumbnails", func(runtimeCtx context.Context) {
+		postCaptureWG.Add(1)
+		if !p.runScreenshotStorageTask(jobs, "generate screenshot history thumbnails", func(runtimeCtx context.Context) {
+			defer postCaptureWG.Done()
 			if err := p.ensureScreenshotHistoryThumbnailsForPath(runtimeCtx, screenshotPath); err != nil {
 				p.api.Log(runtimeCtx, plugin.LogLevelWarning, fmt.Sprintf("failed to generate screenshot history thumbnails: path=%s err=%s", screenshotPath, err.Error()))
 			}
-		})
-		p.scheduleScreenshotOCR(result.ScreenshotPath, jobs)
+		}) {
+			postCaptureWG.Done()
+		}
+		p.scheduleScreenshotOCR(result.ScreenshotPath, jobs, &postCaptureWG)
 		if result.ExtraActionID == screenshotAIExtraActionID {
 			plugin.InvokePluginToolAndNotify(ctx, p.api, plugin.InvokePluginToolOption{
 				PluginId:  common.AIChatPluginID,

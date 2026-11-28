@@ -2,9 +2,12 @@ package screenshot
 
 import (
 	"errors"
+	runtimedebug "runtime/debug"
+	"sync/atomic"
 	"wox/common"
 	woxcomponent "wox/ui/launcher/component"
 	woxui "wox/ui/runtime"
+	"wox/util/processmemory"
 	"wox/util/screen"
 )
 
@@ -132,30 +135,54 @@ type ScreenshotResult struct {
 	ExtraActionID string
 }
 
+var screenshotMemoryReleasePending atomic.Bool
+
+// scheduleScreenshotMemoryRelease returns idle Go and native heap pages after a capture's
+// desktop-sized rasters are dropped instead of waiting for the launcher hide timer.
+func scheduleScreenshotMemoryRelease() {
+	if !screenshotMemoryReleasePending.CompareAndSwap(false, true) {
+		return
+	}
+	go func() {
+		screenshotMemoryReleasePending.Store(false)
+		runtimedebug.FreeOSMemory()
+		_ = processmemory.ReleaseIdleNativeHeap()
+	}()
+}
+
 // CaptureScreenshot runs the native desktop capture and Go-rendered selection surface.
 func CaptureScreenshot(options ScreenshotOptions) (ScreenshotResult, error) {
+	var (
+		result ScreenshotResult
+		err    error
+	)
 	if options.EditScreenshotPath != "" {
-		return editSavedScreenshot(options)
-	}
-	if options.AllowVideoRecording {
-		if recording, ok := activeScreenshotRecordings.Load(options.WindowManager); ok {
-			var handled bool
-			if err := Call(func() { handled = recording.stopFromCaptureCommand() }); err != nil {
-				return ScreenshotResult{}, err
-			}
-			if handled {
-				// The original request still owns the preview and eventual export.
-				return ScreenshotResult{Cancelled: true}, nil
-			}
-		}
-	}
-	// Freeze monitor geometry for both selection fallback and editable scenes before the capture overlays appear.
-	displays, err := screen.ListDisplays()
-	if err == nil {
-		options.capturedDisplays = screenshotDisplayLayout(displays)
+		result, err = editSavedScreenshot(options)
+	} else {
+		var handled bool
 		if options.AllowVideoRecording {
-			options.recordingDisplays = displays
+			if recording, ok := activeScreenshotRecordings.Load(options.WindowManager); ok {
+				if callErr := Call(func() { handled = recording.stopFromCaptureCommand() }); callErr != nil {
+					return ScreenshotResult{}, callErr
+				}
+				if handled {
+					// The original request still owns the preview and eventual export.
+					return ScreenshotResult{Cancelled: true}, nil
+				}
+			}
 		}
+		// Freeze monitor geometry for both selection fallback and editable scenes before the capture overlays appear.
+		displays, listErr := screen.ListDisplays()
+		if listErr == nil {
+			options.capturedDisplays = screenshotDisplayLayout(displays)
+			if options.AllowVideoRecording {
+				options.recordingDisplays = displays
+			}
+		}
+		result, err = captureScreenshotPlatform(options)
 	}
-	return captureScreenshotPlatform(options)
+	if result.SaveEditableScene == nil {
+		scheduleScreenshotMemoryRelease()
+	}
+	return result, err
 }

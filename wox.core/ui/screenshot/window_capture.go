@@ -4,11 +4,71 @@ import (
 	"context"
 	"errors"
 	"image"
+	"image/color"
 	"image/draw"
 
-	xdraw "golang.org/x/image/draw"
 	"wox/util"
 )
+
+// screenshotWindowCaptureImage overlays a cropped native window capture onto the desktop
+// coordinate space without copying the full desktop bitmap.
+type screenshotWindowCaptureImage struct {
+	bounds   image.Rectangle
+	window   *image.RGBA
+	fallback image.Image
+}
+
+func (img *screenshotWindowCaptureImage) ColorModel() color.Model {
+	return color.RGBAModel
+}
+
+func (img *screenshotWindowCaptureImage) Bounds() image.Rectangle {
+	return img.bounds
+}
+
+func (img *screenshotWindowCaptureImage) At(x, y int) color.Color {
+	return img.RGBAAt(x, y)
+}
+
+func (img *screenshotWindowCaptureImage) RGBAAt(x, y int) color.RGBA {
+	if img.window != nil && image.Pt(x, y).In(img.window.Rect) {
+		return img.window.RGBAAt(x, y)
+	}
+	if img.fallback == nil {
+		return color.RGBA{}
+	}
+	if rgba, ok := img.fallback.(interface{ RGBAAt(int, int) color.RGBA }); ok {
+		return rgba.RGBAAt(x, y)
+	}
+	return color.RGBAModel.Convert(img.fallback.At(x, y)).(color.RGBA)
+}
+
+// WriteRGBA fills dst from origin while overlaying the cropped native window without a full-desktop copy.
+func (img *screenshotWindowCaptureImage) WriteRGBA(dst *image.RGBA, origin image.Point) {
+	if dst == nil {
+		return
+	}
+	requested := image.Rectangle{Min: origin, Max: origin.Add(dst.Bounds().Size())}
+	if img.window != nil && requested.In(img.window.Rect) {
+		draw.Draw(dst, dst.Bounds(), img.window, origin, draw.Src)
+		return
+	}
+	if img.fallback != nil {
+		copyScreenshotCapture(dst, img.fallback, origin)
+	}
+	if img.window == nil {
+		return
+	}
+	overlap := requested.Intersect(img.window.Rect)
+	if overlap.Empty() {
+		return
+	}
+	dstRect := image.Rectangle{
+		Min: dst.Bounds().Min.Add(overlap.Min.Sub(origin)),
+		Max: dst.Bounds().Min.Add(overlap.Max.Sub(origin)),
+	}
+	draw.Draw(dst, dstRect, img.window, overlap.Min, draw.Src)
+}
 
 // captureSelectedWindow keeps compositor waits off the UI thread and rejects captures from an abandoned gesture.
 func (state *screenshotEditorOverlayState) captureSelectedWindow(selection Rect, generation uint64, done chan struct{}, autoConfirm bool) {
@@ -22,15 +82,11 @@ func (state *screenshotEditorOverlayState) captureSelectedWindow(selection Rect,
 	if current && err != nil {
 		state.windowSelection = nil
 	}
-	prepareBackground := current && !autoConfirm && state.backgroundWallpaper != nil
 	state.mu.Unlock()
 	if err != nil {
 		util.GetLogger().Debug(context.Background(), "screenshot native window capture: "+err.Error())
 	}
 	if current {
-		if prepareBackground {
-			state.prepareWindowBackground()
-		}
 		state.invalidate()
 		if autoConfirm {
 			state.complete(false)
@@ -39,7 +95,6 @@ func (state *screenshotEditorOverlayState) captureSelectedWindow(selection Rect,
 }
 
 // installWindowCapture prepares native pixels for export without changing the frozen desktop shown during editing.
-// Src replaces background pixels at transparent edges instead of blending them into the window capture.
 func (state *screenshotEditorOverlayState) installWindowCapture(selection Rect, pixels *image.RGBA) error {
 	if pixels == nil || pixels.Bounds().Empty() || state.originalSource == nil {
 		return errors.New("window capture has no pixels")
@@ -49,15 +104,20 @@ func (state *screenshotEditorOverlayState) installWindowCapture(selection Rect, 
 	if err != nil {
 		return err
 	}
-	source := image.NewRGBA(original.Bounds())
-	copyScreenshotCapture(source, original, original.Bounds().Min)
+	var window *image.RGBA
 	if clip.Size() == pixels.Bounds().Size() {
-		draw.Draw(source, clip, pixels, pixels.Bounds().Min, draw.Src)
+		start := pixels.PixOffset(pixels.Rect.Min.X, pixels.Rect.Min.Y)
+		window = &image.RGBA{Pix: pixels.Pix[start:], Stride: pixels.Stride, Rect: clip}
 	} else {
 		// Native backing resolution can differ from the display owning a clipped cross-display window.
-		xdraw.CatmullRom.Scale(source, clip, pixels, pixels.Bounds(), draw.Src, nil)
+		window = image.NewRGBA(clip)
+		scaleImageCatmullRom(window, pixels, pixels.Bounds(), false)
 	}
-	state.windowSource = source
+	state.windowSource = &screenshotWindowCaptureImage{
+		bounds:   original.Bounds(),
+		window:   window,
+		fallback: original,
+	}
 	state.windowSelection = &selection
 	return nil
 }
@@ -87,6 +147,11 @@ func clipScreenshotWindowAlpha(output *image.RGBA, source image.Image, selection
 		return
 	}
 	raster, _ := source.(*image.RGBA)
+	if raster == nil {
+		if capture, ok := source.(*screenshotWindowCaptureImage); ok && capture.window != nil && clip.In(capture.window.Rect) {
+			raster = capture.window
+		}
+	}
 	for y := 0; y < output.Bounds().Dy(); y++ {
 		offset := output.PixOffset(output.Rect.Min.X, output.Rect.Min.Y+y)
 		row := output.Pix[offset : offset+output.Bounds().Dx()*4]

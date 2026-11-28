@@ -47,13 +47,11 @@ func TestScreenshotRegionBackground(t *testing.T) {
 			state.mu.Lock()
 			done := state.backgroundDone
 			state.mu.Unlock()
-			select {
-			case <-done:
-			case <-time.After(5 * time.Second):
-				t.Fatal("freeform selection did not prepare the preloaded background")
+			if done != nil || state.backgroundSource != nil || state.backgroundPreview != nil {
+				t.Fatal("freeform selection eagerly prepared background before toggle")
 			}
-			if state.selection != selection || state.windowSelection != nil || state.windowSource != nil || state.showBackground || state.backgroundSource == nil {
-				t.Fatal("freeform preparation changed selection, enabled the effect, or installed native alpha")
+			if state.selection != selection || state.windowSelection != nil || state.windowSource != nil || state.showBackground {
+				t.Fatal("freeform selection changed selection, enabled the effect, or installed native alpha")
 			}
 			state.draw(&DisplayList{}, FrameInfo{Size: frame})
 			button := state.backgroundRect
@@ -61,7 +59,15 @@ func TestScreenshotRegionBackground(t *testing.T) {
 				t.Fatalf("freeform background button has invalid bounds: %+v", button)
 			}
 			state.pointer(PointerEvent{Kind: PointerDown, Button: PointerButtonPrimary, Position: Point{X: button.X + button.Width/2, Y: button.Y + button.Height/2}})
-			if !state.showBackground || state.image != preview || state.selection != selection {
+			state.mu.Lock()
+			done = state.backgroundDone
+			state.mu.Unlock()
+			select {
+			case <-done:
+			case <-time.After(5 * time.Second):
+				t.Fatal("background toggle did not prepare the preloaded background")
+			}
+			if !state.showBackground || state.backgroundSource == nil || state.backgroundPreview == nil || state.image != preview || state.selection != selection {
 				t.Fatal("background toggle changed frozen capture or underlying crop")
 			}
 			outer := state.selectionBoundsLocked()

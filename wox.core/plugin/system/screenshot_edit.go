@@ -17,10 +17,20 @@ import (
 // saveScreenshotSceneInBackground lets the image reach history and clipboard before encoding the full desktop.
 // Plugin unload already waits for these tasks, so a normal shutdown does not abandon an active archive write.
 func (p *ScreenshotPlugin) saveScreenshotSceneInBackground(path string, save func() error, jobs *sync.WaitGroup) {
+	p.saveScreenshotSceneWithTracker(path, save, jobs, nil)
+}
+
+func (p *ScreenshotPlugin) saveScreenshotSceneWithTracker(path string, save func() error, jobs *sync.WaitGroup, doneWG *sync.WaitGroup) {
 	if save == nil {
 		return
 	}
-	p.runScreenshotStorageTask(jobs, "save screenshot scene", func(ctx context.Context) {
+	if doneWG != nil {
+		doneWG.Add(1)
+	}
+	started := p.runScreenshotStorageTask(jobs, "save screenshot scene", func(ctx context.Context) {
+		if doneWG != nil {
+			defer doneWG.Done()
+		}
 		started := time.Now()
 		if err := save(); err != nil {
 			util.GetLogger().Warn(ctx, "failed to save screenshot scene: "+err.Error())
@@ -35,6 +45,9 @@ func (p *ScreenshotPlugin) saveScreenshotSceneInBackground(path string, save fun
 			p.api.RefreshQuery(ctx, plugin.RefreshQueryParam{PreserveSelectedIndex: true})
 		}
 	})
+	if !started && doneWG != nil {
+		doneWG.Done()
+	}
 }
 
 // indexScreenshotScenes rebuilds clipboard associations without decoding historical desktop images.

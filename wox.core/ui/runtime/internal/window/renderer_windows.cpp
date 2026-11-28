@@ -102,6 +102,9 @@ struct WoxRenderer {
   bool caret_valid = false;
   WoxRendererResourceStats resource_stats = {};
   std::vector<CachedImageBitmap> cached_image_bitmaps;
+  // Retain up to two oversized images (e.g. a 5K screenshot desktop capture plus a large padded
+  // background card) across frames without evicting ordinary UI textures from the 32 MiB cache.
+  CachedImageBitmap cached_large_image_bitmaps[2] = {};
   // Uploads too large for the retained cache but referenced again within the same frame, such as
   // a repeated theme surface slice. They live until EndDraw so one image costs one upload per frame.
   std::vector<CachedImageBitmap> frame_image_bitmaps;
@@ -372,6 +375,10 @@ static void clear_cached_image_bitmaps(WoxRenderer *renderer) {
   }
   renderer->cached_image_bitmaps.clear();
   renderer->cached_image_bitmap_bytes = 0;
+  for (CachedImageBitmap &entry : renderer->cached_large_image_bitmaps) {
+    release_com(&entry.bitmap);
+    entry = {};
+  }
 }
 
 // Readable groups reuse a bounded pool across frames; in-flight targets cannot be reused before EndDraw.
@@ -439,6 +446,13 @@ static void release_retired_image_bitmaps(WoxRenderer *renderer) {
 static ID2D1Bitmap1 *find_cached_image_bitmap(WoxRenderer *renderer, uint64_t image_id) {
   for (CachedImageBitmap &entry : renderer->cached_image_bitmaps) {
     if (entry.image_id == image_id) {
+      entry.last_used = ++renderer->cached_image_use_serial;
+      renderer->resource_stats.cache_hits++;
+      return entry.bitmap;
+    }
+  }
+  for (CachedImageBitmap &entry : renderer->cached_large_image_bitmaps) {
+    if (entry.bitmap != nullptr && entry.image_id == image_id) {
       entry.last_used = ++renderer->cached_image_use_serial;
       renderer->resource_stats.cache_hits++;
       return entry.bitmap;
@@ -959,6 +973,9 @@ static void destroy_renderer(WoxRenderer *renderer) {
   release_com(&renderer->overlay_target_bitmap);
   release_com(&renderer->target_bitmap);
   release_com(&renderer->d2d_context);
+  if (renderer->d2d_device != nullptr) {
+    renderer->d2d_device->ClearResources(0);
+  }
   release_com(&renderer->d2d_device);
   release_com(&renderer->d2d_factory);
   release_com(&renderer->dwrite_factory);
@@ -970,6 +987,15 @@ static void destroy_renderer(WoxRenderer *renderer) {
   release_com(&renderer->composition_device);
   release_com(&renderer->overlay_swap_chain);
   release_com(&renderer->swap_chain);
+  // Trim driver allocations when a secondary window (such as the 5K screenshot overlay) closes
+  // while the launcher still holds a reference to the shared D3D device.
+  if (!renderer->test_offscreen && renderer->device != nullptr) {
+    IDXGIDevice3 *dxgi_device = nullptr;
+    if (SUCCEEDED(renderer->device->QueryInterface(__uuidof(IDXGIDevice3), reinterpret_cast<void **>(&dxgi_device)))) {
+      dxgi_device->Trim();
+      dxgi_device->Release();
+    }
+  }
   release_shared_d3d_device(&renderer->device);
   delete renderer;
 }
@@ -1414,7 +1440,52 @@ extern "C" int32_t wox_renderer_draw_image(WoxRenderer *renderer, uint64_t image
     if (cache_image_bitmap(renderer, image_id, image_bytes, bitmap)) {
       release_bitmap = false;
     } else if (image_id != 0) {
-      renderer->frame_image_bitmaps.push_back(CachedImageBitmap{image_id, image_bytes, 0, bitmap});
+      constexpr uint64_t max_cached_large_image_bytes = 256ULL * 1024ULL * 1024ULL;
+      if (image_bytes <= max_cached_large_image_bytes) {
+        auto total_large_bytes = [&]() {
+          uint64_t total = 0;
+          for (const CachedImageBitmap &entry : renderer->cached_large_image_bitmaps) {
+            if (entry.bitmap != nullptr) {
+              total += entry.byte_size;
+            }
+          }
+          return total;
+        };
+        auto find_free_large_slot = [&]() -> CachedImageBitmap * {
+          for (CachedImageBitmap &entry : renderer->cached_large_image_bitmaps) {
+            if (entry.bitmap == nullptr) {
+              return &entry;
+            }
+          }
+          return nullptr;
+        };
+        while (find_free_large_slot() == nullptr || total_large_bytes() + image_bytes > max_cached_large_image_bytes) {
+          CachedImageBitmap *oldest = nullptr;
+          for (CachedImageBitmap &entry : renderer->cached_large_image_bitmaps) {
+            if (entry.bitmap != nullptr && (oldest == nullptr || entry.last_used < oldest->last_used)) {
+              oldest = &entry;
+            }
+          }
+          if (oldest == nullptr) {
+            break;
+          }
+          renderer->frame_image_bitmaps.push_back(*oldest);
+          renderer->resource_stats.cache_evictions++;
+          *oldest = {};
+        }
+        if (CachedImageBitmap *slot = find_free_large_slot(); slot != nullptr && total_large_bytes() + image_bytes <= max_cached_large_image_bytes) {
+          *slot = CachedImageBitmap{
+              image_id,
+              image_bytes,
+              ++renderer->cached_image_use_serial,
+              bitmap,
+          };
+        } else {
+          renderer->frame_image_bitmaps.push_back(CachedImageBitmap{image_id, image_bytes, 0, bitmap});
+        }
+      } else {
+        renderer->frame_image_bitmaps.push_back(CachedImageBitmap{image_id, image_bytes, 0, bitmap});
+      }
       release_bitmap = false;
     }
   }
@@ -2154,8 +2225,12 @@ extern "C" int64_t wox_renderer_resident_bytes(WoxRenderer *renderer) {
   if (renderer == nullptr) {
     return 0;
   }
+  uint64_t large_bytes = 0;
+  for (const CachedImageBitmap &entry : renderer->cached_large_image_bitmaps) {
+    large_bytes += entry.byte_size;
+  }
   const auto caret_size = renderer->caret_backdrop == nullptr ? D2D1::SizeU(0, 0) : renderer->caret_backdrop->GetPixelSize();
-  return static_cast<int64_t>(renderer->cached_image_bitmap_bytes + renderer->composite_bitmap_bytes + static_cast<uint64_t>(caret_size.width) * caret_size.height * 4);
+  return static_cast<int64_t>(renderer->cached_image_bitmap_bytes + large_bytes + renderer->composite_bitmap_bytes + static_cast<uint64_t>(caret_size.width) * caret_size.height * 4);
 }
 
 extern "C" int32_t wox_renderer_simulate_device_removed(WoxRenderer *renderer) {

@@ -80,6 +80,9 @@ func TestScreenshotWindowAlphaSurvivesExportAndScene(t *testing.T) {
 			if err := state.installWindowCapture(selection, pixels); err != nil {
 				t.Fatal(err)
 			}
+			if state.windowSource == nil || state.windowSource.window.Bounds().Size() != pixels.Bounds().Size() || state.windowSource.Bounds() != desktop.Bounds() {
+				t.Fatal("window capture copied the full desktop or lost desktop bounds")
+			}
 			if state.image != preview || !desktop.Opaque() {
 				t.Fatal("window capture changed the editing preview or desktop pixels")
 			}

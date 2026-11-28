@@ -99,7 +99,7 @@ func TestPreparedScreenshotSceneOwnsPixelsAndAnnotations(t *testing.T) {
 	}
 	// The native source and editor are gone before the plugin starts the deferred write.
 	clear(source.Pix)
-	clear(state.windowSource.Pix)
+	clear(state.windowSource.window.Pix)
 	state.annotations[0].points[0] = Point{X: 30, Y: 30}
 	state.cursorPixel.X = 31
 	if err := save(); err != nil {

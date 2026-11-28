@@ -15,6 +15,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -45,17 +46,26 @@ func Save(path string, state json.RawMessage, source, cursor, composited, window
 	if err != nil {
 		return err
 	}
-	file, err := os.Open(path)
-	if err != nil {
-		return err
+	compositedHash := clipboard.ImageHash(composited)
+	exportedHash := compositedHash
+	_, isPacked8Bit := composited.(*image.RGBA)
+	if !isPacked8Bit {
+		_, isPacked8Bit = composited.(*image.NRGBA)
 	}
-	exported, _, err := image.Decode(file)
-	_ = file.Close()
-	if err != nil {
-		return err
+	if !strings.EqualFold(filepath.Ext(path), ".png") || !isPacked8Bit {
+		file, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		exported, _, err := image.Decode(file)
+		_ = file.Close()
+		if err != nil {
+			return err
+		}
+		exportedHash = clipboard.ImageHash(exported)
 	}
 	metadata := Metadata{Version: 1, ExportHash: exportHash, State: state,
-		ImageHashes: []string{clipboard.ImageHash(composited), clipboard.ImageHash(exported)}}
+		ImageHashes: []string{compositedHash, exportedHash}}
 	util.GetLogger().Debug(context.Background(), fmt.Sprintf("screenshot_scene stage=fingerprints durationMs=%d", time.Since(startedAt).Milliseconds()))
 	tmp, err := os.CreateTemp(filepath.Dir(path), ".screenshot-edit-*.tmp")
 	if err != nil {
