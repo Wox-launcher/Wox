@@ -10,6 +10,7 @@ func TestSelectCurrentOSManifestsKeepsOnlyThisMachine(t *testing.T) {
 	manifests := []StorePluginManifest{
 		{Id: "win", SupportedOS: []string{"Windows"}},
 		{Id: "mac", SupportedOS: []string{"Darwin"}},
+		{Id: "mac-alias", SupportedOS: []string{"Macos"}},
 		{Id: "linux", SupportedOS: []string{"Linux"}},
 		{Id: "all", SupportedOS: []string{"Windows", "Darwin", "Linux"}},
 	}
@@ -17,7 +18,7 @@ func TestSelectCurrentOSManifestsKeepsOnlyThisMachine(t *testing.T) {
 	for _, manifest := range selectCurrentOSManifests(manifests) {
 		ids = append(ids, manifest.Id)
 	}
-	want := []string{"mac", "all"}
+	want := []string{"mac", "mac-alias", "all"}
 	if runtime.GOOS == "windows" {
 		want = []string{"win", "all"}
 	} else if runtime.GOOS == "linux" {
@@ -25,6 +26,15 @@ func TestSelectCurrentOSManifestsKeepsOnlyThisMachine(t *testing.T) {
 	}
 	if strings.Join(ids, ",") != strings.Join(want, ",") {
 		t.Fatalf("ids = %#v, want %#v", ids, want)
+	}
+}
+
+func TestPluginOSValidationAcceptsMacOSAlias(t *testing.T) {
+	if !IsAllSupportedOS([]string{"Windows", "Linux", "Macos"}) {
+		t.Fatal("Macos should be valid alongside the other platforms")
+	}
+	if IsAllSupportedOS([]string{"macOS", "unknown"}) {
+		t.Fatal("an unknown platform should still invalidate the list")
 	}
 }
 

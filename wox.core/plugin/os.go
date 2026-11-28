@@ -13,9 +13,19 @@ const (
 	PLUGIN_OS_LINUX   OS = "LINUX"
 )
 
+// Some published plugins use the product name macOS for the Darwin platform.
+func canonicalPluginOS(name string) OS {
+	if strings.EqualFold(name, "macOS") {
+		return PLUGIN_OS_DARWIN
+	}
+	return OS(strings.ToUpper(name))
+}
+
 func IsAllSupportedOS(os []string) bool {
 	for _, o := range os {
-		if !strings.EqualFold(o, string(PLUGIN_OS_WINDOWS)) && !strings.EqualFold(o, string(PLUGIN_OS_DARWIN)) && !strings.EqualFold(o, string(PLUGIN_OS_LINUX)) {
+		switch canonicalPluginOS(o) {
+		case PLUGIN_OS_WINDOWS, PLUGIN_OS_DARWIN, PLUGIN_OS_LINUX:
+		default:
 			return false
 		}
 	}
@@ -24,8 +34,9 @@ func IsAllSupportedOS(os []string) bool {
 }
 
 func IsAnySupportedInCurrentOS(supportedOS []string) bool {
+	current := canonicalPluginOS(util.GetCurrentPlatform())
 	for _, o := range supportedOS {
-		if strings.EqualFold(o, string(util.GetCurrentPlatform())) {
+		if canonicalPluginOS(o) == current {
 			return true
 		}
 	}
