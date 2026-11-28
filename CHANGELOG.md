@@ -1,5 +1,61 @@
 # Changelog
 
+## v2.5.1-beta.1 - 2026-11-28
+
+Wox feels faster, uses less memory, and comes as a smaller download. You can also paste images right into the search box, download languages including Spanish on demand, and check live speed and health in Wox Doctor.
+
+![Wox v2.5.1-beta.1 Faster & Lighter cover with a Wox Doctor performance preview](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/changelog-v2.5.1-beta.1-performance.png)
+
+- Improve
+  - [`Performance`] Open Wox faster on Windows, use less memory while typing and taking screenshots, and download a significantly smaller app.
+  - [`Reliability`] Keep searches responsive when a plugin is slow or stuck, with a warning that links straight to Wox Doctor if a plugin is paused. Backups, data recovery, plugin updates, and recovery after waking from sleep are also more reliable.
+  - [`Wox Doctor`] Combine memory tracking into Wox Doctor, check live launcher and plugin speed with `doctor perf`, and export shareable diagnostic reports.
+  - [`Cloud Sync`] Keep conflicting edits safe instead of silently overwriting them, and optionally sync hotkeys across Windows, macOS, and Linux.
+  - [`Language`] Add Spanish support and download languages other than English and Simplified Chinese on demand, with offline caching and manual refresh in Settings. [#4720](https://github.com/Wox-launcher/Wox/issues/4720)
+  - [`Launcher`] Paste copied images or image files directly into the search box to act on them with supported plugins. [#4756](https://github.com/Wox-launcher/Wox/issues/4756)
+  - [`Query`] Clear all active filters with one button, and easily update or remove saved default filters.
+  - [`File Search`] Speed up indexed searches and recent files on Windows, stop idle background CPU usage in the Windows file index service, and offer a "Search more" option when global file results are capped.
+  - [`Clipboard`] Send text and images from clipboard history directly with LocalSend when the LocalSend plugin is installed.
+  - [`Browser Bookmark`] Search Safari bookmarks on macOS.
+  - [`Settings`] Add a Large (120%) interface size, close Settings with Escape when no dialog or field is active, and open localized guides from built-in plugin settings. [#4715](https://github.com/Wox-launcher/Wox/issues/4715) [#4736](https://github.com/Wox-launcher/Wox/issues/4736) [#4737](https://github.com/Wox-launcher/Wox/issues/4737)
+  - [`AI Chat`] Configure how many tool calls a message can run, and notify you when the limit is reached while keeping your conversation ready to continue. [#4729](https://github.com/Wox-launcher/Wox/issues/4729)
+  - [`Folder`] Press Ctrl+Enter (Cmd+Enter on macOS) to open a file's containing folder directly. [#4749](https://github.com/Wox-launcher/Wox/issues/4749)
+  - [`Plugin`] Sort `wpm install` and `wpm update` results by downloads, stars, name, or recent updates with a shortcut, keep your place in the list after installing or removing a plugin, and copy a ready-to-use AI prompt with `wpm create`.
+  - [`Hotkey`] Use numpad number keys in shortcuts separately from top-row numbers across Windows, macOS, and Linux. [#4716](https://github.com/Wox-launcher/Wox/issues/4716)
+  - [`Linux`] Support selection queries on KDE Wayland, and recognize Homebrew-installed AppImages so updates stay managed by Homebrew. [#4735](https://github.com/Wox-launcher/Wox/issues/4735)
+  - [`Install`] Install Wox with a single command on Windows, macOS, and Linux. [#4734](https://github.com/Wox-launcher/Wox/issues/4734)
+
+- Fix
+  - [`File Search`] Honor ignore rules in Windows Fast Index without rescanning the disk when rules change. [#4759](https://github.com/Wox-launcher/Wox/issues/4759)
+  - [`Quick Jump`] Fix macOS file dialogs stalling and keep focus intact when clicking the Quick Jump hint. [#4761](https://github.com/Wox-launcher/Wox/issues/4761)
+  - [`Launcher`] Keep keyboard focus working on macOS when a password field is active, prevent Escape from closing Wox while composing with an IME, align search text selection and cursor cleanly, and prevent stray scrollbars or result jitter. [#4710](https://github.com/Wox-launcher/Wox/issues/4710) [#4743](https://github.com/Wox-launcher/Wox/issues/4743)
+  - [`Clipboard`] Stop repeated permission prompts on KDE Wayland and wait for the target window to regain focus before pasting. [#4714](https://github.com/Wox-launcher/Wox/issues/4714) [#4745](https://github.com/Wox-launcher/Wox/issues/4745)
+  - [`Screenshot`] Reduce frame drops in Windows recordings, keep recording controls visible in fullscreen captures, and quiet unnecessary capture-success notifications.
+  - [`OCR`] Run Windows system OCR directly without invoking PowerShell, so security policies that block PowerShell no longer break OCR. [#4721](https://github.com/Wox-launcher/Wox/issues/4721)
+  - [`Browser Bookmark`] Restore Linux bookmark indexing for Flatpak and Firefox profiles, and keep Chromium bookmark titles from being replaced by folder names. [#4712](https://github.com/Wox-launcher/Wox/issues/4712) [#4754](https://github.com/Wox-launcher/Wox/issues/4754)
+  - [`App`] Prevent unrelated matches for Windows Settings pages and UWP apps. [#4728](https://github.com/Wox-launcher/Wox/issues/4728)
+  - [`AI Chat`] Fix streaming replies stalling on keep-alive connections. [#4709](https://github.com/Wox-launcher/Wox/pull/4709) [@dragonish](https://github.com/dragonish)
+  - [`Notes`] Restore typing after minimizing Notes on Windows, and keep the sidebar toggle clear of macOS window buttons. [#4746](https://github.com/Wox-launcher/Wox/issues/4746)
+  - [`Settings`] Fix clipped text in Settings, dropdowns, and plugin or theme lists. [#4715](https://github.com/Wox-launcher/Wox/issues/4715) [#4751](https://github.com/Wox-launcher/Wox/issues/4751)
+  - [`Linux`] Render sharper text on Linux, fix KDE multi-monitor placement and screenshots, and preserve toolbar height during window resizes. [#4711](https://github.com/Wox-launcher/Wox/issues/4711) [#4713](https://github.com/Wox-launcher/Wox/issues/4713)
+  - [`Windows`] Prevent locked window hook files from blocking Wox startup. [#4741](https://github.com/Wox-launcher/Wox/issues/4741)
+
+- Store
+  - Plugin
+    - [Weather (China)](https://gist.github.com/nanhaiya/7c624486991cdc91954c37e8af2c20d0) Current weather and a 7-day forecast for Chinese cities from the itab weather API. [#4708](https://github.com/Wox-launcher/Wox/pull/4708) [@nanhaiya](https://github.com/nanhaiya)
+    - [Dictionary](https://github.com/skulltrail/Wox.Plugin.Dictionary) Look up word definitions directly in Wox. [#4724](https://github.com/Wox-launcher/Wox/pull/4724) [@skulltrail](https://github.com/skulltrail)
+    - [Stickies](https://github.com/dragonish/Wox.Plugin.Stickies) Create, browse, search and manage Stickies notes from Wox. [#4730](https://github.com/Wox-launcher/Wox/pull/4730) [@dragonish](https://github.com/dragonish)
+    - [portkill](https://gist.github.com/raphaelabl/38f5c43e8ebb4ea108c3bac3b142f1eb) Find processes listening on TCP/UDP ports and kill them after confirmation [#4760](https://github.com/Wox-launcher/Wox/pull/4760) [@raphaelabl](https://github.com/raphaelabl)
+    - [Docker](https://gist.github.com/raphaelabl/37ee78251e9505523f1065235e2f0edd) Manage Docker containers, images, compose projects, volumes and networks, and start common dev services (Postgres, Keycloak, Redis, …) in one step [#4760](https://github.com/Wox-launcher/Wox/pull/4760) [@raphaelabl](https://github.com/raphaelabl)
+    - [Projects](https://gist.github.com/raphaelabl/95d1871d1f5a147f99ea9651ccbecb06) Keep code projects in one folder: open them in the right IDE, start/end work sessions, archive and restore them, or store them on GitHub and clone them back [#4760](https://github.com/Wox-launcher/Wox/pull/4760) [@raphaelabl](https://github.com/raphaelabl)
+    - [Docs](https://gist.github.com/raphaelabl/2327085e7fd421bbef328d1f34e35b55) Personal Markdown docs: create, search, quick-edit in Wox, open in Obsidian or VS Code, and hand them to Claude Code [#4760](https://github.com/Wox-launcher/Wox/pull/4760) [@raphaelabl](https://github.com/raphaelabl)
+  - Theme
+    - [8-Bit Night](https://github.com/Wox-launcher/Wox.Theme.8bit) A navy pixel-art launcher with stepped frames and ice-blue, mint, and gold accents. [@Wox-launcher](https://github.com/Wox-launcher)
+    - [Pink Romance](https://github.com/dragonish/Wox.Theme.PinkRomance) A dreamy pink romance of rose petals and soft light, around a blush workspace with a rose toolbar and deep rose selection. [#4719](https://github.com/Wox-launcher/Wox/pull/4719) [@dragonish](https://github.com/dragonish)
+    - [Retro Terminal](https://github.com/dragonish/Wox.Theme.RetroTerminal) Retro terminal green on black: monospace type, cyan links, and a stepped pixel frame with a >█ tab. [#4726](https://github.com/Wox-launcher/Wox/pull/4726) [@dragonish](https://github.com/dragonish)
+    - [Tokyo Night](https://gist.github.com/dragonish/f097c25e33c793b0fe10d923025436fb) A clean Wox port of the Tokyo Night palette: deep blue-black background, soft blue-white text, blue-gray selection with a purple indicator. Unofficial port, not affiliated with the original authors. [#4731](https://github.com/Wox-launcher/Wox/pull/4731) [@dragonish](https://github.com/dragonish)
+    - [Tokyo Night Light](https://gist.github.com/dragonish/8724090b5bbbdad6383644afb8e44305) A clean Wox port of the Tokyo Night Light palette: soft gray background, dark blue-gray text, light gray selection with a purple indicator. Unofficial port, not affiliated with the original authors. [#4731](https://github.com/Wox-launcher/Wox/pull/4731) [@dragonish](https://github.com/dragonish)
+
 ## v2.5.0 - 2026-11-09
 
 Plugins can now open native windows and let you interact directly with search previews. Timer and Dictation are now standalone plugins you can install from the Wox Store as needed. We explain the move in [Keeping Wox Simple](https://www.woxlauncher.com/blog/a-smaller-core-with-plugins.html).

@@ -1,5 +1,61 @@
 # Changelog
 
+## v2.5.1-beta.1 - 2026-11-28
+
+Wox 启动和搜索更快、占用内存更低，安装包体积也明显减小。现在还可以直接把图片粘贴到搜索框、按需下载包括西班牙语在内的语言包，并在 Wox Doctor 中查看实时速度与运行状态。
+
+![Wox v2.5.1-beta.1 Faster & Lighter cover with a Wox Doctor performance preview](https://raw.githubusercontent.com/Wox-launcher/Wox/refs/heads/master/screenshots/changelog-v2.5.1-beta.1-performance.png)
+
+- Improve
+  - [`性能`] Windows 上唤起 Wox 更快，输入搜索和截图时占用更少内存，安装包体积也明显减小。
+  - [`稳定性`] 当单个插件卡顿或响应过慢时保持全局搜索流畅，插件被暂停时会弹出提示并可直接跳转到 Wox Doctor 查看。备份、数据恢复、插件更新以及系统休眠唤醒后的恢复也更可靠。
+  - [`Wox Doctor`] 将内存监控整合进 Wox Doctor，支持通过 `doctor perf` 查看启动器和插件的实时耗时，并可导出便于分享的诊断报告。
+  - [`云同步`] 遇到同步冲突时保留双方内容而不再静默覆盖，并支持按需开启跨平台快捷键同步。
+  - [`语言`] 新增西班牙语支持；除英语和简体中文外，其余语言包改为按需下载并支持离线缓存，可在设置中查看进度或重新下载。 [#4720](https://github.com/Wox-launcher/Wox/issues/4720)
+  - [`启动器`] 支持直接将复制的图片或图片文件粘贴到搜索框中，交给支持的插件处理。 [#4756](https://github.com/Wox-launcher/Wox/issues/4756)
+  - [`搜索`] 一键清除当前所有筛选条件，并可更方便地更新或取消已保存的默认筛选。
+  - [`文件搜索`] 加快 Windows 上的索引搜索和最近文件加载速度，消除 Windows 文件索引服务的后台空闲 CPU 占用，并在全局搜索的文件结果达到上限时提供「搜索更多」选项。
+  - [`剪贴板`] 安装 LocalSend 插件后，可直接从剪贴板历史中通过 LocalSend 发送文本和图片。
+  - [`浏览器书签`] 在 macOS 上支持搜索 Safari 书签。
+  - [`设置`] 新增「大号（120%）」界面尺寸，在没有弹窗或输入框处于活动状态时按 Escape 可关闭设置窗口，并可在内置插件设置中直接打开对应语言的使用指南。 [#4715](https://github.com/Wox-launcher/Wox/issues/4715) [#4736](https://github.com/Wox-launcher/Wox/issues/4736) [#4737](https://github.com/Wox-launcher/Wox/issues/4737)
+  - [`AI Chat`] 支持设置单条消息的最大工具调用轮数，达到上限时会提醒并保留已有回复，方便继续对话。 [#4729](https://github.com/Wox-launcher/Wox/issues/4729)
+  - [`文件夹`] 支持使用 Ctrl+Enter（macOS 为 Cmd+Enter）直接打开文件所在目录。 [#4749](https://github.com/Wox-launcher/Wox/issues/4749)
+  - [`插件`] `wpm install` 和 `wpm update` 支持通过快捷键按下载数、星标数、名称或最近更新时间排序，安装或卸载插件后保留列表位置；`wpm create` 改为一键复制用于 AI 创建插件的提示词。
+  - [`快捷键`] 在 Windows、macOS 和 Linux 上支持将小键盘数字键作为独立快捷键使用，不再与主键盘数字键混淆。 [#4716](https://github.com/Wox-launcher/Wox/issues/4716)
+  - [`Linux`] 在 KDE Wayland 上支持选中文本查询，并识别通过 Homebrew 安装的 AppImage，让更新继续由 Homebrew 管理。 [#4735](https://github.com/Wox-launcher/Wox/issues/4735)
+  - [`安装`] 支持在 Windows、macOS 和 Linux 上使用单条命令快速安装 Wox。 [#4734](https://github.com/Wox-launcher/Wox/issues/4734)
+
+- Fix
+  - [`文件搜索`] 修复 Windows 快速索引未遵循忽略规则的问题，修改规则后无需重新扫描磁盘即可生效。 [#4759](https://github.com/Wox-launcher/Wox/issues/4759)
+  - [`Quick Jump`] 修复 macOS 文件对话框卡顿的问题，并在点击提示按钮时保持焦点正常。 [#4761](https://github.com/Wox-launcher/Wox/issues/4761)
+  - [`启动器`] 修复 macOS 上光标位于密码输入框时 Wox 无法输入的问题，避免中文等输入法组合期间按 Escape 直接关闭 Wox，并修复搜索框选中高亮、光标位置偏移及多余滚动条与结果抖动。 [#4710](https://github.com/Wox-launcher/Wox/issues/4710) [#4743](https://github.com/Wox-launcher/Wox/issues/4743)
+  - [`剪贴板`] 修复 KDE Wayland 上反复弹出权限授权提示的问题，并在目标窗口恢复焦点后再执行粘贴。 [#4714](https://github.com/Wox-launcher/Wox/issues/4714) [#4745](https://github.com/Wox-launcher/Wox/issues/4745)
+  - [`截图`] 减少 Windows 录屏掉帧，确保全屏录制时控制按钮始终可见，并取消多余的截图成功提示。
+  - [`OCR`] Windows 系统 OCR 不再调用 PowerShell，避免受限于安全策略时无法识别文字。 [#4721](https://github.com/Wox-launcher/Wox/issues/4721)
+  - [`浏览器书签`] 恢复 Linux 上 Flatpak 浏览器与 Firefox 书签索引，并修复 Chromium 书签标题被文件夹名称覆盖的问题。 [#4712](https://github.com/Wox-launcher/Wox/issues/4712) [#4754](https://github.com/Wox-launcher/Wox/issues/4754)
+  - [`应用`] 修复 Windows 设置项和 UWP 应用出现无关误匹配的问题。 [#4728](https://github.com/Wox-launcher/Wox/issues/4728)
+  - [`AI Chat`] 修复流式回复在保活连接下卡住的问题。 [#4709](https://github.com/Wox-launcher/Wox/pull/4709) [@dragonish](https://github.com/dragonish)
+  - [`Notes`] 修复 Windows 上最小化后无法继续输入的问题，并避免侧边栏按钮与 macOS 窗口控制按钮重叠。 [#4746](https://github.com/Wox-launcher/Wox/issues/4746)
+  - [`设置`] 修复设置页面、下拉框及插件/主题列表中文字被裁切的问题。 [#4715](https://github.com/Wox-launcher/Wox/issues/4715) [#4751](https://github.com/Wox-launcher/Wox/issues/4751)
+  - [`Linux`] 提升 Linux 文字渲染清晰度，修复 KDE 多显示器定位与截图问题，并在窗口调整大小时保持工具栏高度。 [#4711](https://github.com/Wox-launcher/Wox/issues/4711) [#4713](https://github.com/Wox-launcher/Wox/issues/4713)
+  - [`Windows`] 修复窗口挂钩文件被占用时阻塞 Wox 启动的问题。 [#4741](https://github.com/Wox-launcher/Wox/issues/4741)
+
+- Store
+  - Plugin
+    - [天气](https://gist.github.com/nanhaiya/7c624486991cdc91954c37e8af2c20d0) 使用 itab 天气接口查询中国城市当前天气和 7 天预报。 [#4708](https://github.com/Wox-launcher/Wox/pull/4708) [@nanhaiya](https://github.com/nanhaiya)
+    - [Dictionary](https://github.com/skulltrail/Wox.Plugin.Dictionary) Look up word definitions directly in Wox. [#4724](https://github.com/Wox-launcher/Wox/pull/4724) [@skulltrail](https://github.com/skulltrail)
+    - [Stickies](https://github.com/dragonish/Wox.Plugin.Stickies) 通过 Wox 创建、浏览、搜索和管理 Stickies 便签。 [#4730](https://github.com/Wox-launcher/Wox/pull/4730) [@dragonish](https://github.com/dragonish)
+    - [portkill](https://gist.github.com/raphaelabl/38f5c43e8ebb4ea108c3bac3b142f1eb) Find processes listening on TCP/UDP ports and kill them after confirmation [#4760](https://github.com/Wox-launcher/Wox/pull/4760) [@raphaelabl](https://github.com/raphaelabl)
+    - [Docker](https://gist.github.com/raphaelabl/37ee78251e9505523f1065235e2f0edd) Manage Docker containers, images, compose projects, volumes and networks, and start common dev services (Postgres, Keycloak, Redis, …) in one step [#4760](https://github.com/Wox-launcher/Wox/pull/4760) [@raphaelabl](https://github.com/raphaelabl)
+    - [Projects](https://gist.github.com/raphaelabl/95d1871d1f5a147f99ea9651ccbecb06) Keep code projects in one folder: open them in the right IDE, start/end work sessions, archive and restore them, or store them on GitHub and clone them back [#4760](https://github.com/Wox-launcher/Wox/pull/4760) [@raphaelabl](https://github.com/raphaelabl)
+    - [Docs](https://gist.github.com/raphaelabl/2327085e7fd421bbef328d1f34e35b55) Personal Markdown docs: create, search, quick-edit in Wox, open in Obsidian or VS Code, and hand them to Claude Code [#4760](https://github.com/Wox-launcher/Wox/pull/4760) [@raphaelabl](https://github.com/raphaelabl)
+  - Theme
+    - [像素夜航](https://github.com/Wox-launcher/Wox.Theme.8bit) 深蓝底色、阶梯形像素边框，点缀冰蓝、薄荷绿和金黄。 [@Wox-launcher](https://github.com/Wox-launcher)
+    - [粉色浪漫](https://github.com/dragonish/Wox.Theme.PinkRomance) 梦幻粉色浪漫，玫瑰花瓣与柔光环绕，配粉白内容区、玫瑰工具栏与深玫红选中。 [#4719](https://github.com/Wox-launcher/Wox/pull/4719) [@dragonish](https://github.com/dragonish)
+    - [复古终端](https://github.com/dragonish/Wox.Theme.RetroTerminal) 复古终端绿配黑：等宽字体、青色链接，阶梯像素边框配 >█ 标签。 [#4726](https://github.com/Wox-launcher/Wox/pull/4726) [@dragonish](https://github.com/dragonish)
+    - [东京之夜](https://gist.github.com/dragonish/f097c25e33c793b0fe10d923025436fb) Tokyo Night 配色的 Wox 移植：深蓝黑底、柔和蓝白文字，蓝灰选中配紫色指示条。非官方移植，与原作者无关。 [#4731](https://github.com/Wox-launcher/Wox/pull/4731) [@dragonish](https://github.com/dragonish)
+    - [东京之夜浅色](https://gist.github.com/dragonish/8724090b5bbbdad6383644afb8e44305) Tokyo Night Light 配色的 Wox 移植：浅灰底、深蓝灰文字，浅灰选中配紫色指示条。非官方移植，与原作者无关。 [#4731](https://github.com/Wox-launcher/Wox/pull/4731) [@dragonish](https://github.com/dragonish)
+
 ## v2.5.0 - 2026-11-09
 
 插件现在可以打开原生窗口，也可以让你直接在搜索结果的预览中操作。计时器和听写改为独立插件，可在 Wox 商店按需安装，查看[此博客](https://www.woxlauncher.com/zh/blog/a-smaller-core-with-plugins.html)了解我们为什么这么做。
