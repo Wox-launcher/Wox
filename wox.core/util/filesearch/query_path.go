@@ -118,6 +118,9 @@ func searchColumnPaths(ctx context.Context, view column.View, query SearchQuery,
 			stack = stack[:len(stack)-1]
 			continue
 		}
+		if view.PruneStructuralDirectories && record.Flags&column.Structural != 0 {
+			continue
+		}
 		if record.Flags&column.Directory == 0 {
 			if !columnExtensionEligible(query, record) {
 				continue

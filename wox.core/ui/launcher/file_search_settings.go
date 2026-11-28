@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"wox/common"
+	"wox/plugin"
 	launcherview "wox/ui/launcher/view"
 )
 
@@ -11,6 +12,23 @@ const fileSearchPluginID = common.FileSearchPluginID
 
 func isFileSearchRootsTable(idPrefix string, definition formDefinition, pluginID string) bool {
 	return idPrefix == "plugin-settings" && pluginID == fileSearchPluginID && definition.Value.Key == "roots"
+}
+
+// Read the live plugin's attached volumes so an excluded drive is never shown
+// as a locked, automatically indexed Settings row.
+func fileSearchIndexedVolumes() []string {
+	manager := plugin.GetPluginManager()
+	if manager == nil {
+		return nil
+	}
+	instance := manager.GetPluginInstanceById(fileSearchPluginID)
+	if instance == nil {
+		return nil
+	}
+	if source, ok := instance.Plugin.(interface{ NativeVolumeRoots() []string }); ok {
+		return source.NativeVolumeRoots()
+	}
+	return nil
 }
 
 // fileSearchServiceVolumeRows builds locked prefix rows for volumes owned by the

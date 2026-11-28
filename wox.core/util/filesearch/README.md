@@ -9,8 +9,13 @@ helper is shipped.
 
 Windows' privileged service only enumerates NTFS MFT records and reads USN
 changes over a bounded binary named-pipe stream. It does not own the filename
-index or execute searches. Windows service mode retains fixed-NTFS-volume scope;
-other modes retain configured roots. macOS uses bulk directory reads and
+index or execute searches. Windows service mode attaches only fixed NTFS volumes
+whose root passes the configured ignore patterns. Excluded volumes have no build
+or USN subscription. On included volumes the store retains parent/child facts so
+a USN directory rename can restore all descendants without re-enumeration.
+Search uses a cached visibility mask per generation and rule set, applying
+incremental changes before ranking filenames or directory paths. Other modes
+retain configured roots. macOS uses bulk directory reads and
 FSEvents. Windows configured roots use the USN journal. Linux uses recursive fsnotify watches. Windows volumes without a journal use
 ReadDirectoryChangesW subtree watches. Platform adapters must
 not depend on query policy or plugin implementations.

@@ -30,6 +30,8 @@ f .pdf
 
 ![文件搜索设置中的 Fast Indexing](/images/guide/plugin_filesearch.png)
 
+在 **忽略规则** 中每行填写一条规则。`E:\` 或 `E:/**` 会让快速索引跳过整个 E 盘；`node_modules` 会从文件名搜索结果中排除同名目录及其内容，`*.tmp` 会排除匹配的文件名。修改规则后会自动生效。常规目录扫描还会读取 `.gitignore`，快速索引只使用设置中填写的规则。
+
 快速索引只在 Windows 上提供。macOS 和 Linux 仍使用常规的根目录索引。内容搜索目录和文件名根目录是分开配置的；即使启用 Fast Index，内容搜索仍限定在内容搜索目录内。
 
 功能概览见[文件搜索启动器](/zh/features/file-search)。

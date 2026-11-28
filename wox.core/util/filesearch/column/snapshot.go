@@ -2,9 +2,11 @@
 package column
 
 import (
+	"cmp"
 	"fmt"
 	"math"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"unsafe"
@@ -360,9 +362,15 @@ func (s *Snapshot) PrepareSearchHints() {
 		if s.mapping != nil {
 			s.NameRows = append([]uint32(nil), s.NameRows...)
 		}
+		compare := s.comparePaths
+		if len(s.RowDirectory) != 0 {
+			compare = s.comparePostingParents
+		}
 		for id := 0; id < s.Names(); id++ {
 			rows := s.NameRows[s.NameStarts[id]:s.NameStarts[id+1]]
-			sort.Slice(rows, func(i, j int) bool { return s.comparePaths(rows[i], rows[j]) < 0 })
+			if len(rows) > 1 {
+				slices.SortFunc(rows, compare)
+			}
 		}
 		s.NameRowsPathSorted = true
 	}
@@ -476,4 +484,32 @@ func (s *Snapshot) comparePaths(left, right uint32) int {
 		return 1
 	}
 	return 0
+}
+
+// Postings in one group have identical basenames. Their joined paths therefore
+// sort by parent path length and then parent bytes. Borrowing the directory
+// column avoids walking both ancestor chains on every comparison during a build.
+func (s *Snapshot) comparePostingParents(left, right uint32) int {
+	a, b := s.Parents[left], s.Parents[right]
+	if a == b {
+		return 0
+	}
+	if a != NoRow && s.RowDirectory[a] == NoRow || b != NoRow && s.RowDirectory[b] == NoRow {
+		return s.comparePaths(left, right)
+	}
+	var x, y string
+	if a != NoRow {
+		x = s.DirectoryPath(s.RowDirectory[a])
+	}
+	if b != NoRow {
+		y = s.DirectoryPath(s.RowDirectory[b])
+	}
+	if x == "" || y == "" {
+		// Unreachable rows sort after reachable rows.
+		return cmp.Compare(len(y), len(x))
+	}
+	if n := cmp.Compare(len(x), len(y)); n != 0 {
+		return n
+	}
+	return strings.Compare(x, y)
 }

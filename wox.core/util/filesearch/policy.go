@@ -8,7 +8,15 @@ import (
 	"wox/util"
 )
 
+// FilenameIgnoreRules matches configured patterns against NTFS facts without filesystem I/O.
+type FilenameIgnoreRules interface {
+	CacheKey() string
+	ClassifyName(name string) (ignore, checkPath bool)
+	IgnorePath(root, path string) bool
+}
+
 type Policy struct {
+	FilenameIgnore      FilenameIgnoreRules
 	NewTraversalContext func(root RootRecord, scopePath string) TraversalPolicyContext
 	ShouldProcessChange func(root RootRecord, change ChangeSignal) bool
 }

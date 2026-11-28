@@ -255,7 +255,7 @@ func (b *Builder) Finish() (*Snapshot, error) {
 	if err := s.Validate(); err != nil {
 		return nil, err
 	}
-	s.PrepareSearchHints()
 	s.prepareDirectoryColumns()
+	s.PrepareSearchHints()
 	return &s, nil
 }

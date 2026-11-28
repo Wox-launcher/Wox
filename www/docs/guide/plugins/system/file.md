@@ -30,6 +30,8 @@ On Windows, File Search can use optional Fast Indexing. Open **Settings -> Plugi
 
 ![Fast Indexing in File Search settings](/images/guide/plugin_filesearch.png)
 
+Add one entry per row in **Ignore Patterns**. Use `E:\` or `E:/**` to skip an entire drive, `node_modules` to hide matching directories and their contents from filename search, or `*.tmp` to hide matching filenames. Changes apply automatically. Fast Indexing uses the configured patterns. Regular directory scans also read `.gitignore` files.
+
 Fast Indexing is Windows-only. macOS and Linux keep using the regular root-based index. Content-search directories are configured separately from filename-search roots and remain scoped to those content directories even with Fast Index.
 
 For a short overview of what File Search is for, see [File search launcher](/features/file-search).

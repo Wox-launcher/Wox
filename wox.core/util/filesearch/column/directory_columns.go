@@ -42,7 +42,15 @@ func (s *Snapshot) prepareDirectoryColumns() {
 		row  uint32
 		path string
 	}
-	var directories []directory
+	// The path dictionary and visibility projection both need directory ordinals.
+	// Reserve the final size once instead of growing a volume-sized pointer slice.
+	count := 0
+	for _, flags := range s.Flags {
+		if flags&Directory != 0 {
+			count++
+		}
+	}
+	directories := make([]directory, 0, count)
 	for row, flags := range s.Flags {
 		if flags&Directory != 0 {
 			path, _ := s.Path(uint32(row))

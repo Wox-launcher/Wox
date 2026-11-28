@@ -11,7 +11,6 @@ import (
 	launcherview "wox/ui/launcher/view"
 	woxui "wox/ui/runtime"
 	woxwidget "wox/ui/widget"
-	"wox/util/filesearchservice"
 )
 
 // formTableHeaderWeight keeps plugin table field titles regular and uses
@@ -169,7 +168,7 @@ func (c *formTableController) formTableFieldProps(fields formFieldsSnapshot, cal
 	}
 	viewRows := c.formTableViewRows(definition, visibleColumns, rows, theme, callbacks.imageScale)
 	if isFileSearchRootsTable(callbacks.idPrefix, definition, c.selectedPluginID()) {
-		volumeRows := fileSearchServiceVolumeRows(visibleColumns, filesearchservice.IndexedVolumeRoots(), c.language.translate("i18n:plugin_file_setting_service_volume_tooltip"))
+		volumeRows := fileSearchServiceVolumeRows(visibleColumns, fileSearchIndexedVolumes(), c.language.translate("i18n:plugin_file_setting_service_volume_tooltip"))
 		if len(volumeRows) > 0 {
 			viewRows = append(volumeRows, viewRows...)
 		}

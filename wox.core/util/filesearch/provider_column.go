@@ -53,12 +53,15 @@ func searchColumnViewWithFloor(ctx context.Context, view column.View, input Sear
 	// A query-local directory cache avoids allocating each repeated parent path.
 	// It is not retained by the index or shared with subsequent queries.
 	parents := make(map[uint64]string)
-	resolve := func(record column.Record) (string, bool) {
+	resolve := func(record column.Record, parentRow uint32) (string, bool) {
 		parent, found := parents[record.ParentID]
 		if !found {
 			var ok bool
-			if row, exists := base.Row(record.ParentID); exists && view.DirectoryUnchanged(row) {
-				parent = base.DirectoryPath(base.RowDirectory[row])
+			if parentRow == column.NoRow {
+				parentRow, _ = base.Row(record.ParentID)
+			}
+			if view.DirectoryUnchanged(parentRow) {
+				parent = base.DirectoryPath(base.RowDirectory[parentRow])
 				ok = parent != ""
 			} else {
 				parent, ok = view.Path(record.ParentID)
@@ -70,7 +73,7 @@ func searchColumnViewWithFloor(ctx context.Context, view column.View, input Sear
 		}
 		return filepath.Join(parent, record.Name), true
 	}
-	add := func(record column.Record, score int64, path string) {
+	add := func(record column.Record, score int64, path string, parentRow uint32) {
 		if record.Flags&column.Structural != 0 {
 			return
 		}
@@ -82,7 +85,7 @@ func searchColumnViewWithFloor(ctx context.Context, view column.View, input Sear
 		}
 		if path == "" {
 			var ok bool
-			path, ok = resolve(record)
+			path, ok = resolve(record, parentRow)
 			if !ok {
 				return
 			}
@@ -93,7 +96,7 @@ func searchColumnViewWithFloor(ctx context.Context, view column.View, input Sear
 	if root.Flags&column.Structural == 0 && columnExtensionEligible(query, root) {
 		if matched, score := scoreDocAgainstQuery(query, docRecord{Path: base.Root, IsDir: true}); matched {
 			root.Name = filepath.Base(base.Root)
-			add(root, score, base.Root)
+			add(root, score, base.Root, column.NoRow)
 		}
 	}
 	groups := &columnNameHeap{limit: limit}
@@ -103,24 +106,34 @@ func searchColumnViewWithFloor(ctx context.Context, view column.View, input Sear
 			break
 		}
 	}
-	workers := min(runtime.GOMAXPROCS(0), max(1, base.Names()/16384), 8)
-	partitions := make([]*columnNameHeap, workers)
-	var wait sync.WaitGroup
-	for worker := 0; worker < workers; worker++ {
-		wait.Add(1)
-		go func(worker int) {
-			defer wait.Done()
-			partitions[worker] = scanColumnNames(ctx, view, query, limit, worker*64, base.Names(), workers, sharedMinimum)
-		}(worker)
+	// All workers must partition the same list, even if another shard raises
+	// the shared score floor while these workers are starting.
+	var cached []column.ScoredName
+	if limit > 0 && len(view.FrequentMatches) > 0 && query.plan.patternASCII && query.wildcard == nil && len(query.plan.andTerms) == 0 && len(query.plan.exactPhrases) == 0 && query.plan.extension == "" && sharedMinimum.Load() >= columnPrefixScore(len(query.plan.raw)) {
+		cached = view.FrequentMatches[query.plan.rawLower]
 	}
-	wait.Wait()
+	workers := min(runtime.GOMAXPROCS(0), max(1, base.Names()/16384), 8)
+	if workers == 1 {
+		groups = scanColumnNames(ctx, view, query, limit, 0, base.Names(), 1, sharedMinimum, cached)
+	} else {
+		partitions := make([]*columnNameHeap, workers)
+		var wait sync.WaitGroup
+		for worker := 0; worker < workers; worker++ {
+			wait.Add(1)
+			go func(worker int) {
+				defer wait.Done()
+				partitions[worker] = scanColumnNames(ctx, view, query, limit, worker*64, base.Names(), workers, sharedMinimum, cached)
+			}(worker)
+		}
+		wait.Wait()
+		for _, partition := range partitions {
+			for _, hit := range partition.items {
+				groups.add(hit)
+			}
+		}
+	}
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
-	}
-	for _, partition := range partitions {
-		for _, hit := range partition.items {
-			groups.add(hit)
-		}
 	}
 	// Each retained group is known to contain a live row. The best K groups
 	// therefore contain the global best K base rows, without a recall cutoff.
@@ -131,7 +144,7 @@ func searchColumnViewWithFloor(ctx context.Context, view column.View, input Sear
 			return nil, err
 		}
 		for _, row := range rows {
-			add(base.Record(row), hit.score, "")
+			add(base.Record(row), hit.score, "", base.Parents[row])
 		}
 		if limit > 0 && results.Len() >= limit {
 			break
@@ -186,7 +199,7 @@ func searchColumnViewWithFloor(ctx context.Context, view column.View, input Sear
 			if query.wildcard == nil {
 				score = 1000000 + min(max(score, 0), 999999)
 			}
-			add(change.Record, score, "")
+			add(change.Record, score, "", column.NoRow)
 		}
 	}
 
@@ -349,48 +362,129 @@ func appendColumnHeap[T any](items []T, value T, limit int) []T {
 
 // scanColumnNames scores disjoint name ranges with private top-K heaps. A local
 // loser cannot enter the global top K, so merging needs no recall cutoff.
-func scanColumnNames(ctx context.Context, view column.View, query SearchQuery, limit, start, end, stride int, sharedMinimum *atomic.Int64) *columnNameHeap {
+func scanColumnNames(ctx context.Context, view column.View, query SearchQuery, limit, start, end, stride int, sharedMinimum *atomic.Int64, cached []column.ScoredName) *columnNameHeap {
 	base := view.Base
 	mask, requiresNonASCII := columnNameFilter(query)
 	groups := &columnNameHeap{limit: limit}
 	reachableParents := make(map[uint64]bool)
 	recycleParents := make(map[uint64]bool)
-	words := (base.Names() + 63) / 64
-	// Order bitmaps sparsest-first (non-ASCII, ordered pairs, repeated letters,
-	// non-letter symbols/digits, then ASCII letters) so early break skips dense reads.
-	var stackCols [128][]uint64
-	columns := stackCols[:0]
-	if requiresNonASCII {
-		columns = append(columns, base.NonASCIINameBitmap)
-	}
-	if len(base.NamePairBitmaps) != 0 && len(query.plan.namePairs) != 0 {
-		stride := base.NamePairStride
-		if stride == 0 {
-			stride = column.NamePairAlphabet
+	considerName := func(nameID int, name string, score int64) {
+		flags := base.NameFlags[nameID]
+		if query.wildcard == nil {
+			score = 1000000 + min(max(score, 0), 999999)
 		}
-		for _, pair := range query.plan.namePairs {
-			idx := pair
-			if stride != column.NamePairAlphabet {
-				first, second := pair/column.NamePairAlphabet, pair%column.NamePairAlphabet
-				if first >= stride || second >= stride {
+		kinds := flags & (column.NameHasDirectory | column.NameHasFile)
+		if kinds == 0 {
+			// Early development snapshots did not record kind summaries.
+			kinds = column.NameHasDirectory | column.NameHasFile
+		}
+		// A name that loses at its full score cannot win from a recycle-bin row.
+		// Rows are still scanned when a normal copy of that name may exist.
+		fileCandidate := kinds&column.NameHasFile != 0 && groups.competitive(columnNameHit{name: name, score: score})
+		dirCandidate := kinds&column.NameHasDirectory != 0 && groups.competitive(columnNameHit{name: name, score: score, directory: true})
+		if !fileCandidate && !dirCandidate {
+			return
+		}
+		fileSeen, dirSeen := false, false
+		fileNormal, dirNormal := false, false
+		for _, row := range base.NameRows[base.NameStarts[nameID]:base.NameStarts[nameID+1]] {
+			if (!fileCandidate || fileNormal) && (!dirCandidate || dirNormal) {
+				break
+			}
+			if _, changed := view.Delta[base.IDs[row]]; changed {
+				continue
+			}
+			record := base.Record(row)
+			if record.Flags&column.Structural != 0 {
+				continue
+			}
+			directory := record.Flags&column.Directory != 0
+			if directory {
+				if !dirCandidate || dirNormal {
 					continue
 				}
-				idx = first*stride + second
+			} else if !fileCandidate || fileNormal {
+				continue
 			}
-			columns = append(columns, base.NamePairBitmaps[idx*words:(idx+1)*words])
+			if !columnExtensionEligible(query, record) {
+				if directory {
+					dirCandidate = false
+				} else {
+					fileCandidate = false
+				}
+				continue
+			}
+			parentRow := base.Parents[row]
+			stable := view.DirectoryUnchanged(parentRow)
+			reachable, checked := reachableParents[record.ParentID]
+			if stable {
+				reachable, checked = base.DirectoryPath(base.RowDirectory[parentRow]) != "", true
+			}
+			if !checked {
+				reachable = view.Reachable(record.ParentID)
+				reachableParents[record.ParentID] = reachable
+			}
+			if !reachable {
+				continue
+			}
+			recycled := false
+			if stable {
+				recycled = pathInWindowsRecycleBin(base.DirectoryPath(base.RowDirectory[parentRow])) || parentRow == 0 && strings.EqualFold(record.Name, "$Recycle.Bin") && runtime.GOOS == "windows"
+			} else {
+				recycled = recordInWindowsRecycleBin(view, record, recycleParents)
+			}
+			if directory {
+				dirSeen = true
+				dirNormal = dirNormal || !recycled
+			} else {
+				fileSeen = true
+				fileNormal = fileNormal || !recycled
+			}
+		}
+		if fileSeen {
+			hit := columnNameHit{id: uint32(nameID), name: name, score: score, recycleOnly: !fileNormal}
+			if groups.competitive(hit) {
+				groups.add(hit)
+			}
+		}
+		if dirSeen {
+			hit := columnNameHit{id: uint32(nameID), name: name, score: score, directory: true, recycleOnly: !dirNormal}
+			if groups.competitive(hit) {
+				groups.add(hit)
+			}
 		}
 	}
-	for remaining := columnRepeatedLetters(query); remaining != 0; remaining &= remaining - 1 {
-		class := bits.TrailingZeros32(remaining)
-		columns = append(columns, base.NameRepeatBitmaps[class*words:(class+1)*words])
+	if cached != nil {
+		for n := start / 64; n < len(cached); n += stride {
+			if ctx.Err() != nil {
+				return groups
+			}
+			hit := cached[n]
+			score := hit.WithPinyin
+			if !query.plan.usePinyin {
+				score = hit.WithoutPinyin
+			}
+			if score == 0 {
+				continue
+			}
+			name := base.Name(hit.ID)
+			if len(view.Delta) != 0 {
+				considerName(int(hit.ID), name, int64(score))
+				continue
+			}
+			for _, kind := range [...]byte{column.NameHasFile, column.NameHasDirectory} {
+				if hit.Kinds&kind == 0 {
+					continue
+				}
+				groups.add(columnNameHit{id: hit.ID, name: name, score: 1000000 + min(int64(score), 999999), directory: kind == column.NameHasDirectory, recycleOnly: hit.NormalKinds&kind == 0})
+			}
+		}
+		return groups
 	}
-	for remaining := mask >> 26; remaining != 0; remaining &= remaining - 1 {
-		class := 26 + bits.TrailingZeros64(remaining)
-		columns = append(columns, base.NameBitmaps[class*words:(class+1)*words])
-	}
-	for remaining := mask & ((uint64(1) << 26) - 1); remaining != 0; remaining &= remaining - 1 {
-		class := bits.TrailingZeros64(remaining)
-		columns = append(columns, base.NameBitmaps[class*words:(class+1)*words])
+	var stackCols [128][]uint64
+	columns := columnNameCandidateBitmaps(base, query, mask, requiresNonASCII, stackCols[:0])
+	if view.VisibleNames != nil {
+		columns = append(columns, view.VisibleNames)
 	}
 	for word := start / 64; word < (end+63)/64; word += stride {
 		if ctx.Err() != nil {
@@ -446,89 +540,7 @@ func scanColumnNames(ctx context.Context, view column.View, query SearchQuery, l
 			if !matched {
 				continue
 			}
-			if query.wildcard == nil {
-				score = 1000000 + min(max(score, 0), 999999)
-			}
-			kinds := base.NameFlags[nameID] & (column.NameHasDirectory | column.NameHasFile)
-			if kinds == 0 {
-				// Early development snapshots did not record kind summaries.
-				kinds = column.NameHasDirectory | column.NameHasFile
-			}
-			// A name that loses at its full score cannot win from a recycle-bin row.
-			// Rows are still scanned when a normal copy of that name may exist.
-			fileCandidate := kinds&column.NameHasFile != 0 && groups.competitive(columnNameHit{name: name, score: score})
-			dirCandidate := kinds&column.NameHasDirectory != 0 && groups.competitive(columnNameHit{name: name, score: score, directory: true})
-			if !fileCandidate && !dirCandidate {
-				continue
-			}
-			fileSeen, dirSeen := false, false
-			fileNormal, dirNormal := false, false
-			for _, row := range base.NameRows[base.NameStarts[nameID]:base.NameStarts[nameID+1]] {
-				if (!fileCandidate || fileNormal) && (!dirCandidate || dirNormal) {
-					break
-				}
-				if _, changed := view.Delta[base.IDs[row]]; changed {
-					continue
-				}
-				record := base.Record(row)
-				if record.Flags&column.Structural != 0 {
-					continue
-				}
-				directory := record.Flags&column.Directory != 0
-				if directory {
-					if !dirCandidate || dirNormal {
-						continue
-					}
-				} else if !fileCandidate || fileNormal {
-					continue
-				}
-				if !columnExtensionEligible(query, record) {
-					if directory {
-						dirCandidate = false
-					} else {
-						fileCandidate = false
-					}
-					continue
-				}
-				parentRow := base.Parents[row]
-				stable := view.DirectoryUnchanged(parentRow)
-				reachable, checked := reachableParents[record.ParentID]
-				if stable {
-					reachable, checked = base.DirectoryPath(base.RowDirectory[parentRow]) != "", true
-				}
-				if !checked {
-					reachable = view.Reachable(record.ParentID)
-					reachableParents[record.ParentID] = reachable
-				}
-				if !reachable {
-					continue
-				}
-				recycled := false
-				if stable {
-					recycled = pathInWindowsRecycleBin(base.DirectoryPath(base.RowDirectory[parentRow])) || parentRow == 0 && strings.EqualFold(record.Name, "$Recycle.Bin") && runtime.GOOS == "windows"
-				} else {
-					recycled = recordInWindowsRecycleBin(view, record, recycleParents)
-				}
-				if directory {
-					dirSeen = true
-					dirNormal = dirNormal || !recycled
-				} else {
-					fileSeen = true
-					fileNormal = fileNormal || !recycled
-				}
-			}
-			if fileSeen {
-				hit := columnNameHit{id: uint32(nameID), name: name, score: score, recycleOnly: !fileNormal}
-				if groups.competitive(hit) {
-					groups.add(hit)
-				}
-			}
-			if dirSeen {
-				hit := columnNameHit{id: uint32(nameID), name: name, score: score, directory: true, recycleOnly: !dirNormal}
-				if groups.competitive(hit) {
-					groups.add(hit)
-				}
-			}
+			considerName(nameID, name, score)
 		}
 		if limit > 0 && groups.Len() >= limit {
 			floor := groups.items[0].rankScore()
@@ -547,6 +559,46 @@ func scanColumnNames(ctx context.Context, view column.View, query SearchQuery, l
 	return groups
 }
 
+// columnNameCandidateBitmaps selects lossless name filters in increasing density.
+func columnNameCandidateBitmaps(base *column.Snapshot, query SearchQuery, mask uint64, requiresNonASCII bool, columns [][]uint64) [][]uint64 {
+	words := (base.Names() + 63) / 64
+	// Order bitmaps sparsest-first (non-ASCII, ordered pairs, repeated letters,
+	// non-letter symbols/digits, then ASCII letters) so early break skips dense reads.
+	if requiresNonASCII {
+		columns = append(columns, base.NonASCIINameBitmap)
+	}
+	if len(base.NamePairBitmaps) != 0 && len(query.plan.namePairs) != 0 {
+		stride := base.NamePairStride
+		if stride == 0 {
+			stride = column.NamePairAlphabet
+		}
+		for _, pair := range query.plan.namePairs {
+			idx := pair
+			if stride != column.NamePairAlphabet {
+				first, second := pair/column.NamePairAlphabet, pair%column.NamePairAlphabet
+				if first >= stride || second >= stride {
+					continue
+				}
+				idx = first*stride + second
+			}
+			columns = append(columns, base.NamePairBitmaps[idx*words:(idx+1)*words])
+		}
+	}
+	for remaining := columnRepeatedLetters(query); remaining != 0; remaining &= remaining - 1 {
+		class := bits.TrailingZeros32(remaining)
+		columns = append(columns, base.NameRepeatBitmaps[class*words:(class+1)*words])
+	}
+	for remaining := mask >> 26; remaining != 0; remaining &= remaining - 1 {
+		class := 26 + bits.TrailingZeros64(remaining)
+		columns = append(columns, base.NameBitmaps[class*words:(class+1)*words])
+	}
+	for remaining := mask & ((uint64(1) << 26) - 1); remaining != 0; remaining &= remaining - 1 {
+		class := bits.TrailingZeros64(remaining)
+		columns = append(columns, base.NameBitmaps[class*words:(class+1)*words])
+	}
+	return columns
+}
+
 // recycleBinRankPenalty sits above the filename score band (1_000_000 plus up to
 // 999_999) so every ordinary match outranks a Recycle Bin path. The same gap
 // also covers wildcard and explicit path scores, which are much smaller.
@@ -555,7 +607,7 @@ const recycleBinRankPenalty int64 = 2_000_000
 // pathInWindowsRecycleBin reports paths whose first segment under a drive root
 // is $Recycle.Bin. A same-named folder anywhere else stays a normal directory.
 func pathInWindowsRecycleBin(path string) bool {
-	if runtime.GOOS != "windows" {
+	if runtime.GOOS != "windows" || strings.IndexByte(path, '$') < 0 {
 		return false
 	}
 	clean := filepath.Clean(path)

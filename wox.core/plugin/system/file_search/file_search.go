@@ -535,7 +535,12 @@ func (c *FileSearchPlugin) Init(ctx context.Context, initParams plugin.InitParam
 			return
 		}
 		if key == fileIgnorePatternsSettingKey {
+			c.serviceSyncMu.Lock()
+			defer c.serviceSyncMu.Unlock()
 			c.syncIgnorePatterns(callbackCtx)
+			if c.usesServiceFilenameIndex() {
+				c.syncUserRoots(callbackCtx)
+			}
 			c.onFileSearchPolicyChanged(callbackCtx)
 			return
 		}
@@ -1909,6 +1914,14 @@ func (c *FileSearchPlugin) getEngineRootPaths(ctx context.Context) []string {
 		paths = append(paths, c.getConfiguredContentRootPaths(ctx)...)
 	}
 	return filesearch.NormalizeUserRootPaths(ctx, paths)
+}
+
+// NativeVolumeRoots supplies the read-only filename roots shown in Settings.
+func (c *FileSearchPlugin) NativeVolumeRoots() []string {
+	if c.engine == nil {
+		return nil
+	}
+	return c.engine.NativeVolumeRoots()
 }
 
 func (c *FileSearchPlugin) usesServiceFilenameIndex() bool {

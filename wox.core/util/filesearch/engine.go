@@ -23,12 +23,13 @@ type Engine struct {
 	searchProvider interface {
 		Search(context.Context, SearchQuery, int) ([]SearchResult, error)
 	}
-	scanner         *Scanner
-	policy          *policyState
-	statusListeners *util.HashMap[string, func(StatusSnapshot)]
-	contentHook     ContentHook
-	nameIndexActive bool
-	nativeIndex     nativeNameIndex
+	scanner          *Scanner
+	policy           *policyState
+	statusListeners  *util.HashMap[string, func(StatusSnapshot)]
+	contentHook      ContentHook
+	nameIndexActive  bool
+	nativeIndex      nativeNameIndex
+	nativeRefreshing bool
 }
 
 func NewEngine(ctx context.Context) (*Engine, error) {
@@ -161,8 +162,19 @@ func (e *Engine) UpdatePolicy(policy Policy) {
 	if e == nil {
 		return
 	}
+	e.resetMu.Lock()
+	defer e.resetMu.Unlock()
 	if e.policy != nil {
 		e.policy.Set(policy)
+	}
+	e.mu.RLock()
+	index := e.nativeIndex
+	e.mu.RUnlock()
+	if index != nil && !index.updateIgnoreRules(policy.FilenameIgnore) {
+		ctx := util.NewTraceContext()
+		if err := e.refreshNativeNameIndex(ctx); err != nil {
+			util.GetLogger().Warn(ctx, "filesearch could not reconcile NTFS volumes: "+err.Error())
+		}
 	}
 
 	e.mu.RLock()
@@ -899,6 +911,9 @@ func (e *Engine) Search(ctx context.Context, query SearchQuery, limit int) ([]Se
 
 	if e.nativeIndex != nil {
 		return e.nativeIndex.Search(ctx, query, limit)
+	}
+	if e.nativeRefreshing {
+		return nil, nil
 	}
 	return e.searchProvider.Search(ctx, query, limit)
 }

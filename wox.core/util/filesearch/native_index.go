@@ -3,6 +3,7 @@ package filesearch
 import (
 	"context"
 	"path/filepath"
+	"slices"
 
 	"wox/util"
 )
@@ -15,15 +16,26 @@ type nativeNameIndex interface {
 	Progress() StatusSnapshot
 	Close() error
 	directoryView() *directoryIndex
+	updateIgnoreRules(FilenameIgnoreRules) bool
 }
 
 type nativeIndexCallbacks struct {
+	ignore       FilenameIgnoreRules
 	availability func(string, bool)
 	status       func()
 	content      func(context.Context, []ContentHookNotification)
 	wantsContent func() bool
 	loadElapsed  func(context.Context, string) (int64, error)
 	saveElapsed  func(context.Context, string, int64) error
+}
+
+// NativeVolumeRoots returns the volumes actually attached after ignore rules.
+func (e *Engine) NativeVolumeRoots() []string {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	roots := nativeRootPaths(e.nativeIndex)
+	slices.Sort(roots)
+	return roots
 }
 
 // RefreshNativeNameIndex reconciles the source after a service install, update,
@@ -46,7 +58,9 @@ func (e *Engine) refreshNativeNameIndex(ctx context.Context) error {
 	db := e.db
 	e.closeContentHookLocked()
 	e.nativeIndex = nil
+	e.nativeRefreshing = previous != nil
 	e.mu.Unlock()
+	defer func() { e.mu.Lock(); e.nativeRefreshing = false; e.mu.Unlock() }()
 	if previous != nil {
 		if err := previous.Close(); err != nil {
 			return err
@@ -56,6 +70,11 @@ func (e *Engine) refreshNativeNameIndex(ctx context.Context) error {
 		status:       func() { e.notifyStatusChanged(util.NewTraceContext()) },
 		content:      e.notifyNativeContent,
 		wantsContent: func() bool { e.mu.RLock(); defer e.mu.RUnlock(); return e.contentHook != nil },
+	}
+	if e.policy != nil {
+		e.policy.mu.RLock()
+		callbacks.ignore = e.policy.policy.FilenameIgnore
+		e.policy.mu.RUnlock()
 	}
 	if db != nil {
 		callbacks.loadElapsed = db.lastNativeFullIndexElapsedMs

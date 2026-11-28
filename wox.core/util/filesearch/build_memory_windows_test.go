@@ -19,6 +19,7 @@ import (
 	"testing"
 	"time"
 	"unsafe"
+	"wox/plugin/system/file_search/indexpolicy"
 	"wox/util/filesearch/column"
 	"wox/util/filesearchservice"
 	"wox/util/filesearchservice/protocol"
@@ -149,7 +150,14 @@ func TestNativeBuildMemoryDiagnostic(t *testing.T) {
 			ingestMillis = float64(time.Since(started)) / float64(time.Millisecond)
 		}
 	}}
+	if os.Getenv("WOX_BUILD_IGNORE_PATTERNS") == "1" {
+		filter := nativeQueryVisibility{rules: indexpolicy.New().FilenameMatcher(), cacheDir: t.TempDir()}
+		store.SetQueryProjection(&filter)
+	}
 	err = source.build(context.Background())
+	if err == nil && os.Getenv("WOX_BUILD_IGNORE_PATTERNS") == "1" {
+		err = store.ReadQuery(func(column.View) error { return nil })
+	}
 	elapsed := float64(time.Since(started)) / float64(time.Millisecond)
 	postBuild := sample()
 	peakMu.Lock()
@@ -167,20 +175,28 @@ func TestNativeBuildMemoryDiagnostic(t *testing.T) {
 	queries := []string{"readme", "wox", "qqyy", "微信", "wx", "main.go", "test", "文件", "src/main", "read me", ".json", "woxzzzzmissing"}
 	signatures := map[string]string{}
 	queryMillis := map[string]float64{}
-	for _, q := range queries {
-		queryStarted := time.Now()
-		results, err := index.search(context.Background(), SearchQuery{Raw: q}, 100)
-		queryMillis[q] = float64(time.Since(queryStarted)) / float64(time.Millisecond)
-		if err != nil {
-			t.Fatal(err)
+	rounds, warmup := 1, 0
+	if os.Getenv("WOX_BUILD_WARM_QUERIES") == "1" {
+		rounds, warmup = 30, 2
+	}
+	for round := 0; round < rounds; round++ {
+		for _, q := range queries {
+			queryStarted := time.Now()
+			results, err := index.search(context.Background(), SearchQuery{Raw: q}, 100)
+			if round >= warmup {
+				queryMillis[q] += float64(time.Since(queryStarted)) / float64(time.Millisecond) / float64(rounds-warmup)
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			keys := make([]string, len(results))
+			for i, r := range results {
+				keys[i] = fmt.Sprintf("%s:%d", r.Path, r.Score)
+			}
+			data, _ := json.Marshal(keys)
+			hash := sha256.Sum256(data)
+			signatures[q] = hex.EncodeToString(hash[:])
 		}
-		keys := make([]string, len(results))
-		for i, r := range results {
-			keys[i] = fmt.Sprintf("%s:%d", r.Path, r.Score)
-		}
-		data, _ := json.Marshal(keys)
-		hash := sha256.Sum256(data)
-		signatures[q] = hex.EncodeToString(hash[:])
 	}
 	stopSampling()
 	queryPeak := peak

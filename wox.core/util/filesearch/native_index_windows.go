@@ -41,6 +41,8 @@ type ntfsNameIndex struct {
 	changes    chan struct{}
 	callbacks  nativeIndexCallbacks
 	runStarted time.Time
+	volumes    []string
+	ignoreKey  string // Protected by the engine lifecycle lock.
 }
 
 // openNativeNameIndex restores mappings immediately, then catches up each
@@ -85,7 +87,14 @@ func newNTFSNameIndex(ctx context.Context, dir string, roots []string, stream fa
 	}
 	workerCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	index := &ntfsNameIndex{directory: newDirectoryIndex(dir), cancel: cancel, work: make(chan struct{}, 1), states: make(map[string]nativeVolumeState), notify: callbacks.status, callbacks: callbacks}
+	index.volumes = roots
+	if callbacks.ignore != nil {
+		index.ignoreKey = callbacks.ignore.CacheKey()
+	}
 	for _, root := range roots {
+		if callbacks.ignore != nil && callbacks.ignore.IgnorePath(root, root) {
+			continue
+		}
 		id := normalizePath(root)
 		if _, exists := index.states[id]; exists {
 			continue
@@ -93,6 +102,11 @@ func newNTFSNameIndex(ctx context.Context, dir string, roots []string, stream fa
 		if err := index.directory.attach(RootRecord{ID: id, Path: root}); err != nil {
 			_ = index.Close()
 			return nil, err
+		}
+		if callbacks.ignore != nil {
+			shard := index.directory.shards[id]
+			filter := nativeQueryVisibility{rules: callbacks.ignore, cacheDir: index.directory.shardDirectory(id)}
+			shard.store.SetQueryProjection(&filter)
 		}
 		state := nativeVolumeState{}
 		state.pending = errors.Is(index.directory.shards[id].store.Read(func(column.View) error { return nil }), column.ErrNotReady)
@@ -183,6 +197,10 @@ func (i *ntfsNameIndex) runVolume(ctx context.Context, id string, source *ntfsSo
 		i.clearError(id)
 	}
 	needsBuild := errors.Is(source.store.Read(func(column.View) error { return nil }), column.ErrNotReady)
+	if !needsBuild && i.callbacks.ignore != nil {
+		// Warm the generation's visibility cache on the volume worker, ahead of typing.
+		_ = source.store.ReadQuery(func(column.View) error { return nil })
+	}
 	caughtUp := false
 	for ctx.Err() == nil {
 		var err error
@@ -354,6 +372,37 @@ func (i *ntfsNameIndex) clearError(id string) {
 
 func (i *ntfsNameIndex) Search(ctx context.Context, query SearchQuery, limit int) ([]SearchResult, error) {
 	return i.directory.search(ctx, query, limit)
+}
+
+// updateIgnoreRules reuses attached mappings and USN subscriptions for folder
+// edits. Only a change in volume membership requires reopening source workers.
+func (i *ntfsNameIndex) updateIgnoreRules(rules FilenameIgnoreRules) bool {
+	key := ""
+	if rules != nil {
+		key = rules.CacheKey()
+	}
+	if i.ignoreKey == key {
+		return true
+	}
+	i.directory.mu.Lock()
+	defer i.directory.mu.Unlock()
+	for _, root := range i.volumes {
+		attached := i.directory.shards[normalizePath(root)] != nil
+		if attached != (rules == nil || !rules.IgnorePath(root, root)) {
+			return false
+		}
+	}
+	for id, shard := range i.directory.shards {
+		if rules == nil {
+			shard.store.SetQueryProjection(nil)
+			continue
+		}
+		filter := nativeQueryVisibility{rules: rules, cacheDir: i.directory.shardDirectory(id)}
+		shard.store.SetQueryProjection(&filter)
+		_ = shard.store.ReadQuery(func(column.View) error { return nil })
+	}
+	i.ignoreKey = key
+	return true
 }
 
 func (i *ntfsNameIndex) directoryView() *directoryIndex { return i.directory }

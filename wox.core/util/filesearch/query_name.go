@@ -94,6 +94,11 @@ func scoreColumnName(query SearchQuery, name string, ascii bool, minimum int64, 
 		}
 		return true, score
 	}
+	// Basic Han characters survive normalization literally and pinyin readings
+	// contain no Han. Reject absent literals before allocating scorer scratch.
+	if plan.requiredHan != "" && !plan.extensionOnly && !strings.Contains(name, plan.requiredHan) {
+		return false, 0
+	}
 	fuzzyMinimum := minimum - 4000
 	if plan.extension != "" {
 		fuzzyMinimum -= 500
@@ -130,13 +135,26 @@ func exactColumnNameThreshold(ctx context.Context, view column.View, query Searc
 	}
 	base := view.Base
 	rawLen := len(plan.raw)
+	if counts, ok := view.PrefixCounts[plan.rawLower]; ok {
+		count := counts.WithPinyin
+		if !plan.usePinyin {
+			count = counts.WithoutPinyin
+		}
+		if count >= limit {
+			return columnPrefixScore(rawLen)
+		}
+	}
 	firstLower := plan.raw[0]
 	if firstLower >= 'A' && firstLower <= 'Z' {
 		firstLower += 'a' - 'A'
 	}
 	hasHints := len(base.NameScoreHints) == base.Names()
 	exactCount, prefixCount := 0, 0
-	for _, id := range base.FrequentNameIDs {
+	ids := base.FrequentNameIDs
+	if view.FrequentByInitial != nil && firstLower < 128 {
+		ids = view.FrequentByInitial[firstLower]
+	}
+	for _, id := range ids {
 		if ctx.Err() != nil {
 			return 0
 		}
@@ -188,7 +206,7 @@ func exactColumnNameThreshold(ctx context.Context, view column.View, query Searc
 		}
 	}
 	if prefixCount >= limit {
-		return 4000 + 32 + int64(rawLen*16)
+		return columnPrefixScore(rawLen)
 	}
 	return 0
 }
@@ -297,3 +315,5 @@ type columnNameBounds struct {
 	length        int
 	first, second uint64
 }
+
+func columnPrefixScore(length int) int64 { return 4000 + 32 + int64(length*16) }

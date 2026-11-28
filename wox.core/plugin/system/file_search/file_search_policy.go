@@ -41,10 +41,14 @@ func newFileSearchIndexPolicy() *fileSearchIndexPolicy {
 }
 
 func (p *fileSearchIndexPolicy) toFilesearchPolicy() filesearch.Policy {
-	return filesearch.Policy{
+	policy := filesearch.Policy{
 		NewTraversalContext: p.newTraversalContext,
 		ShouldProcessChange: p.shouldProcessChange,
 	}
+	if matcher := p.inner.FilenameMatcher(); matcher != nil {
+		policy.FilenameIgnore = matcher
+	}
+	return policy
 }
 
 func (p *fileSearchIndexPolicy) newTraversalContext(root filesearch.RootRecord, scopePath string) filesearch.TraversalPolicyContext {

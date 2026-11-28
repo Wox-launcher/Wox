@@ -87,11 +87,16 @@ func searchIndexedColumnPaths(ctx context.Context, view column.View, query Searc
 						return
 					}
 				}
-				if row != column.NoRow {
+				if row == column.NoRow {
+					record = view.Delta[record.ID].Record
+				} else {
 					record = base.Record(row)
 					if change, exists := view.Delta[record.ID]; exists {
 						record = change.Record
 					}
+				}
+				if view.PruneStructuralDirectories && row != 0 && record.Flags&column.Structural != 0 {
+					return
 				}
 				directory.path, directory.key = path, key
 				directory.matches = directory.matches[:0]

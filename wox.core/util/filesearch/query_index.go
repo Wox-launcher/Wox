@@ -16,6 +16,7 @@ type queryPlan struct {
 	pattern               *fuzzymatch.PreparedPattern
 	pathPattern           *fuzzymatch.PreparedPattern
 	patternASCII          bool
+	requiredHan           string
 	andTerms              []SearchQuery
 	raw                   string
 	rawLower              string
@@ -140,6 +141,9 @@ func buildQueryPlan(query SearchQuery) *queryPlan {
 	for _, c := range raw {
 		if c >= 128 {
 			plan.patternASCII = false
+			if c >= 0x4e00 && c <= 0x9fff {
+				plan.requiredHan = string(c)
+			}
 			break
 		}
 	}

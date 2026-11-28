@@ -43,6 +43,8 @@ type Store struct {
 	unsynced        bool // log holds ApplyUnsynced frames not yet fsynced
 	query           *QueryOverlay
 	queryPending    []uint64
+	projectQuery    QueryProjection
+	projected       View
 	queryMu         sync.Mutex // serializes lazy preparation within concurrent read leases
 	prepareSnapshot func(*Snapshot) error
 	countsMu        sync.Mutex
@@ -210,14 +212,31 @@ func (s *Store) NeedsCompaction() bool {
 	return err == nil && info.Size() >= 64<<20
 }
 
+// ScoredName stores immutable basename scores for a literal query. A zero
+// score denotes a name below the prefix floor for that pinyin setting.
+type ScoredName struct {
+	ID                        uint32
+	WithPinyin, WithoutPinyin int32
+	Kinds, NormalKinds        byte // Reachable visible kinds and the subset outside the recycle bin.
+}
+
+// PrefixCounts counts distinct reachable names scoring at least the cached floor.
+type PrefixCounts struct{ WithPinyin, WithoutPinyin int }
+
 // View is valid only for the duration of Store.Read. Borrowed names must not escape it.
 type View struct {
-	Base     *Snapshot
-	Delta    map[uint64]Change
-	Cursor   string
-	Revision uint64
-	Policy   string
-	Query    *QueryOverlay
+	Generation                 string
+	PruneStructuralDirectories bool                    // Every non-root structural directory in this view is excluded.
+	PrefixCounts               map[string]PrefixCounts // Valid only before live updates.
+	FrequentByInitial          *[128][]uint32          // Visible frequent ASCII names grouped by folded first byte.
+	FrequentMatches            map[string][]ScoredName // Prefix-quality candidates for frequently excluded terms.
+	VisibleNames               []uint64                // Optional base-name eligibility bitmap for this query view.
+	Base                       *Snapshot
+	Delta                      map[uint64]Change
+	Cursor                     string
+	Revision                   uint64
+	Policy                     string
+	Query                      *QueryOverlay
 }
 
 // OpenStore restores the last published generation and only complete journal batches.
@@ -293,7 +312,22 @@ func (s *Store) Read(callback func(View) error) error {
 	if s.base == nil {
 		return ErrNotReady
 	}
-	return callback(View{Base: s.base, Delta: s.delta, Cursor: s.cursor, Revision: s.revision, Policy: s.manifest.Policy})
+	return callback(View{Generation: s.manifest.Generation, Base: s.base, Delta: s.delta, Cursor: s.cursor, Revision: s.revision, Policy: s.manifest.Policy})
+}
+
+// QueryProjection derives a search-only view from source facts. PreparePublication
+// may run alongside readers and must not mutate their current view.
+type QueryProjection interface {
+	PreparePublication(*Snapshot, string)
+	Project(View, []uint64, bool) View
+}
+
+// SetQueryProjection replaces the search-only view after a rule change. The
+// projection runs under the query preparation lock and borrows the store lease.
+func (s *Store) SetQueryProjection(project QueryProjection) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.projectQuery, s.query, s.projected = project, nil, View{}
 }
 
 // ReadQuery prepares or incrementally patches one shared overlay only when a search needs it.
@@ -303,14 +337,22 @@ func (s *Store) ReadQuery(callback func(View) error) error {
 		// The read lease pins the mapping and delta while queryMu prevents two
 		// searches from preparing duplicate overlays for the same state.
 		s.queryMu.Lock()
-		if s.query == nil {
+		reset := s.query == nil
+		if reset {
 			s.query = buildQueryOverlay(view)
-			s.queryPending = nil
 		} else if len(s.queryPending) > 0 {
 			patchQueryOverlay(view, s.query, s.queryPending)
-			s.queryPending = s.queryPending[:0]
 		}
 		view.Query = s.query
+		if s.projectQuery != nil {
+			if reset || len(s.queryPending) > 0 {
+				s.projected = s.projectQuery.Project(view, s.queryPending, reset)
+			}
+			// Cursor-only checkpoints reuse the projection but still advance the read view.
+			s.projected.Revision, s.projected.Cursor = view.Revision, view.Cursor
+			view = s.projected
+		}
+		s.queryPending = s.queryPending[:0]
 		s.queryMu.Unlock()
 		return callback(view)
 	})
@@ -351,6 +393,12 @@ func (s *Store) Publish(base *Snapshot, cursor, policy string, expectedRevision 
 		return err
 	}
 	generation := hex.EncodeToString(token[:])
+	s.mu.RLock()
+	projection := s.projectQuery
+	s.mu.RUnlock()
+	if projection != nil {
+		projection.PreparePublication(base, generation)
+	}
 	columnPath := filepath.Join(s.dir, generation+".columns")
 	logPath := filepath.Join(s.dir, generation+".log")
 	manifestPath := filepath.Join(s.dir, generation+".json")
@@ -878,6 +926,7 @@ func (s *Store) Close() error {
 		err = errors.Join(err, s.log.Close())
 	}
 	s.delta = nil
+	s.projectQuery, s.projected = nil, View{}
 	s.query = nil
 	s.queryPending = nil
 	return err

@@ -1,6 +1,9 @@
 package indexpolicy
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"os"
 	"path"
 	"path/filepath"
@@ -9,6 +12,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode"
 )
 
 // Policy owns the plugin-level filesystem ignore rules that sit above the
@@ -645,6 +649,7 @@ type fileSearchIgnoreRule struct {
 }
 
 type fileSearchIgnoreRules struct {
+	key             string
 	pathRules       []fileSearchIgnoreRule
 	segmentLiterals map[string]struct{}
 	segmentRules    []fileSearchIgnoreRule
@@ -680,7 +685,60 @@ func compileFileSearchIgnoreRules(patterns []string) fileSearchIgnoreRules {
 		}
 	}
 
+	serialized, _ := json.Marshal(patterns)
+	digest := sha256.Sum256(serialized)
+	compiled.key = hex.EncodeToString(digest[:])
 	return compiled
+}
+
+// FilenameMatcher is an immutable snapshot of the user-configured patterns.
+type FilenameMatcher struct {
+	rules     fileSearchIgnoreRules
+	terminals map[string]bool
+	anyPath   bool
+}
+
+func (m *FilenameMatcher) CacheKey() string { return m.rules.key }
+
+func (m *FilenameMatcher) IgnorePath(root, path string) bool {
+	return configuredPatternMatchesPath(m.rules, root, path)
+}
+
+// FilenameMatcher snapshots the configured rules. A literal terminal component
+// gates path checks so volume indexing can classify each interned name just once.
+func (p *Policy) FilenameMatcher() *FilenameMatcher {
+	rules := p.ignoreRulesSnapshot()
+	if len(rules.pathRules)+len(rules.segmentRules)+len(rules.segmentLiterals) == 0 {
+		return nil
+	}
+	terminals := make(map[string]bool)
+	anyPath := false
+	for _, rule := range rules.pathRules {
+		switch {
+		case rule.pathPrefix != "":
+			terminals[strings.ToLower(path.Base(rule.pathPrefix))] = true
+		case len(rule.pathSegmentParts) > 0 && rule.pathSegmentParts[len(rule.pathSegmentParts)-1] != "**":
+			terminals[rule.pathSegmentParts[len(rule.pathSegmentParts)-1]] = true
+		default:
+			anyPath = true
+		}
+	}
+	return &FilenameMatcher{rules: rules, terminals: terminals, anyPath: anyPath}
+}
+
+// ClassifyName resolves segment-only rules and requests path matching only for
+// names that can terminate a configured path rule.
+func (m *FilenameMatcher) ClassifyName(name string) (ignore, checkPath bool) {
+	lower := strings.ToLower(name)
+	if _, found := m.rules.segmentLiterals[lower]; found {
+		return true, false
+	}
+	for _, rule := range m.rules.segmentRules {
+		if rule.matchesSegment(lower) {
+			return true, false
+		}
+	}
+	return false, m.anyPath || m.terminals[strings.TrimRightFunc(lower, unicode.IsSpace)]
 }
 
 func compileFileSearchIgnoreRule(pattern string) (fileSearchIgnoreRule, bool) {

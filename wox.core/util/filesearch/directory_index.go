@@ -97,6 +97,36 @@ func (d *directoryIndex) search(ctx context.Context, query SearchQuery, limit in
 	}
 	matches := make([][]SearchResult, len(shards))
 	errs := make([]error, len(shards))
+	readShard := func(i int) {
+		if err := ctx.Err(); err != nil {
+			errs[i] = err
+			return
+		}
+		errs[i] = shards[i].store.ReadQuery(func(view column.View) error {
+			var err error
+			matches[i], err = searchColumnViewWithFloor(ctx, view, query, limit, &sharedMinimum)
+			return err
+		})
+	}
+	// A single volume already returns a ranked top K. Preserve path de-duplication
+	// without scheduling another worker or rebuilding the result heap.
+	if len(shards) == 1 {
+		readShard(0)
+		if err := errs[0]; err != nil && !errors.Is(err, column.ErrNotReady) {
+			return nil, err
+		}
+		batch := matches[0]
+		seen := make(map[string]bool, len(batch))
+		unique := batch[:0]
+		for _, match := range batch {
+			key := normalizePath(match.Path)
+			if !seen[key] {
+				seen[key] = true
+				unique = append(unique, match)
+			}
+		}
+		return unique, nil
+	}
 	jobs := make(chan int, len(shards))
 	for i := range shards {
 		jobs <- i
@@ -108,15 +138,7 @@ func (d *directoryIndex) search(ctx context.Context, query SearchQuery, limit in
 		go func() {
 			defer wait.Done()
 			for i := range jobs {
-				if err := ctx.Err(); err != nil {
-					errs[i] = err
-					continue
-				}
-				errs[i] = shards[i].store.ReadQuery(func(view column.View) error {
-					var err error
-					matches[i], err = searchColumnViewWithFloor(ctx, view, query, limit, &sharedMinimum)
-					return err
-				})
+				readShard(i)
 			}
 		}()
 	}
