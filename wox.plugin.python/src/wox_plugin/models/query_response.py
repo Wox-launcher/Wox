@@ -25,6 +25,7 @@ class QueryRefinementType(str, Enum):
     MULTI_SELECT = "multiSelect"
     TOGGLE = "toggle"
     SORT = "sort"
+    """Deprecated: use `QueryRefinementType.SINGLE_SELECT` for sort controls."""
 
 
 @dataclass

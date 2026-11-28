@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"wox/plugin"
 	"wox/ui/contract"
 	woxui "wox/ui/runtime"
 )
@@ -92,6 +93,30 @@ func TestRefinementDropdownHotkeysAndLocalSearch(t *testing.T) {
 	app.applyRefinementsLocked(refinements[:1])
 	if app.resultList.refinementPicker.id != "" {
 		t.Fatal("picker remained open after its group disappeared")
+	}
+}
+
+func TestRefinementSortDropdownCommitsOneChoice(t *testing.T) {
+	services := &sendQueryRecorderServices{}
+	app := newSendQueryTestApp(services, newInputQuery("stock "), showAppParams{})
+	defer app.querySession.resetQueryLoadingLocked()
+	app.applyRefinementsLocked([]queryRefinement{{
+		ID: "order", Type: plugin.QueryRefinementTypeSort, Title: "Sort",
+		Options: []queryRefinementOption{{Value: "default", Title: "Default"}, {Value: "gainers", Title: "Gainers"}},
+	}})
+	app.toggleRefinementBar()
+	group := app.refinementViewProps(app.snapshot(), 0, 0, 1).Groups[0]
+	if group.OnTap == nil || group.Current != "Default" {
+		t.Fatalf("expected sort dropdown showing Default, got %#v", group)
+	}
+	group.OnTap()
+	app.onRefinementPickerKey(woxui.KeyEvent{Key: woxui.KeyArrowDown, Down: true})
+	app.onRefinementPickerKey(woxui.KeyEvent{Key: woxui.KeyEnter, Down: true})
+	if got := services.startedQuery.QueryRefinements["order"]; got != "gainers" {
+		t.Fatalf("sort sent with query = %q, want gainers", got)
+	}
+	if app.resultList.refinementPicker.id != "" {
+		t.Fatal("sort dropdown stayed open after selection")
 	}
 }
 

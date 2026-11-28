@@ -1264,8 +1264,7 @@ func (m *Manager) PostOnQueryBoxFocus(ctx context.Context) {
 
 func (m *Manager) PostOnHide(ctx context.Context) {
 	sessionID := util.GetContextSessionId(ctx)
-	m.cancelSessionQuery(sessionID)
-	// Update cached visibility state
+	// Keep the current query running so a continued session can show results received while hidden.
 	if impl, ok := m.ui.(*uiImpl); ok {
 		impl.sessionMu.Lock()
 		if impl.sessionVisible == nil {

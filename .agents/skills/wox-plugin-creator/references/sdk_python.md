@@ -41,7 +41,7 @@ class Query:
 class QueryRefinement:
     id: str
     title: str
-    type: QueryRefinementType  # singleSelect | multiSelect | toggle | sort
+    type: QueryRefinementType  # SINGLE_SELECT, MULTI_SELECT, or TOGGLE. SORT is deprecated; use SINGLE_SELECT.
     hotkey: str  # e.g. cmd+shift+t on macOS, ctrl+shift+t on Windows/Linux
     options: list[QueryRefinementOption]
     default_value: list[str] = []

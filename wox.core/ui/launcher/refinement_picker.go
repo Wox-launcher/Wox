@@ -20,7 +20,7 @@ type refinementPicker struct {
 }
 
 func refinementUsesDropdown(refinement queryRefinement) bool {
-	return refinement.Type == plugin.QueryRefinementTypeSingleSelect || refinement.Type == plugin.QueryRefinementTypeMultiSelect
+	return refinementIsSingleChoice(refinement) || refinement.Type == plugin.QueryRefinementTypeMultiSelect
 }
 
 func (a *App) refinementByID(id string) *queryRefinement {
@@ -150,7 +150,7 @@ func (a *App) activateRefinementPickerOption(id, value string) {
 		!slices.ContainsFunc(refinement.Options, func(option queryRefinementOption) bool { return option.Value == value }) {
 		return
 	}
-	if refinement.Type == plugin.QueryRefinementTypeSingleSelect {
+	if refinementIsSingleChoice(*refinement) {
 		a.dismissRefinementPicker()
 		if a.querySession.query.QueryRefinements[id] == value {
 			return

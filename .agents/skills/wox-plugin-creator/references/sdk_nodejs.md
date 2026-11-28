@@ -55,7 +55,7 @@ Return refinements on `QueryResponse.Refinements`. Read selected values from `qu
 interface QueryRefinement {
   Id: string;
   Title: string;
-  Type: "singleSelect" | "multiSelect" | "toggle" | "sort";
+  Type: "singleSelect" | "multiSelect" | "toggle" | "sort"; // "sort" is deprecated. Use "singleSelect".
   Options: QueryRefinementOption[];
   DefaultValue?: string[];
   Hotkey: string; // e.g. cmd+shift+t on macOS, ctrl+shift+t on Windows/Linux

@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"image"
 	"image/png"
+	"io"
 	"os"
 	"strings"
 	"sync/atomic"
@@ -79,7 +80,6 @@ func readFilePaths() ([]string, error) {
 	var cPaths *C.wchar_t
 	var cLen C.int
 	ret := C.clipboardReadFilePaths(&cPaths, &cLen)
-	C.clipboardReleaseDataCache()
 	if ret != 0 {
 		if ret == -1 {
 			return nil, noDataErr
@@ -122,14 +122,13 @@ func readFilePaths() ([]string, error) {
 	return paths, nil
 }
 
-// readImageSnapshot copies native bytes while leaving pixel decoding to the caller.
-func readImageSnapshot() (*ImageSnapshot, error) {
+// readImage decodes directly from the native clipboard buffer to avoid an extra full-frame Go copy.
+func readImage() (image.Image, error) {
 	var cData *C.uchar
 	var cLen C.int
 	var cIsPNG C.int
 	var cInfo C.BitmapInfo
 	ret := C.clipboardReadImage(&cData, &cLen, &cIsPNG, &cInfo)
-	C.clipboardReleaseDataCache()
 	if ret != 0 {
 		if ret == -1 {
 			return nil, noDataErr
@@ -137,8 +136,41 @@ func readImageSnapshot() (*ImageSnapshot, error) {
 		return nil, fmt.Errorf("clipboard: readImage failed (code=%d)", int(ret))
 	}
 	defer C.free(unsafe.Pointer(cData))
+	if cLen <= 0 {
+		return nil, noDataErr
+	}
+
+	// raw stays valid until C.free runs on return; every decoder below produces an independent Go image.
+	raw := unsafe.Slice((*byte)(unsafe.Pointer(cData)), int(cLen))
+	if int(cIsPNG) != 0 {
+		img, _, err := image.Decode(bytes.NewReader(raw))
+		if err != nil {
+			return nil, fmt.Errorf("decode image: %w", err)
+		}
+		return img, nil
+	}
+	if int(cInfo.bitCount) == 32 {
+		return decode32bppDIB(raw, int(cInfo.headerSize), int(cInfo.width), int(cInfo.height), int(cInfo.compression))
+	}
+	return decodeNon32bppDIB(raw, int(cInfo.headerSize), int(cInfo.width), int(cInfo.height), int(cInfo.bitCount), int(cInfo.compression), int(cInfo.sizeImage), int(cInfo.clrUsed))
+}
+
+// readImageSnapshot copies native bytes while leaving pixel decoding to the caller.
+func readImageSnapshot() (*ImageSnapshot, error) {
+	var cData *C.uchar
+	var cLen C.int
+	var cIsPNG C.int
+	var cInfo C.BitmapInfo
+	ret := C.clipboardReadImage(&cData, &cLen, &cIsPNG, &cInfo)
+	if ret != 0 {
+		if ret == -1 {
+			return nil, noDataErr
+		}
+		return nil, fmt.Errorf("clipboard: readImage failed (code=%d)", int(ret))
+	}
 
 	data := C.GoBytes(unsafe.Pointer(cData), cLen)
+	C.free(unsafe.Pointer(cData))
 	if int(cIsPNG) != 0 {
 		return encodedImageSnapshot(data)
 	}
@@ -259,21 +291,19 @@ func decodeNon32bppDIB(data []byte, headerSize, width, height, bitCount, compres
 
 	fileSize := offset + uint32(sizeImage)
 
-	// Construct BMP file
-	buf := new(bytes.Buffer)
-	binary.Write(buf, binary.LittleEndian, uint16('B')|(uint16('M')<<8)) // bfType
-	binary.Write(buf, binary.LittleEndian, uint32(fileSize))             // bfSize
-	binary.Write(buf, binary.LittleEndian, uint32(0))                    // bfReserved1, bfReserved2
-	binary.Write(buf, binary.LittleEndian, uint32(offset))               // bfOffBits
+	// Build the 14-byte BMP file header on the stack and stream DIB bytes without copying them.
+	var fileHeader [fileHeaderLen]byte
+	fileHeader[0] = 'B'
+	fileHeader[1] = 'M'
+	binary.LittleEndian.PutUint32(fileHeader[2:6], fileSize)
+	binary.LittleEndian.PutUint32(fileHeader[10:14], offset)
 
-	// Write DIB data from our copy
 	dibSize := fileSize - fileHeaderLen
 	if int(dibSize) > len(data) {
 		dibSize = uint32(len(data))
 	}
-	buf.Write(data[:dibSize])
 
-	decoded, decodeErr := bmp.Decode(buf)
+	decoded, decodeErr := bmp.Decode(io.MultiReader(bytes.NewReader(fileHeader[:]), bytes.NewReader(data[:dibSize])))
 	if decodeErr != nil {
 		return nil, fmt.Errorf("clipboard: failed to decode BMP (headerSize=%d bitCount=%d compression=%d): %w",
 			headerSize, bitCount, compression, decodeErr)

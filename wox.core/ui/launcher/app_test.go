@@ -1500,17 +1500,21 @@ func TestApplyLaunchModeOnShowLocked(t *testing.T) {
 	}
 }
 
-// TestApplyLaunchModeOnShowLockedContinuesPreviousQuery verifies continue mode retains the complete visible query state.
+// Continue mode must retain a slow query's final response even if it arrived while hidden.
 func TestApplyLaunchModeOnShowLockedContinuesPreviousQuery(t *testing.T) {
-	query := newInputQuery("continued query")
-	query.QueryID = "continued-query-id"
+	query := newInputQuery("stock ")
 	app := newSendQueryTestApp(&sendQueryRecorderServices{}, query, showAppParams{LaunchMode: "continue", ShowSource: "default"})
-	app.resultList.results = []queryResult{{ID: "continued-result", QueryID: query.QueryID}}
-	app.resultList.resultsQueryID = query.QueryID
-	app.resultList.selected = 0
+	app.querySession.showQueryLoading(query.QueryID)
+	app.ApplyQueryResponse(context.Background(), contract.QueryResponse{
+		QueryID: query.QueryID, IsFinal: true,
+		Response: plugin.QueryResponseUI{Results: []plugin.QueryResultUI{{Id: "continued-result"}}},
+	})
 
 	if !app.applyLaunchModeOnShowLocked() {
 		t.Fatal("continue mode should preserve the previous query")
+	}
+	if app.querySession.queryLoading || !app.querySession.queryComplete {
+		t.Fatal("continued query still appears pending after receiving its final response")
 	}
 	if app.querySession.query.QueryID != query.QueryID || app.querySession.query.QueryText != query.QueryText || app.querySession.editor.State().Text != query.QueryText {
 		t.Fatalf("continued query state = id %q query %q editor %q, want id %q text %q", app.querySession.query.QueryID, app.querySession.query.QueryText, app.querySession.editor.State().Text, query.QueryID, query.QueryText)

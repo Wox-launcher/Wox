@@ -483,6 +483,10 @@ func (a *App) refreshRefinementResults() {
 	}
 }
 
+func refinementIsSingleChoice(refinement queryRefinement) bool {
+	return refinement.Type == plugin.QueryRefinementTypeSingleSelect || refinement.Type == plugin.QueryRefinementTypeSort
+}
+
 func normalizeRefinementValues(refinement queryRefinement, values []string) []string {
 	allowed := make(map[string]bool, len(refinement.Options))
 	for _, option := range refinement.Options {
@@ -504,10 +508,10 @@ func normalizeRefinementValues(refinement queryRefinement, values []string) []st
 	if len(normalized) == 0 && len(values) == 0 {
 		normalized = filter(refinement.DefaultValue)
 	}
-	if (refinement.Type == "singleSelect" || refinement.Type == "sort") && len(normalized) == 0 && len(refinement.Options) > 0 {
+	if refinementIsSingleChoice(refinement) && len(normalized) == 0 && len(refinement.Options) > 0 {
 		normalized = []string{refinement.Options[0].Value}
 	}
-	if (refinement.Type == "singleSelect" || refinement.Type == "sort") && len(normalized) > 1 {
+	if refinementIsSingleChoice(refinement) && len(normalized) > 1 {
 		normalized = normalized[:1]
 	}
 	return normalized

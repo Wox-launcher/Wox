@@ -1,7 +1,7 @@
 package system
 
 import (
-	"bytes"
+	"bufio"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -9,9 +9,11 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"io"
 	"os"
 	"path"
 	"path/filepath"
+	runtimedebug "runtime/debug"
 	"sort"
 	"strconv"
 	"strings"
@@ -30,6 +32,7 @@ import (
 	"wox/util"
 	"wox/util/clipboard"
 	"wox/util/ocr"
+	"wox/util/processmemory"
 	"wox/util/shell"
 	"wox/util/window"
 
@@ -179,6 +182,26 @@ type ClipboardPlugin struct {
 	// skipHistoryUntil blocks Watch persistence after a sequential paste restore
 	// so writing an older item cannot insert a duplicate row and reset the cursor.
 	skipHistoryUntil int64
+
+	// imagePostProcessMu serializes heavy large-image cleanup and OCR so rapid
+	// screenshots do not stack multiple native OCR allocations concurrently.
+	imagePostProcessMu sync.Mutex
+}
+
+const (
+	clipboardLargeImageReleasePixels int64 = 1_000_000
+	clipboardPostProcessSettleDelay        = 50 * time.Millisecond
+)
+
+type clipboardImagePostProcess struct {
+	recordID      string
+	imagePath     string
+	runOCR        bool
+	releaseMemory bool
+}
+
+func (p clipboardImagePostProcess) needed() bool {
+	return p.runOCR || p.releaseMemory
 }
 
 type ignoredClipboardApplication struct {
@@ -412,6 +435,15 @@ func (c *ClipboardPlugin) Init(ctx context.Context, initParams plugin.InitParams
 		}
 		c.api.Log(runtimeCtx, plugin.LogLevelInfo, fmt.Sprintf("clipboard data changed, type=%s", data.GetType()))
 
+		// Defer post-processing until after this Watch callback returns so data
+		// drops out of scope before Go heap release and WinRT OCR allocate memory.
+		var postTasks []clipboardImagePostProcess
+		defer func() {
+			for _, task := range postTasks {
+				c.scheduleImagePostProcess(runtimeCtx, task)
+			}
+		}()
+
 		if data.GetType() == clipboard.ClipboardTypeFile {
 			fileData := data.(*clipboard.FilePathData)
 			if c.shouldTreatFileClipboardAsImages(fileData.FilePaths) {
@@ -420,13 +452,17 @@ func (c *ClipboardPlugin) Init(ctx context.Context, initParams plugin.InitParams
 					return
 				}
 				for _, imageData := range imageDataList {
-					c.processClipboardData(runtimeCtx, imageData)
+					if task := c.processClipboardData(runtimeCtx, imageData); task.needed() {
+						postTasks = append(postTasks, task)
+					}
 				}
 				return
 			}
 		}
 
-		c.processClipboardData(runtimeCtx, data)
+		if task := c.processClipboardData(runtimeCtx, data); task.needed() {
+			postTasks = append(postTasks, task)
+		}
 	})
 
 	// Stop producers and background database users before closing the connection.
@@ -497,9 +533,25 @@ func isIgnoredClipboardApplication(rows []ignoredClipboardApplicationRow, identi
 	return false
 }
 
-func (c *ClipboardPlugin) processClipboardData(ctx context.Context, data clipboard.Data) {
+func (c *ClipboardPlugin) processClipboardData(ctx context.Context, data clipboard.Data) clipboardImagePostProcess {
 	var fileSignature string
 	var imageHash string
+	var isLargeImage bool
+	if data.GetType() == clipboard.ClipboardTypeImage {
+		imageData := data.(*clipboard.ImageData)
+		bounds := imageData.Image.Bounds()
+		isLargeImage = int64(bounds.Dx())*int64(bounds.Dy()) >= clipboardLargeImageReleasePixels
+	}
+
+	if data.GetType() == clipboard.ClipboardTypeText && !c.isKeepTextHistory(ctx) {
+		return clipboardImagePostProcess{}
+	}
+	if data.GetType() == clipboard.ClipboardTypeFile && !c.isKeepTextHistory(ctx) {
+		return clipboardImagePostProcess{}
+	}
+	if data.GetType() == clipboard.ClipboardTypeImage && !c.isKeepImageHistory(ctx) {
+		return clipboardImagePostProcess{releaseMemory: isLargeImage}
+	}
 	if data.GetType() == clipboard.ClipboardTypeImage {
 		imageData := data.(*clipboard.ImageData)
 		imageHash = c.calculateImageHash(imageData.Image)
@@ -515,20 +567,10 @@ func (c *ClipboardPlugin) processClipboardData(ctx context.Context, data clipboa
 			),
 		)
 	}
-
-	if data.GetType() == clipboard.ClipboardTypeText && !c.isKeepTextHistory(ctx) {
-		return
-	}
-	if data.GetType() == clipboard.ClipboardTypeFile && !c.isKeepTextHistory(ctx) {
-		return
-	}
-	if data.GetType() == clipboard.ClipboardTypeImage && !c.isKeepImageHistory(ctx) {
-		return
-	}
 	if data.GetType() == clipboard.ClipboardTypeFile {
 		fileData := data.(*clipboard.FilePathData)
 		if len(fileData.FilePaths) == 0 {
-			return
+			return clipboardImagePostProcess{}
 		}
 		fileSignature = c.calculateFileListHash(fileData.FilePaths)
 	}
@@ -537,7 +579,7 @@ func (c *ClipboardPlugin) processClipboardData(ctx context.Context, data clipboa
 	if data.GetType() == clipboard.ClipboardTypeText {
 		textData := data.(*clipboard.TextData)
 		if len(textData.Text) == 0 || strings.TrimSpace(textData.Text) == "" {
-			return
+			return clipboardImagePostProcess{}
 		}
 	}
 
@@ -553,7 +595,7 @@ func (c *ClipboardPlugin) processClipboardData(ctx context.Context, data clipboa
 				c.scheduleLinkPreviewFetch(ctx, util.NormalizeUrl(textData.Text))
 			}
 		}
-		return
+		return clipboardImagePostProcess{releaseMemory: isLargeImage}
 	}
 
 	// Create new record (always non-favorite initially)
@@ -582,7 +624,7 @@ func (c *ClipboardPlugin) processClipboardData(ctx context.Context, data clipboa
 
 		if saveErr := imaging.Save(imageData.Image, imageFilePath); saveErr != nil {
 			c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to save image to disk: %s", saveErr.Error()))
-			return
+			return clipboardImagePostProcess{releaseMemory: isLargeImage}
 		}
 
 		// Get image dimensions
@@ -609,7 +651,12 @@ func (c *ClipboardPlugin) processClipboardData(ctx context.Context, data clipboa
 		imagePreviewFile := path.Join(util.GetLocation().GetImageCacheDirectory(), fmt.Sprintf("clipboard_%s_preview.png", record.ID))
 		imageIconFile := path.Join(util.GetLocation().GetImageCacheDirectory(), fmt.Sprintf("clipboard_%s_icon_plain.png", record.ID))
 		previewImg := imaging.Resize(imageData.Image, 400, 0, imaging.Lanczos)
-		iconImg := common.NewImageThumbnail(imageData.Image)
+		// Reuse the 400px preview when downscaling large images instead of scanning the full raster twice.
+		iconSource := imageData.Image
+		if width >= 400 {
+			iconSource = previewImg
+		}
+		iconImg := common.NewImageThumbnail(iconSource)
 		if err := imaging.Save(previewImg, imagePreviewFile); err != nil {
 			c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to save clipboard image preview cache: %s", err.Error()))
 		}
@@ -632,16 +679,9 @@ func (c *ClipboardPlugin) processClipboardData(ctx context.Context, data clipboa
 	// Insert into database (non-favorite items only)
 	if err := c.db.Insert(ctx, record); err != nil {
 		c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to insert clipboard record: %s", err.Error()))
-		return
+		return clipboardImagePostProcess{releaseMemory: isLargeImage}
 	}
 	c.resetPasteCursor()
-
-	if data.GetType() == clipboard.ClipboardTypeImage && c.isImageTextRecognitionEnabled(ctx) {
-		// Feature addition: clipboard image OCR is intentionally independent
-		// from screenshot OCR sidecars. The clipboard plugin owns its own index
-		// field because cb queries search clipboard records, not screenshot files.
-		c.scheduleClipboardImageTextRecognition(ctx, record.ID, record.FilePath)
-	}
 
 	// Enforce max count limit
 	if deletedCount, err := c.db.EnforceMaxCount(ctx, c.maxHistoryCount); err != nil {
@@ -657,6 +697,16 @@ func (c *ClipboardPlugin) processClipboardData(ctx context.Context, data clipboa
 		c.scheduleLinkPreviewFetch(ctx, link)
 	}
 	c.scheduleLinkFaviconPrefetch(ctx, []ClipboardRecord{record})
+
+	if data.GetType() == clipboard.ClipboardTypeImage {
+		return clipboardImagePostProcess{
+			recordID:      record.ID,
+			imagePath:     record.FilePath,
+			runOCR:        c.isImageTextRecognitionEnabled(ctx),
+			releaseMemory: isLargeImage,
+		}
+	}
+	return clipboardImagePostProcess{}
 }
 
 func (c *ClipboardPlugin) newClipboardQueryResponse(results []plugin.QueryResult) plugin.QueryResponse {
@@ -2256,25 +2306,49 @@ func (c *ClipboardPlugin) saveDibCache(ctx context.Context, img image.Image, rec
 		return
 	}
 
-	const fileHeaderLen = 14 // BMP file header length to skip
-	dibPath := c.getDibCachePath(recordID)
-
-	bmpBuf := new(bytes.Buffer)
-	if err := bmp.Encode(bmpBuf, img); err != nil {
-		c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to encode dib cache: %s", err.Error()))
-		return
-	}
-
-	bmpData := bmpBuf.Bytes()
-	if len(bmpData) <= fileHeaderLen {
-		c.api.Log(ctx, plugin.LogLevelError, "dib cache data too short")
-		return
-	}
-
-	if err := os.WriteFile(dibPath, bmpData[fileHeaderLen:], 0o644); err != nil {
+	if err := writeDIBCache(c.getDibCachePath(recordID), img); err != nil {
 		c.api.Log(ctx, plugin.LogLevelError, fmt.Sprintf("failed to save dib cache: %s", err.Error()))
-		return
 	}
+}
+
+// writeDIBCache streams the bitmap rows to disk and publishes the cache only after a successful close.
+func writeDIBCache(path string, img image.Image) error {
+	file, err := os.CreateTemp(filepath.Dir(path), ".clipboard-dib-*.tmp")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(file.Name())
+
+	buffer := bufio.NewWriterSize(file, 64*1024)
+	const bmpFileHeaderSize = 14
+	err = bmp.Encode(&dibWriter{dst: buffer, headerRemaining: bmpFileHeaderSize}, img)
+	if err == nil {
+		err = buffer.Flush()
+	}
+	closeErr := file.Close()
+	if err != nil {
+		return err
+	}
+	if closeErr != nil {
+		return closeErr
+	}
+	return os.Rename(file.Name(), path)
+}
+
+// CF_DIB starts immediately after the BMP file header, even if the encoder splits it across writes.
+type dibWriter struct {
+	dst             io.Writer
+	headerRemaining int
+}
+
+func (w *dibWriter) Write(p []byte) (int, error) {
+	skip := min(w.headerRemaining, len(p))
+	w.headerRemaining -= skip
+	if skip == len(p) {
+		return skip, nil
+	}
+	n, err := w.dst.Write(p[skip:])
+	return skip + n, err
 }
 
 func (c *ClipboardPlugin) getImageDataListFromFilePaths(ctx context.Context, filePaths []string) []*clipboard.ImageData {
@@ -2331,16 +2405,52 @@ func (c *ClipboardPlugin) ocrModel(ctx context.Context) string {
 	return system.NormalizeOCRModelID(c.api.GetSetting(ctx, clipboardOCRModelSettingKey))
 }
 
-func (c *ClipboardPlugin) scheduleClipboardImageTextRecognition(ctx context.Context, recordID string, imagePath string) {
-	if recordID == "" || imagePath == "" || ctx.Err() != nil {
+// scheduleImagePostProcess releases Go's large capture buffers once the Watch
+// callback returns and serializes OCR so Go and native WinRT peaks do not overlap.
+func (c *ClipboardPlugin) scheduleImagePostProcess(ctx context.Context, task clipboardImagePostProcess) {
+	if !task.needed() || ctx.Err() != nil {
 		return
+	}
+	if task.runOCR && (task.recordID == "" || task.imagePath == "") {
+		task.runOCR = false
+		if !task.releaseMemory {
+			return
+		}
 	}
 
 	c.backgroundTasks.Add(1)
-	util.Go(ctx, "clipboard image text recognition", func() {
+	util.Go(ctx, "clipboard image post-process", func() {
 		defer c.backgroundTasks.Done()
-		c.recognizeClipboardImageText(ctx, recordID, imagePath)
+
+		timer := time.NewTimer(clipboardPostProcessSettleDelay)
+		defer timer.Stop()
+		select {
+		case <-ctx.Done():
+			return
+		case <-timer.C:
+		}
+
+		c.imagePostProcessMu.Lock()
+		defer c.imagePostProcessMu.Unlock()
+
+		if task.releaseMemory {
+			releaseClipboardImageMemory()
+		}
+		if task.runOCR && ctx.Err() == nil {
+			// Feature addition: clipboard image OCR is intentionally independent
+			// from screenshot OCR sidecars. The clipboard plugin owns its own index
+			// field because cb queries search clipboard records, not screenshot files.
+			c.recognizeClipboardImageText(ctx, task.recordID, task.imagePath)
+			if task.releaseMemory {
+				releaseClipboardImageMemory()
+			}
+		}
 	})
+}
+
+func releaseClipboardImageMemory() {
+	runtimedebug.FreeOSMemory()
+	_ = processmemory.ReleaseIdleNativeHeap()
 }
 
 func (c *ClipboardPlugin) recognizeClipboardImageText(ctx context.Context, recordID string, imagePath string) {

@@ -48,7 +48,9 @@ const (
 	QueryRefinementTypeSingleSelect QueryRefinementType = "singleSelect"
 	QueryRefinementTypeMultiSelect  QueryRefinementType = "multiSelect"
 	QueryRefinementTypeToggle       QueryRefinementType = "toggle"
-	QueryRefinementTypeSort         QueryRefinementType = "sort"
+
+	// Deprecated: Use QueryRefinementTypeSingleSelect for sort controls.
+	QueryRefinementTypeSort QueryRefinementType = "sort"
 )
 
 // Query from Wox. See "Doc/Query.md" for details.

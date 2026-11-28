@@ -1,9 +1,12 @@
 package system
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"image"
+	"image/color"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -20,7 +23,56 @@ import (
 	"wox/util/clipboard"
 
 	"github.com/google/uuid"
+	"golang.org/x/image/bmp"
 )
+
+// TestDIBCacheMatchesBMP checks row padding, alpha, and palette bytes used by Windows paste.
+func TestDIBCacheMatchesBMP(t *testing.T) {
+	bounds := image.Rect(0, 0, 3, 2)
+	opaque := image.NewRGBA(bounds)
+	for i := 3; i < len(opaque.Pix); i += 4 {
+		opaque.Pix[i] = 255
+	}
+	opaque.SetRGBA(0, 0, color.RGBA{R: 120, A: 255})
+	transparent := image.NewNRGBA(bounds)
+	transparent.SetNRGBA(1, 1, color.NRGBA{G: 218, A: 73})
+	paletted := image.NewPaletted(bounds, color.Palette{color.Black, color.White})
+	paletted.SetColorIndex(2, 0, 1)
+
+	for _, img := range []image.Image{opaque, transparent, paletted} {
+		var reference bytes.Buffer
+		if err := bmp.Encode(&reference, img); err != nil {
+			t.Fatal(err)
+		}
+		path := filepath.Join(t.TempDir(), "clipboard.dib")
+		if err := writeDIBCache(path, img); err != nil {
+			t.Fatal(err)
+		}
+		got, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(got, reference.Bytes()[14:]) {
+			t.Errorf("%T cache differs from the BMP payload", img)
+		}
+	}
+}
+
+// TestDIBCacheEncodeFailure verifies a failed encode publishes no cache or temporary file.
+func TestDIBCacheEncodeFailure(t *testing.T) {
+	dir := t.TempDir()
+	invalid := &image.RGBA{Rect: image.Rectangle{Max: image.Pt(-1, 1)}}
+	if err := writeDIBCache(filepath.Join(dir, "clipboard.dib"), invalid); err == nil {
+		t.Fatal("expected encoding to fail for negative bounds")
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("failed encode left files: %v", entries)
+	}
+}
 
 type clipboardPreviewTestAPI struct{ imagePasteFailureAPI }
 
@@ -1018,4 +1070,124 @@ func TestClipboardCompactMetadata(t *testing.T) {
 func (api *imagePasteFailureAPI) ShowToastMsg(ctx context.Context, option plugin.ShowToastMsgOption) plugin.ShowToastMsgResult {
 	api.Notify(ctx, option.Message)
 	return plugin.ShowToastMsgResult{Success: true}
+}
+
+type trackingDB struct {
+	clipboardQueryTestDB
+	inserted []ClipboardRecord
+	recent   []ClipboardRecord
+}
+
+func (d *trackingDB) Insert(_ context.Context, record ClipboardRecord) error {
+	d.inserted = append(d.inserted, record)
+	return nil
+}
+
+func (d *trackingDB) GetRecent(_ context.Context, limit, offset int) ([]ClipboardRecord, error) {
+	if offset >= len(d.recent) {
+		return nil, nil
+	}
+	end := min(len(d.recent), offset+limit)
+	return d.recent[offset:end], nil
+}
+
+func TestProcessClipboardDataSkipsImageHashWhenDisabledAndFlagsLargeRelease(t *testing.T) {
+	api := &clipboardFavoritesTestAPI{settings: map[string]string{
+		isKeepImageHistorySettingKey: "false",
+	}}
+	db := &trackingDB{}
+	c := &ClipboardPlugin{
+		api:                   api,
+		db:                    db,
+		imageCache:            util.NewHashMap[string, *ImageCacheEntry](),
+		faviconFetchAttempted: util.NewHashMap[string, bool](),
+	}
+
+	largeTask := c.processClipboardData(context.Background(), &clipboard.ImageData{
+		Image: image.NewRGBA(image.Rect(0, 0, 1200, 1000)),
+	})
+	if !largeTask.releaseMemory || largeTask.runOCR || len(db.inserted) != 0 {
+		t.Fatalf("large disabled task = %+v, inserted=%d", largeTask, len(db.inserted))
+	}
+	for _, entry := range api.logs {
+		if strings.Contains(entry, "clipboard image captured:") {
+			t.Fatalf("must not log/hash disabled image capture, got %q", entry)
+		}
+	}
+
+	smallTask := c.processClipboardData(context.Background(), &clipboard.ImageData{
+		Image: image.NewRGBA(image.Rect(0, 0, 200, 200)),
+	})
+	if smallTask.needed() {
+		t.Fatalf("small disabled task should not trigger post-process: %+v", smallTask)
+	}
+}
+
+func TestProcessClipboardDataBuildsPreviewAndIconForWideImages(t *testing.T) {
+	if os.Getenv("WOX_CLIPBOARD_WIDE_THUMB_TEST_CHILD") == "" {
+		t.Setenv(util.TestWoxDataDirEnv, t.TempDir())
+		t.Setenv(util.TestUserDataDirEnv, t.TempDir())
+		t.Setenv("WOX_CLIPBOARD_WIDE_THUMB_TEST_CHILD", "1")
+		command := exec.Command(os.Args[0], "-test.run=^TestProcessClipboardDataBuildsPreviewAndIconForWideImages$")
+		if output, err := command.CombinedOutput(); err != nil {
+			t.Fatalf("wide thumb check: %v\n%s", err, output)
+		}
+		return
+	}
+	if err := util.GetLocation().Init(); err != nil {
+		t.Fatal(err)
+	}
+	if err := util.GetLocation().EnsureDirectoryExist(util.GetLocation().GetImageCacheDirectory()); err != nil {
+		t.Fatal(err)
+	}
+
+	api := &clipboardFavoritesTestAPI{settings: map[string]string{
+		isKeepImageHistorySettingKey:            "true",
+		clipboardImageTextRecognitionSettingKey: "true",
+	}}
+	db := &trackingDB{}
+	c := &ClipboardPlugin{
+		api:                   api,
+		db:                    db,
+		imageCache:            util.NewHashMap[string, *ImageCacheEntry](),
+		faviconFetchAttempted: util.NewHashMap[string, bool](),
+	}
+
+	wide := image.NewRGBA(image.Rect(0, 0, 1600, 1000))
+	task := c.processClipboardData(context.Background(), &clipboard.ImageData{Image: wide})
+	if !task.releaseMemory || !task.runOCR || task.recordID == "" || task.imagePath == "" {
+		t.Fatalf("unexpected task = %+v", task)
+	}
+	if len(db.inserted) != 1 {
+		t.Fatalf("inserted = %d, want 1", len(db.inserted))
+	}
+
+	cacheDir := util.GetLocation().GetImageCacheDirectory()
+	previewFile, err := os.Open(filepath.Join(cacheDir, fmt.Sprintf("clipboard_%s_preview.png", task.recordID)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer previewFile.Close()
+	previewCfg, _, err := image.DecodeConfig(previewFile)
+	if err != nil || previewCfg.Width != 400 || previewCfg.Height != 250 {
+		t.Fatalf("preview config = %+v, err=%v", previewCfg, err)
+	}
+
+	iconFile, err := os.Open(filepath.Join(cacheDir, fmt.Sprintf("clipboard_%s_icon_plain.png", task.recordID)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer iconFile.Close()
+	iconCfg, _, err := image.DecodeConfig(iconFile)
+	if err != nil || iconCfg.Width != common.ImageThumbnailSize || iconCfg.Height != 60 {
+		t.Fatalf("icon config = %+v, err=%v", iconCfg, err)
+	}
+}
+
+func TestScheduleImagePostProcessCancelsCleanly(t *testing.T) {
+	c := &ClipboardPlugin{api: &imagePasteFailureAPI{}}
+	ctx, cancel := context.WithCancel(context.Background())
+	c.scheduleImagePostProcess(ctx, clipboardImagePostProcess{releaseMemory: true})
+	cancel()
+	c.backgroundTasks.Wait()
 }

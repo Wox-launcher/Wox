@@ -57,3 +57,42 @@ func TestWindowsMediaOCRRecognizesText(t *testing.T) {
 		t.Fatalf("OCR using %s returned %q", result.Engine, result.Text)
 	}
 }
+
+func TestWindowsMediaOCRRecognizesLargeDownscaledText(t *testing.T) {
+	parsed, err := opentype.Parse(goregular.TTF)
+	if err != nil {
+		t.Fatal(err)
+	}
+	face, err := opentype.NewFace(parsed, &opentype.FaceOptions{Size: 72, DPI: 72, Hinting: font.HintingFull})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer face.Close()
+
+	// Exceed kMaxOCRBitmapPixels (2.6 MP) to exercise Gray8 + BitmapTransform downscaling.
+	bitmap := image.NewRGBA(image.Rect(0, 0, 2400, 1600))
+	draw.Draw(bitmap, bitmap.Bounds(), image.NewUniform(color.White), image.Point{}, draw.Src)
+	drawer := font.Drawer{Dst: bitmap, Src: image.NewUniform(color.Black), Face: face, Dot: fixed.P(120, 320)}
+	drawer.DrawString("Large Clipboard OCR")
+	path := filepath.Join(t.TempDir(), "large.png")
+	file, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := errors.Join(png.Encode(file, bitmap), file.Close()); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := recognizeWindowsWithMediaOCR(context.Background(), Request{ImagePath: path})
+	const noOCRLanguagePack windows.Errno = 0x80070032
+	if errors.Is(err, noOCRLanguagePack) || errors.Is(err, windows.Errno(windows.REGDB_E_CLASSNOTREG)) {
+		t.Skipf("Windows Media OCR is unavailable on this host: %v", err)
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	recognized := strings.ToLower(strings.Join(strings.Fields(result.Text), ""))
+	if result.Engine != EngineWindowsMediaOCR || !strings.Contains(recognized, "clipboard") {
+		t.Fatalf("OCR using %s returned %q", result.Engine, result.Text)
+	}
+}

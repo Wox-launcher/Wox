@@ -536,6 +536,7 @@ export interface Query {
   IsGlobalQuery(): boolean
 }
 
+/** The `"sort"` value is deprecated. Use `"singleSelect"` for sort controls. */
 export type QueryRefinementType = "singleSelect" | "multiSelect" | "toggle" | "sort"
 
 /**

@@ -15,6 +15,7 @@
 #include <wrl/wrappers/corewrappers.h>
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <new>
 #include <string>
@@ -48,8 +49,41 @@ struct BitmapDecoderStatics : IInspectable {
 };
 const IID bitmapDecoderStaticsID = {0x438ccb26, 0xbcef, 0x4e95, {0xba, 0xd6, 0x23, 0xa8, 0x22, 0xe5, 0x8d, 0x01}};
 
+struct BitmapFrame : IInspectable {
+  virtual HRESULT STDMETHODCALLTYPE GetThumbnailAsync(IInspectable **) = 0;
+  virtual HRESULT STDMETHODCALLTYPE get_BitmapProperties(IInspectable **) = 0;
+  virtual HRESULT STDMETHODCALLTYPE get_BitmapPixelFormat(imaging::BitmapPixelFormat *) = 0;
+  virtual HRESULT STDMETHODCALLTYPE get_BitmapAlphaMode(imaging::BitmapAlphaMode *) = 0;
+  virtual HRESULT STDMETHODCALLTYPE get_DpiX(double *) = 0;
+  virtual HRESULT STDMETHODCALLTYPE get_DpiY(double *) = 0;
+  virtual HRESULT STDMETHODCALLTYPE get_PixelWidth(UINT32 *) = 0;
+  virtual HRESULT STDMETHODCALLTYPE get_PixelHeight(UINT32 *) = 0;
+  virtual HRESULT STDMETHODCALLTYPE get_OrientedPixelWidth(UINT32 *) = 0;
+  virtual HRESULT STDMETHODCALLTYPE get_OrientedPixelHeight(UINT32 *) = 0;
+};
+const IID bitmapFrameID = {0x72a49a1c, 0x8081, 0x438d, {0x91, 0xbc, 0x94, 0xec, 0xfc, 0x81, 0x85, 0xc6}};
+
+struct BitmapTransform : IInspectable {
+  virtual HRESULT STDMETHODCALLTYPE get_ScaledWidth(UINT32 *) = 0;
+  virtual HRESULT STDMETHODCALLTYPE put_ScaledWidth(UINT32) = 0;
+  virtual HRESULT STDMETHODCALLTYPE get_ScaledHeight(UINT32 *) = 0;
+  virtual HRESULT STDMETHODCALLTYPE put_ScaledHeight(UINT32) = 0;
+  virtual HRESULT STDMETHODCALLTYPE get_InterpolationMode(UINT32 *) = 0;
+  virtual HRESULT STDMETHODCALLTYPE put_InterpolationMode(UINT32) = 0;
+};
+const IID bitmapTransformID = {0xae755344, 0xe268, 0x4d35, {0xad, 0xcf, 0xe9, 0x95, 0xd3, 0x1a, 0x8d, 0x34}};
+
+constexpr UINT32 bitmapInterpolationFant = 3;
+constexpr UINT32 exifOrientationRespect = 1;
+constexpr UINT32 colorManagementDoNotManage = 0;
+
 struct BitmapFrameWithSoftwareBitmap : IInspectable {
   virtual HRESULT STDMETHODCALLTYPE GetSoftwareBitmapAsync(IAsyncOperation<imaging::ISoftwareBitmap *> **) = 0;
+  virtual HRESULT STDMETHODCALLTYPE GetSoftwareBitmapConvertedAsync(
+      imaging::BitmapPixelFormat, imaging::BitmapAlphaMode, IAsyncOperation<imaging::ISoftwareBitmap *> **) = 0;
+  virtual HRESULT STDMETHODCALLTYPE GetSoftwareBitmapTransformedAsync(
+      imaging::BitmapPixelFormat, imaging::BitmapAlphaMode, IInspectable *, UINT32, UINT32,
+      IAsyncOperation<imaging::ISoftwareBitmap *> **) = 0;
 };
 const IID bitmapFrameWithSoftwareBitmapID = {0xfe287c9a, 0x420c, 0x4963, {0x87, 0xad, 0x69, 0x14, 0x36, 0xe0, 0x83, 0x83}};
 
@@ -118,19 +152,118 @@ ComPtr<Object> await(IAsyncOperation<Object *> *operation, HANDLE cancelEvent) {
   return result;
 }
 
-// Use the same WinRT decoder for clipboard images and screenshot files.
-ComPtr<imaging::ISoftwareBitmap> decodeBitmap(PCWSTR path, HANDLE cancelEvent) {
+void closeWinRT(IUnknown *object) {
+  if (!object) {
+    return;
+  }
+  ComPtr<foundation::IClosable> closable;
+  if (SUCCEEDED(object->QueryInterface(IID_PPV_ARGS(closable.GetAddressOf())))) {
+    closable->Close();
+  }
+}
+
+template <typename T>
+struct ClosableGuard {
+  ComPtr<T> &ref;
+  ~ClosableGuard() { closeWinRT(ref.Get()); }
+};
+
+// Cap OCR raster size (~2.6 MP) so high-DPI captures do not decode huge WIC bitmaps in-process.
+constexpr uint64_t kMaxOCRBitmapPixels = 2600000;
+
+ComPtr<BitmapTransform> createScaledTransform(UINT32 width, UINT32 height) {
+  HString className;
+  check(className.Set(L"Windows.Graphics.Imaging.BitmapTransform"));
+  ComPtr<IInspectable> instance;
+  check(RoActivateInstance(className.Get(), instance.GetAddressOf()));
+  ComPtr<BitmapTransform> transform;
+  check(instance->QueryInterface(bitmapTransformID, reinterpret_cast<void **>(transform.GetAddressOf())));
+  check(transform->put_ScaledWidth(width));
+  check(transform->put_ScaledHeight(height));
+  check(transform->put_InterpolationMode(bitmapInterpolationFant));
+  return transform;
+}
+
+// Use the same WinRT decoder for clipboard images and screenshot files, converting to Gray8
+// and downscaling oversized rasters during WIC decode to keep OCR native memory bounded.
+ComPtr<imaging::ISoftwareBitmap> decodeBitmap(PCWSTR path, UINT32 maxDimension, HANDLE cancelEvent) {
   ComPtr<storage::Streams::IRandomAccessStream> stream;
+  ClosableGuard<storage::Streams::IRandomAccessStream> streamGuard{stream};
   check(CreateRandomAccessStreamOnFile(path, storage::FileAccessMode_Read, IID_PPV_ARGS(stream.GetAddressOf())));
   auto factory = activationFactory<BitmapDecoderStatics>(L"Windows.Graphics.Imaging.BitmapDecoder", bitmapDecoderStaticsID);
   ComPtr<IAsyncOperation<IInspectable *>> decode;
   check(factory->CreateAsync(stream.Get(), decode.GetAddressOf()));
   auto decoder = await(decode.Get(), cancelEvent);
+
+  UINT32 width = 0;
+  UINT32 height = 0;
+  ComPtr<BitmapFrame> frameInfo;
+  if (SUCCEEDED(decoder->QueryInterface(bitmapFrameID, reinterpret_cast<void **>(frameInfo.GetAddressOf())))) {
+    if (FAILED(frameInfo->get_PixelWidth(&width)) || FAILED(frameInfo->get_PixelHeight(&height))) {
+      width = 0;
+      height = 0;
+    }
+  }
+
+  UINT32 scaledWidth = width;
+  UINT32 scaledHeight = height;
+  const uint64_t pixels = static_cast<uint64_t>(width) * static_cast<uint64_t>(height);
+  if (width > 0 && height > 0 &&
+      (pixels > kMaxOCRBitmapPixels || (maxDimension > 0 && (width > maxDimension || height > maxDimension)))) {
+    double scale = 1.0;
+    if (pixels > kMaxOCRBitmapPixels) {
+      scale = std::min(scale, std::sqrt(static_cast<double>(kMaxOCRBitmapPixels) / static_cast<double>(pixels)));
+    }
+    if (maxDimension > 0 && width > maxDimension) {
+      scale = std::min(scale, static_cast<double>(maxDimension) / static_cast<double>(width));
+    }
+    if (maxDimension > 0 && height > maxDimension) {
+      scale = std::min(scale, static_cast<double>(maxDimension) / static_cast<double>(height));
+    }
+    scaledWidth = std::max<UINT32>(1, static_cast<UINT32>(std::lround(static_cast<double>(width) * scale)));
+    scaledHeight = std::max<UINT32>(1, static_cast<UINT32>(std::lround(static_cast<double>(height) * scale)));
+    if (maxDimension > 0) {
+      scaledWidth = std::min(scaledWidth, maxDimension);
+      scaledHeight = std::min(scaledHeight, maxDimension);
+    }
+  }
+
   ComPtr<BitmapFrameWithSoftwareBitmap> frame;
   check(decoder->QueryInterface(bitmapFrameWithSoftwareBitmapID, reinterpret_cast<void **>(frame.GetAddressOf())));
-  ComPtr<IAsyncOperation<imaging::ISoftwareBitmap *>> bitmap;
-  check(frame->GetSoftwareBitmapAsync(bitmap.GetAddressOf()));
-  return await(bitmap.Get(), cancelEvent);
+
+  if (scaledWidth < width || scaledHeight < height) {
+    auto transform = createScaledTransform(scaledWidth, scaledHeight);
+    try {
+      ComPtr<IAsyncOperation<imaging::ISoftwareBitmap *>> bitmap;
+      check(frame->GetSoftwareBitmapTransformedAsync(
+          imaging::BitmapPixelFormat_Gray8, imaging::BitmapAlphaMode_Ignore,
+          transform.Get(), exifOrientationRespect, colorManagementDoNotManage, bitmap.GetAddressOf()));
+      return await(bitmap.Get(), cancelEvent);
+    } catch (HRESULT) {
+      if (WaitForSingleObject(cancelEvent, 0) == WAIT_OBJECT_0) {
+        throw E_ABORT;
+      }
+      ComPtr<IAsyncOperation<imaging::ISoftwareBitmap *>> bitmap;
+      check(frame->GetSoftwareBitmapTransformedAsync(
+          imaging::BitmapPixelFormat_Bgra8, imaging::BitmapAlphaMode_Premultiplied,
+          transform.Get(), exifOrientationRespect, colorManagementDoNotManage, bitmap.GetAddressOf()));
+      return await(bitmap.Get(), cancelEvent);
+    }
+  }
+
+  try {
+    ComPtr<IAsyncOperation<imaging::ISoftwareBitmap *>> bitmap;
+    check(frame->GetSoftwareBitmapConvertedAsync(
+        imaging::BitmapPixelFormat_Gray8, imaging::BitmapAlphaMode_Ignore, bitmap.GetAddressOf()));
+    return await(bitmap.Get(), cancelEvent);
+  } catch (HRESULT) {
+    if (WaitForSingleObject(cancelEvent, 0) == WAIT_OBJECT_0) {
+      throw E_ABORT;
+    }
+    ComPtr<IAsyncOperation<imaging::ISoftwareBitmap *>> bitmap;
+    check(frame->GetSoftwareBitmapAsync(bitmap.GetAddressOf()));
+    return await(bitmap.Get(), cancelEvent);
+  }
 }
 
 std::wstring readString(HSTRING value) {
@@ -223,7 +356,12 @@ extern "C" HRESULT woxOCRRecognizeMedia(PCWSTR path, PCWSTR languages, uintptr_t
     WinRTApartment apartment;
     HANDLE cancelEvent = reinterpret_cast<HANDLE>(event);
     auto factory = activationFactory<OcrEngineStatics>(L"Windows.Media.Ocr.OcrEngine", ocrEngineStaticsID);
-    auto bitmap = decodeBitmap(path, cancelEvent);
+    UINT32 maxDimension = 0;
+    if (FAILED(factory->get_MaxImageDimension(&maxDimension))) {
+      maxDimension = 0;
+    }
+    auto bitmap = decodeBitmap(path, maxDimension, cancelEvent);
+    ClosableGuard<imaging::ISoftwareBitmap> bitmapGuard{bitmap};
 
     // Try explicit languages or installed non-English recognizers first. Mixing
     // in English OCR can add misread text when a CJK recognizer already succeeded.

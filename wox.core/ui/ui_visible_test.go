@@ -51,3 +51,25 @@ func TestOnboardingRemainsVisibleWhenLauncherHides(t *testing.T) {
 		t.Fatal("closing onboarding must leave the hidden launcher hidden")
 	}
 }
+
+// A slow query can finish while the launcher is hidden and still belongs to its session.
+func TestHiddenSessionKeepsQueryUntilReplacementOrClose(t *testing.T) {
+	sessionID := t.Name()
+	ctx := util.WithSessionContext(context.Background(), sessionID)
+	manager := &Manager{activeQueries: util.NewHashMap[string, context.CancelCauseFunc]()}
+	first := manager.replaceSessionQuery(ctx, sessionID, "first")
+	manager.PostOnHide(ctx)
+	t.Cleanup(manager.cancelHiddenTrim)
+	if err := first.Err(); err != nil {
+		t.Fatalf("hide interrupted the current query: %v", err)
+	}
+
+	next := manager.replaceSessionQuery(ctx, sessionID, "next")
+	if context.Cause(first) != errQuerySuperseded {
+		t.Fatal("a replacement query must cancel the previous query")
+	}
+	manager.UnregisterView(sessionID)
+	if next.Err() != context.Canceled {
+		t.Fatal("closing the session must cancel its current query")
+	}
+}
